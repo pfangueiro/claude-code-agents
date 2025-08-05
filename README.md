@@ -1,6 +1,6 @@
 # Claude Code Agents Collection
 
-A curated collection of 16 specialized AI agents for Claude Code, designed to enhance your development workflow with intelligent, automated assistance.
+A curated collection of 15 specialized AI agents for Claude Code, designed to enhance your development workflow with intelligent, automated assistance.
 
 ## 🚀 Overview
 
@@ -101,11 +101,6 @@ This repository contains custom sub-agents that extend Claude Code's capabilitie
 - **Activates on**: create new agent, agent configuration, custom agent
 - **Specializes in**: Creating new sub-agent configurations
 - **Key tools**: Agent template generation
-
-#### 📢 **work-completion-summary**
-- **Activates on**: task complete, work done, milestone reached, or say "tts" for audio
-- **Specializes in**: Concise work summaries
-- **Key tools**: Text-to-speech on macOS
 
 ## 🛠️ Installation
 
