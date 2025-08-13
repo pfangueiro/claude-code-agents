@@ -1,6 +1,7 @@
 ---
 name: documentation-specialist
-description: "PROACTIVELY creates documentation for: README, API docs, architecture docs, user guides, SSDLC documentation, security guides, setup instructions, code comments, docstrings. Technical writing expert."
+model: haiku
+description: "PROACTIVELY creates documentation for: README, API docs, architecture docs, user guides, SSDLC documentation, security guides, setup instructions, code comments, docstrings, changelog, release notes, migration guides, troubleshooting docs, FAQ, wiki pages. Technical writing expert."
 tools: Read, Write, Grep, WebSearch, Glob, Task, TodoWrite, MultiEdit, mcp__github__, mcp__context7__
 color: Blue
 ---

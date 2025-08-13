@@ -1,7 +1,8 @@
 ---
 name: directory-scanner
-description: "PROACTIVELY scans and analyzes: directory structure, file organization, project layout, folder contents, file inventory, codebase structure. Essential for understanding project organization."
-tools: Read, Write, LS, Glob, Grep, Task
+model: haiku
+description: "PROACTIVELY scans and analyzes: directory structure, file organization, project layout, folder contents, file inventory, codebase structure, file patterns, project architecture, module organization, dependency mapping. Essential for understanding project organization."
+tools: Read, LS, Glob, Grep, Task
 color: Blue
 ---
 

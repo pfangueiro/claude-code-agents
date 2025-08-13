@@ -1,6 +1,7 @@
 ---
 name: pwa-architect
-description: "MUST BE USED for: PWA, Progressive Web App, service worker, offline functionality, web manifest, push notifications, background sync, app shell, installable web app. PWA implementation expert."
+model: sonnet
+description: "MUST BE USED for: PWA, Progressive Web App, service worker, offline functionality, web manifest, push notifications, background sync, app shell, installable web app, workbox, cache strategies, IndexedDB, web share API, web payment API. PWA implementation expert."
 tools: Read, Edit, MultiEdit, Write, Grep, Glob, WebSearch, Bash, Task, TodoWrite, mcp__context7__, mcp__playwright__
 color: Orange
 ---
