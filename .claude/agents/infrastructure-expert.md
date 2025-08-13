@@ -1,8 +1,8 @@
 ---
 name: infrastructure-expert
-model: haiku
-description: "MUST BE USED for: Redis, Elasticsearch, RabbitMQ, Kafka, message queue, caching, pub/sub, session storage, rate limiting, circuit breaker, load balancing, reverse proxy, CDN, monitoring, logging, metrics, distributed systems. Infrastructure specialist."
-tools: Read, Write, Bash, Task, TodoWrite, WebSearch
+model: sonnet
+description: "MUST BE USED for: Redis, Elasticsearch, RabbitMQ, Kafka, message queue, caching, pub/sub, session storage, rate limiting, circuit breaker, load balancing, reverse proxy, CDN, monitoring, logging, metrics, distributed systems, Docker, Kubernetes, container orchestration, service mesh, observability, alerting, Prometheus, Grafana. Infrastructure specialist."
+tools: Read, Write, Bash, Task, TodoWrite, WebSearch, MultiEdit
 color: Orange
 ---
 
