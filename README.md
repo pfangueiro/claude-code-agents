@@ -135,23 +135,62 @@ This repository contains custom sub-agents that extend Claude Code's capabilitie
 
 ## 🛠️ Installation
 
+### Quick Install (Recommended)
+
 1. Clone this repository:
 ```bash
-git clone <repository-url>
-cd claude-agents
+git clone https://github.com/pfangueiro/claude-code-agents.git
+cd claude-code-agents
 ```
 
-2. Copy the `.claude` directory to your project root:
+2. Run the installation script:
+```bash
+./install.sh /path/to/your/project
+```
+
+3. Edit the generated `CLAUDE.md` in your project to match your specific needs
+
+### Manual Installation
+
+1. Copy the `.claude` directory to your project:
 ```bash
 cp -r .claude /path/to/your/project/
 ```
 
-3. Copy the CLAUDE.md file for coordination:
+2. Copy and customize the CLAUDE.md template:
 ```bash
-cp CLAUDE.md /path/to/your/project/
+cp CLAUDE.md.template /path/to/your/project/CLAUDE.md
+# Edit CLAUDE.md to match your project
 ```
 
-4. The agents will be automatically available in Claude Code with coordination enabled
+### What Gets Installed
+
+```
+your-project/
+├── .claude/
+│   ├── agents/           # 18 specialized agents
+│   │   ├── api-builder.md
+│   │   ├── test-engineer.md
+│   │   └── ... (15 more)
+│   ├── commands/         # Custom slash commands
+│   │   ├── workflow.md
+│   │   ├── orchestrate.md
+│   │   └── quality-check.md
+│   └── AGENT-COORDINATION.md  # Agent system rules
+└── CLAUDE.md            # Your project configuration
+```
+
+## 📋 Configuration
+
+After installation, customize `CLAUDE.md` in your project root:
+
+1. **Update project context**: Name, description, tech stack
+2. **Define project structure**: Directory layout
+3. **Set conventions**: Code style, git workflow
+4. **Configure workflows**: Customize agent sequences for your needs
+5. **Add project-specific commands**: Build, test, deploy scripts
+
+See `CLAUDE.md.example` for a complete example configuration.
 
 ## 💡 Usage Examples
 

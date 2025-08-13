@@ -1,0 +1,139 @@
+# Project: [YOUR PROJECT NAME]
+
+## 🎯 Project Context
+[Brief description of your project, its purpose, and main technologies used]
+
+## 🏗️ Project Structure
+```
+[Your project structure here]
+src/
+├── components/
+├── services/
+├── utils/
+└── ...
+```
+
+## 🔧 Development Setup
+
+### Prerequisites
+- [List required tools, languages, frameworks]
+- [Node.js version, Python version, etc.]
+
+### Installation
+```bash
+[Your installation commands]
+npm install
+# or
+pip install -r requirements.txt
+```
+
+### Running the Project
+```bash
+[Your run commands]
+npm run dev
+# or
+python manage.py runserver
+```
+
+## 📋 Project Conventions
+
+### Code Style
+- [Your code style preferences]
+- [Formatting rules]
+- [Naming conventions]
+
+### Git Workflow
+- Branch naming: `feature/`, `bugfix/`, `hotfix/`
+- Commit style: [conventional commits, etc.]
+- PR process: [your review process]
+
+### Architecture Decisions
+- [Key architectural patterns used]
+- [State management approach]
+- [API design principles]
+
+## 🤖 Agent Coordination
+
+### Primary Tech Stack
+This project primarily uses:
+- Frontend: [React/Vue/Angular/etc.]
+- Backend: [Node.js/Python/Java/etc.]
+- Database: [PostgreSQL/MongoDB/etc.]
+- Testing: [Jest/Pytest/etc.]
+
+### Preferred Agents for This Project
+Based on the tech stack, these agents should be prioritized:
+- `[relevant agents based on your stack]`
+- `[e.g., python-expert for Django projects]`
+- `[e.g., typescript-expert for Angular projects]`
+
+### Project-Specific Workflows
+
+#### Feature Development
+```yaml
+workflow: feature-development
+steps:
+  - database-architect  # If data model changes needed
+  - api-builder         # For backend endpoints
+  - frontend-architect  # For UI components
+  - test-engineer       # For comprehensive testing
+  - deployment-engineer # For staging deployment
+```
+
+#### Bug Fix
+```yaml
+workflow: bug-fix
+steps:
+  - performance-optimizer  # If performance issue
+  - secure-coder          # If security issue
+  - test-engineer         # Validate fix
+  - deployment-engineer   # Deploy hotfix
+```
+
+## 🚀 Deployment
+
+### Environments
+- Development: [URL/localhost]
+- Staging: [URL]
+- Production: [URL]
+
+### Deployment Process
+```bash
+[Your deployment commands]
+```
+
+## 📊 Performance Guidelines
+
+### Performance Targets
+- Page load: < [X]s
+- API response: < [X]ms
+- Test coverage: > [X]%
+
+### Known Issues
+- [List any known performance bottlenecks]
+- [Areas that need optimization]
+
+## 🔒 Security Considerations
+
+### Authentication
+- Method: [JWT/OAuth/Session]
+- Token expiry: [duration]
+
+### Sensitive Data
+- [List sensitive data handling requirements]
+- [Encryption requirements]
+
+## 📝 Additional Notes
+
+### External Services
+- [List any external APIs or services]
+- [Required API keys or configurations]
+
+### Project-Specific Commands
+```bash
+# Custom commands for this project
+[your custom commands]
+```
+
+---
+*Project CLAUDE.md - Keep this updated as the project evolves*
