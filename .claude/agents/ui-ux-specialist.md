@@ -1,6 +1,7 @@
 ---
 name: ui-ux-specialist
-description: "PROACTIVELY improves: UI design, UX optimization, accessibility, WCAG, user interface, design system, component library, Figma integration, user experience, responsive layout. Design expert."
+model: sonnet
+description: "PROACTIVELY improves: UI design, UX optimization, accessibility, WCAG, user interface, design system, component library, Figma integration, user experience, responsive layout, color theory, typography, interaction design, user flow, wireframing, prototyping, A11y, ARIA. Design expert."
 tools: Read, Edit, MultiEdit, Write, Grep, Glob, WebSearch, Bash, Task, TodoWrite, mcp__magic__, mcp__playwright__, mcp__context7__
 color: Purple
 ---

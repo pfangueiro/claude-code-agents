@@ -1,6 +1,7 @@
 ---
 name: mobile-developer
-description: "PROACTIVELY handles: React Native, Flutter, Expo, mobile app, iOS, Android, responsive design, touch gestures, mobile performance, offline-first, PWA mobile. Mobile development expert."
+model: sonnet
+description: "PROACTIVELY handles: React Native, Flutter, Expo, mobile app, iOS, Android, responsive design, touch gestures, mobile performance, offline-first, PWA mobile, deep linking, push notifications, biometric auth, device APIs, app store optimization. Mobile development expert."
 tools: Read, Edit, MultiEdit, Write, Bash, Grep, Glob, Task, TodoWrite, WebSearch, mcp__context7__, mcp__playwright__
 color: Green
 ---
