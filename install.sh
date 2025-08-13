@@ -20,6 +20,35 @@ echo -e "${BLUE}║   Claude Code Agents v2.0 Installation    ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════╝${NC}"
 echo
 
+# Check for required dependencies
+print_info "Checking dependencies..."
+MISSING_DEPS=""
+
+if ! command -v git &> /dev/null; then
+    MISSING_DEPS="${MISSING_DEPS} git"
+fi
+
+if ! command -v jq &> /dev/null; then
+    print_warning "jq not installed - JSON tracking features will be limited"
+    print_info "  Install with: brew install jq (macOS) or apt-get install jq (Linux)"
+fi
+
+if ! command -v bc &> /dev/null; then
+    print_warning "bc not installed - Cost calculations will not work"
+    print_info "  Install with: brew install bc (macOS) or apt-get install bc (Linux)"
+fi
+
+if ! command -v uuidgen &> /dev/null && ! command -v uuid &> /dev/null; then
+    print_warning "uuidgen not installed - Task IDs will use timestamps"
+    print_info "  Install with: brew install ossp-uuid (macOS) or apt-get install uuid-runtime (Linux)"
+fi
+
+if [ ! -z "$MISSING_DEPS" ]; then
+    print_error "Required dependencies missing:$MISSING_DEPS"
+    print_info "Please install missing dependencies and try again"
+    exit 1
+fi
+
 # Function to print colored output
 print_info() {
     echo -e "${BLUE}ℹ${NC} $1"
@@ -37,6 +66,18 @@ print_error() {
     echo -e "${RED}✗${NC} $1"
 }
 
+# Validate source directory
+if [ ! -d "$SCRIPT_DIR/.claude" ]; then
+    print_error "Installation source corrupted: .claude directory not found"
+    print_info "Please re-clone the repository and try again"
+    exit 1
+fi
+
+if [ ! -f "$SCRIPT_DIR/CLAUDE.md.template" ]; then
+    print_error "Installation source corrupted: CLAUDE.md.template not found"
+    exit 1
+fi
+
 # Check if target directory is provided
 if [ -z "$1" ]; then
     print_info "Usage: ./install.sh <target-project-directory>"
@@ -45,6 +86,13 @@ if [ -z "$1" ]; then
     print_info "This will install:"
     print_info "  • .claude/ directory with all agents and commands"
     print_info "  • CLAUDE.md template for project configuration"
+    print_info "  • Tracking hooks and scripts"
+    echo
+    print_info "System requirements:"
+    print_info "  • git (required)"
+    print_info "  • jq (recommended for tracking)"
+    print_info "  • bc (recommended for cost calculation)"
+    print_info "  • gh CLI (optional for GitHub integration)"
     echo
     exit 1
 fi
