@@ -52,6 +52,40 @@ python manage.py runserver
 - [State management approach]
 - [API design principles]
 
+## 📊 Task Tracking & Telemetry
+
+### Tracking Configuration
+```bash
+# Enable tracking (automatic)
+Tracking is enabled by default via hooks
+
+# Enable GitHub issue tracking (optional)
+.claude/scripts/tracking.sh enable github
+
+# View real-time dashboard
+.claude/scripts/dashboard.sh
+
+# Check current status
+.claude/scripts/tracking.sh status
+
+# View costs
+.claude/scripts/tracking.sh costs
+```
+
+### Tracking Features
+- **Automatic Metrics**: Every agent execution is tracked
+- **Token Cost Tracking**: Monitor usage by model and agent
+- **GitHub Integration**: Optional issue creation for tasks
+- **Handoff Tracking**: Monitor agent collaboration
+- **Performance Metrics**: Success rates, execution times
+- **Daily Reports**: Comprehensive analysis and ROI
+
+### Custom Tracking
+Use the `/track` command:
+- `/track status` - Show current tasks
+- `/track costs` - Display token usage
+- `/track report` - Generate daily report
+
 ## 🤖 Agent Coordination
 
 ### Primary Tech Stack

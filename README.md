@@ -243,6 +243,53 @@ You can also explicitly request an agent:
 → meta-agent (Opus) creates optimized agent with model selection
 ```
 
+## 📊 Task Tracking & Telemetry
+
+### Automatic Tracking System
+Every agent execution is automatically tracked with:
+- **Task IDs**: Unique identifiers for each task
+- **Token Usage**: Track costs by model and agent
+- **Execution Time**: Performance metrics
+- **Handoff Chain**: Agent collaboration patterns
+- **Success/Failure**: Quality metrics
+
+### Dashboard & Analytics
+```bash
+# View real-time dashboard
+.claude/scripts/dashboard.sh
+
+# Check current status
+.claude/scripts/tracking.sh status
+
+# View token costs
+.claude/scripts/tracking.sh costs
+
+# Generate daily report
+.claude/scripts/tracking.sh report
+```
+
+### GitHub Integration (Optional)
+```bash
+# Enable GitHub issue tracking
+.claude/scripts/tracking.sh enable github
+
+# Tasks automatically create GitHub issues
+# View tracked tasks
+gh issue list -l "agent:*"
+```
+
+### Metrics Location
+```
+.claude/
+├── metrics/
+│   ├── metrics-YYYY-MM-DD.csv    # Daily metrics
+│   └── token-costs.csv           # Cost tracking
+├── logs/
+│   ├── tasks.jsonl               # Structured logs
+│   └── handoffs-YYYY-MM-DD.jsonl # Handoff tracking
+└── hooks/                        # Tracking hooks
+```
+
 ## 🔧 Advanced Features
 
 ### Model Optimization (60% Cost Savings)
@@ -272,7 +319,7 @@ You can also explicitly request an agent:
 6. **Leverage parallel execution** - Up to 10 agents can work simultaneously
 7. **Use quality gates** - Security and performance checks before deployment
 
-## 📊 Performance Metrics
+## 📊 Performance & ROI Metrics
 
 Based on production usage and Anthropic benchmarks:
 - **90.2% performance improvement** with multi-agent orchestration
