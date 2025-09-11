@@ -2,7 +2,7 @@
 
 🚀 **Revolutionary AI Agent System** - Transform Claude Code into an autonomous AI workforce with 23 specialized agents, mesh coordination, predictive optimization, and true auto-activation.
 
-**⚡ 30-Second Universal Setup**: `curl -sSL https://raw.githubusercontent.com/user/repo/main/install.sh | bash -s /path/to/project`
+**⚡ 30-Second Universal Setup**: `curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/install.sh | bash -s /path/to/project`
 
 ---
 
@@ -64,7 +64,7 @@ User: "The API is slow and needs better caching"
 ### **One-Command Installation**
 ```bash
 # For any new or existing project
-curl -sSL https://raw.githubusercontent.com/user/repo/main/install.sh | bash -s /path/to/project
+curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/install.sh | bash -s /path/to/project
 
 # Or clone and install locally
 git clone https://github.com/user/claude-code-agents.git
@@ -252,7 +252,7 @@ bc --version     # Recommended: for cost calculations
 #### **Option 1: Automatic (Recommended)**
 ```bash
 # One-command installation with auto-configuration
-curl -sSL https://raw.githubusercontent.com/user/repo/main/install.sh | bash -s /path/to/project
+curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/install.sh | bash -s /path/to/project
 
 # Verify installation
 cd /path/to/project && claude
@@ -588,7 +588,7 @@ Fork repository → Enhance AI algorithms → Submit improvements
 
 ```bash
 # Ready to revolutionize your development workflow?
-curl -sSL https://raw.githubusercontent.com/user/repo/main/install.sh | bash -s /path/to/project
+curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/install.sh | bash -s /path/to/project
 
 # Then simply start coding with Claude Code:
 cd /path/to/project && claude
