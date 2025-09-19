@@ -1,11 +1,16 @@
 # 🚀 60-Second Quickstart
 
-**Copy-paste these examples. They just work.**
+**Use these examples in your Claude CLI session.**
 
 ## Example 1: Create an API (30 seconds)
 
 ```bash
-claude> "Create a REST API for a todo app with CRUD operations"
+# Optional: Check which agent would handle this
+.claude/router.sh "Create a REST API for a todo app"
+# Output: 🏗️ Architect [S] recommended
+
+# In Claude CLI:
+claude> Create a REST API for a todo app with CRUD operations
 ```
 
 **You get:**
@@ -23,7 +28,12 @@ With validation, error handling, and tests. Done.
 ## Example 2: Fix a Bug (20 seconds)
 
 ```bash
-claude> "My login function returns undefined sometimes"
+# Optional: Check recommendation
+.claude/router.sh "Fix login bug"
+# Output: 🛡️ Guardian [S] recommended
+
+# In Claude CLI:
+claude> My login function returns undefined sometimes
 ```
 
 **What happens:**
@@ -35,7 +45,12 @@ claude> "My login function returns undefined sometimes"
 ## Example 3: Add Security (25 seconds)
 
 ```bash
-claude> "Add authentication to my API endpoints"
+# Optional: Check recommendation
+.claude/router.sh "Add JWT authentication"
+# Output: 🏗️ Architect [S] for JWT implementation
+
+# In Claude CLI:
+claude> Add authentication to my API endpoints
 ```
 
 **You get:**
@@ -48,7 +63,12 @@ claude> "Add authentication to my API endpoints"
 ## Example 4: Make It Fast (15 seconds)
 
 ```bash
-claude> "This page loads slowly"
+# Optional: Check recommendation
+.claude/router.sh "Optimize database performance"
+# Output: 🛡️ Guardian [O] for complex optimization
+
+# In Claude CLI:
+claude> This page loads slowly
 ```
 
 **Guardian does:**
@@ -61,7 +81,12 @@ claude> "This page loads slowly"
 ## Example 5: Deploy It (30 seconds)
 
 ```bash
-claude> "Deploy this to Vercel"
+# Optional: Check recommendation
+.claude/router.sh "Deploy to Vercel"
+# Output: 🔌 Connector [H] for simple deployment
+
+# In Claude CLI:
+claude> Deploy this to Vercel
 ```
 
 **Connector handles:**
@@ -75,30 +100,30 @@ claude> "Deploy this to Vercel"
 
 ### Building Features
 ```bash
-"Create a [thing]"           → Architect builds it
-"Add [feature] to [thing]"   → Architect extends it
-"Connect [A] to [B]"         → Connector integrates
+Create a [thing]           → 🏗️ Architect [S/O]
+Add [feature] to [thing]   → 🏗️ Architect [S]
+Connect [A] to [B]         → 🔌 Connector [H/S]
 ```
 
 ### Fixing Problems
 ```bash
-"Fix [issue]"                → Guardian debugs and fixes
-"[X] is not working"         → Guardian troubleshoots
-"Getting error: [message]"   → Guardian resolves
+Fix [issue]                → 🛡️ Guardian [S]
+[X] is not working         → 🛡️ Guardian [S]
+Getting error: [message]   → 🛡️ Guardian [S/O]
 ```
 
 ### Improving Code
 ```bash
-"Make this faster"           → Guardian optimizes
-"Reduce memory usage"        → Guardian profiles and fixes
-"Improve this code"          → Guardian refactors
+Make this faster           → 🛡️ Guardian [O]
+Reduce memory usage        → 🛡️ Guardian [O]
+Improve security           → 🛡️ Guardian [O]
 ```
 
 ### Understanding Code
 ```bash
-"Explain this function"      → Documenter clarifies
-"How does [X] work?"         → Documenter explains
-"Document this API"          → Documenter writes docs
+Explain this function      → 📝 Documenter [H]
+How does [X] work?         → 📝 Documenter [H]
+Document this API          → 📝 Documenter [H]
 ```
 
 ## Real Project Example
@@ -107,24 +132,29 @@ Starting a new project from scratch:
 
 ```bash
 # 1. Create project
-claude> "Create a task management app with React and Node.js"
-# Architect creates full-stack structure
+claude> Create a task management app with React and Node.js
+# 🏗️ Architect [S] builds full-stack structure
 
 # 2. Add features
-claude> "Add user authentication"
-# Architect designs, Guardian secures
+claude> Add user authentication with JWT
+# 🏗️ Architect [S] implements auth system
 
 # 3. Test it
-claude> "Write tests for all endpoints"
-# Guardian creates comprehensive tests
+claude> Write tests for all endpoints
+# 🛡️ Guardian [S] creates comprehensive tests
 
 # 4. Optimize
-claude> "Optimize for mobile devices"
-# Guardian improves performance
+claude> Optimize for mobile devices
+# 🛡️ Guardian [S] improves performance
 
 # 5. Deploy
-claude> "Deploy to production with GitHub Actions"
-# Connector sets up CI/CD
+claude> Deploy to production with GitHub Actions
+# 🔌 Connector [S] sets up CI/CD
+```
+
+**Pro tip**: Check recommendations first with:
+```bash
+.claude/router.sh "your task"
 ```
 
 Total time: ~5 minutes for a production-ready app.
