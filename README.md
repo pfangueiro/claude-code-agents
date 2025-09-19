@@ -1,140 +1,202 @@
-# Claude Code Agents v3.0
+# Claude Agents - AI Coding Assistant
 
-A collection of specialized AI agents for Claude Code with automatic activation, intelligent coordination, and cost optimization.
+**One command. Zero config. Just works.**
 
-## Quick Setup
+## Install (10 seconds)
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/install.sh | bash -s /path/to/project
+# For any project
+curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/install.sh | bash
 ```
 
-Or clone manually:
+That's it. Start coding with AI.
+
+## How It Works
+
+Just describe what you want in natural language:
+
 ```bash
-git clone https://github.com/pfangueiro/claude-code-agents.git
-cd claude-code-agents
-./install.sh /path/to/your/project
+claude> "Create a REST API for user management"
+# ✅ Architect designs it, Guardian secures it, Connector integrates it
+
+claude> "This function is slow, make it faster"
+# ✅ Guardian analyzes it, optimizes it, and tests it
+
+claude> "Add authentication to my app"
+# ✅ Architect designs auth flow, Guardian implements security
+
+claude> "Deploy this to production"
+# ✅ Connector handles deployment, Guardian validates it
 ```
 
-## What You Get
+## The 4 Agents
 
-### 23 Specialized Agents
-- **Development**: api-builder, frontend-architect, database-architect, mobile-developer
-- **Languages**: python-expert, typescript-expert, infrastructure-expert
-- **Quality**: test-engineer, secure-coder, performance-optimizer, refactor-specialist  
-- **DevOps**: deployment-engineer, pwa-architect
-- **Design**: ui-ux-specialist, documentation-specialist
-- **Management**: project-coordinator, directory-scanner, meta-agent
-- **Intelligence**: context-analyzer, ai-optimizer, integration-specialist, workflow-learner, health-monitor
+Each agent has one clear job:
 
-### Auto-Activation
-Agents activate automatically when you mention relevant keywords:
-- "Create a REST API" → api-builder + secure-coder activate
-- "Optimize database queries" → database-architect + performance-optimizer activate
-- "Build React component" → frontend-architect + typescript-expert activate
+| Agent | Purpose | Activates When You Say |
+|-------|---------|------------------------|
+| **Architect** | Designs and builds code | "create", "build", "implement", "design" |
+| **Guardian** | Quality, security, and performance | "test", "fix", "secure", "optimize" |
+| **Connector** | External services and deployment | "deploy", "integrate", "connect" |
+| **Documenter** | Documentation and explanations | "explain", "document", "describe" |
 
-### Cost Optimization
-- Smart model selection (Haiku $0.80/1M, Sonnet $3/1M, Opus $15/1M tokens)
-- Automatic cost tracking and optimization
-- 60%+ cost reduction through intelligent model assignment
+## Quick Examples
 
-### Quality Gates
-Mandatory validation before deployment:
-- test-engineer: All tests must pass
-- secure-coder: Security review required
-- performance-optimizer: Performance validation
+### 1. Build Something New
+```bash
+"Create a user authentication system with JWT"
+```
+**What happens**: Architect designs → Guardian secures → Connector integrates
 
-## Usage
+### 2. Fix a Problem
+```bash
+"Fix the memory leak in this function"
+```
+**What happens**: Guardian analyzes → fixes → tests
 
-After installation, agents work automatically:
+### 3. Improve Performance
+```bash
+"Make this database query 10x faster"
+```
+**What happens**: Guardian profiles → optimizes → validates
 
+### 4. Add Features
+```bash
+"Add real-time notifications to my app"
+```
+**What happens**: Architect designs → Connector integrates WebSocket → Guardian tests
+
+### 5. Deploy
+```bash
+"Deploy this to AWS with auto-scaling"
+```
+**What happens**: Connector configures → Guardian validates → deploys
+
+## Project Structure
+
+After installation, you get:
+```
+your-project/
+└── .claude/
+    ├── agents/      # The 4 AI agents
+    ├── router.sh    # Understands what you want
+    └── history/     # Learns from your patterns
+```
+
+That's all. No complex configuration.
+
+## For Different Projects
+
+The system auto-detects your project type and adapts:
+
+- **Node.js/React**: Focuses on components and APIs
+- **Python/Django**: Emphasizes backend and data
+- **Mobile**: Optimizes for app development
+- **New Project**: Helps you start from scratch
+
+## Installation Options
+
+### New Project
+```bash
+mkdir my-app && cd my-app
+curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/install.sh | bash
+```
+
+### Existing Project
 ```bash
 cd your-project
-claude
-"I need to create user authentication"
-# Agents coordinate automatically - no manual setup needed
+curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/install.sh | bash
 ```
 
-## Commands
+### Team Setup
+```bash
+# Install once
+./install.sh
 
-Basic commands:
-- `/workflow feature` - Run feature development pipeline
-- `/quality-check` - Run security, performance, and quality validation
-- `/track status` - View agent activity and costs
+# Commit to git
+git add .claude
+git commit -m "Add AI agents"
 
-Advanced commands (v3.0):
-- `/auto-optimize` - AI-powered system optimization
-- `/health check` - System health and diagnostics
-- `/scale up` - Dynamic agent scaling
+# Team members just pull
+git pull
+```
 
-## Project Types Supported
+### CI/CD Integration
+```yaml
+# .github/workflows/ai-assist.yml
+- name: AI Code Review
+  run: |
+    .claude/router.sh "Review this PR for security issues"
+```
 
-The installer auto-detects and configures for:
-- **Next.js/React**: Frontend-focused agent priorities
-- **Python APIs**: Backend and database optimization
-- **Node.js**: Full-stack development support
-- **Mobile**: React Native/Flutter optimization
-- **Infrastructure**: DevOps and deployment focus
-- **Generic**: Adaptive configuration for any project
+## Advanced Usage
 
-## Configuration
+### Custom Workflows
+Create `.claude.yml` (optional):
+```yaml
+workflows:
+  review: [Guardian]
+  release: [Guardian, Connector]
+```
 
-The system generates a project-specific `CLAUDE.md` with:
-- Agent priorities for your tech stack
-- Workflow patterns optimized for your project type
-- Cost optimization settings
-- Auto-activation examples
+### Learning System
+The system learns your patterns:
+- Remembers successful workflows
+- Adapts to your coding style
+- Improves suggestions over time
 
-## Monitoring
+## Deployment
 
-Built-in tracking system:
-- Token usage and cost tracking
-- Agent performance metrics
-- Success/failure rates
-- GitHub integration (optional)
+### Personal Projects
+Just copy the `.claude` folder.
 
-View dashboard: `.claude/scripts/dashboard.sh`
+### Team Projects
+Add `.claude` to your repository.
+
+### Enterprise
+Deploy as MCP server for centralized management.
+
+### Cloud IDE
+Works in GitHub Codespaces, Replit, etc.
+
+## Troubleshooting
+
+**"Agents not responding"**
+→ Run: `.claude/router.sh status`
+
+**"Wrong agent activated"**
+→ Be more specific: "Create REST API" vs "Create GraphQL API"
+
+**"Need different behavior"**
+→ Create `.claude.yml` with custom workflows
+
+## Uninstall
+
+```bash
+rm -rf .claude
+```
+
+## Why Only 4 Agents?
+
+- **Architect**: Handles ALL design and creation
+- **Guardian**: Handles ALL quality and security
+- **Connector**: Handles ALL integrations
+- **Documenter**: Handles ALL documentation
+
+Each agent is powerful and focused. No overlap, no confusion.
 
 ## Requirements
 
-**Required**: git, bash 4.0+
-**Recommended**: jq (JSON processing), bc (cost calculations)
-**Optional**: gh CLI (GitHub integration)
-
-## Documentation
-
-- `INTEGRATION_GUIDE.md` - Detailed deployment and validation procedures
-- `REQUIREMENTS.md` - Complete dependency information
-- `TEST_SCENARIOS.md` - Validation and testing guide
-
-## Architecture
-
-### Agent Coordination
-- **Sequential**: Agent A → Agent B → Agent C
-- **Parallel**: Multiple agents working simultaneously
-- **Quality Gates**: Validation checkpoints before deployment
-
-### Storage
-- CSV files for metrics and cost tracking
-- JSONL files for structured logging
-- Daily partitioned data for performance
-
-### External Integrations
-- GitHub (repository management)
-- Playwright (browser testing)
-- Context7 (documentation lookup)
-- Magic (UI component generation)
-
-## Contributing
-
-1. Use the meta-agent to create new specialized agents
-2. Follow existing agent patterns (YAML frontmatter + markdown)
-3. Test agent activation and coordination
-4. Submit PR with documentation
+- Git
+- Bash 4.0+
+- Claude Code or any AI CLI tool
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT - Use freely in any project.
 
 ---
 
-**Note**: This system enhances Claude Code with specialized agents. It requires Claude Code to be installed and configured separately.
+**Problems?** Open an issue on [GitHub](https://github.com/pfangueiro/claude-code-agents)
+
+**Love it?** Star the repo!
