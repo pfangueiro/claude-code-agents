@@ -13,32 +13,36 @@ That's it. Start coding with AI.
 
 ## How It Works
 
-Just describe what you want in natural language:
+Just describe what you want in natural language. The system automatically:
+1. **Detects intent** from your request
+2. **Analyzes complexity** of the task
+3. **Selects optimal model** (Haiku/Sonnet/Opus)
+4. **Shows visual feedback** with colors and costs
 
 ```bash
 claude> "Create a REST API for user management"
-# ✅ Architect designs it, Guardian secures it, Connector integrates it
+# 🏗️ Architect [S] - Uses Sonnet ($3/1M) for standard complexity
+# ✅ Designs it, Guardian secures it, Connector integrates it
 
-claude> "This function is slow, make it faster"
-# ✅ Guardian analyzes it, optimizes it, and tests it
+claude> "Fix critical security vulnerability in production"
+# 🛡️ Guardian [O] - Uses Opus ($15/1M) for critical issues
+# ✅ Analyzes, patches, validates with maximum intelligence
 
-claude> "Add authentication to my app"
-# ✅ Architect designs auth flow, Guardian implements security
-
-claude> "Deploy this to production"
-# ✅ Connector handles deployment, Guardian validates it
+claude> "Document this function"
+# 📝 Documenter [H] - Uses Haiku ($0.80/1M) to save 95% on costs
+# ✅ Generates clear documentation efficiently
 ```
 
-## The 4 Agents
+## The 4 Agents with Smart Model Selection
 
-Each agent has one clear job:
+Each agent has one clear job and intelligently selects the best AI model:
 
-| Agent | Purpose | Activates When You Say |
-|-------|---------|------------------------|
-| **Architect** | Designs and builds code | "create", "build", "implement", "design" |
-| **Guardian** | Quality, security, and performance | "test", "fix", "secure", "optimize" |
-| **Connector** | External services and deployment | "deploy", "integrate", "connect" |
-| **Documenter** | Documentation and explanations | "explain", "document", "describe" |
+| Agent | Purpose | Activates When You Say | Model Selection |
+|-------|---------|------------------------|------------------|
+| **🏗️ Architect** | Designs and builds code | "create", "build", "implement", "design" | Sonnet ($3/1M) or Opus ($15/1M) for complex |
+| **🛡️ Guardian** | Quality, security, and performance | "test", "fix", "secure", "optimize" | Sonnet ($3/1M) or Opus ($15/1M) for critical |
+| **🔌 Connector** | External services and deployment | "deploy", "integrate", "connect" | Haiku ($0.80/1M) or Sonnet ($3/1M) for production |
+| **📝 Documenter** | Documentation and explanations | "explain", "document", "describe" | Always Haiku ($0.80/1M) - 95% savings |
 
 ## Quick Examples
 
@@ -78,12 +82,16 @@ After installation, you get:
 ```
 your-project/
 └── .claude/
-    ├── agents/      # The 4 AI agents
-    ├── router.sh    # Understands what you want
-    └── history/     # Learns from your patterns
+    ├── agents/      # The 4 AI agents with model configs
+    ├── router.sh    # Smart router with complexity detection
+    └── history/     # Learns patterns and tracks costs
 ```
 
-That's all. No complex configuration.
+**Smart Features**:
+- **Automatic model selection**: Saves 70% on API costs
+- **Visual feedback**: Color-coded agents with emojis
+- **Cost tracking**: See exactly what each request costs
+- **Complexity detection**: Uses expensive models only when needed
 
 ## For Different Projects
 
@@ -170,6 +178,12 @@ Works in GitHub Codespaces, Replit, etc.
 **"Need different behavior"**
 → Create `.claude.yml` with custom workflows
 
+**"Want to check costs"**
+→ Run: `.claude/router.sh costs`
+
+**"See request history"**
+→ Run: `.claude/router.sh history`
+
 ## Uninstall
 
 ```bash
@@ -178,12 +192,21 @@ rm -rf .claude
 
 ## Why Only 4 Agents?
 
-- **Architect**: Handles ALL design and creation
-- **Guardian**: Handles ALL quality and security
-- **Connector**: Handles ALL integrations
-- **Documenter**: Handles ALL documentation
+- **🏗️ Architect**: Handles ALL design and creation (uses Sonnet/Opus)
+- **🛡️ Guardian**: Handles ALL quality and security (uses Sonnet/Opus)
+- **🔌 Connector**: Handles ALL integrations (uses Haiku/Sonnet)
+- **📝 Documenter**: Handles ALL documentation (always Haiku for savings)
 
-Each agent is powerful and focused. No overlap, no confusion.
+Each agent is powerful, focused, and cost-optimized. No overlap, no confusion, no waste.
+
+## Cost Optimization
+
+The system intelligently selects models based on task complexity:
+- **Simple tasks**: Haiku at $0.80/1M tokens (80% cheaper)
+- **Standard tasks**: Sonnet at $3/1M tokens (balanced)
+- **Complex/Critical**: Opus at $15/1M tokens (maximum intelligence)
+
+**Result**: 70% average cost savings vs always using Opus
 
 ## Requirements
 
