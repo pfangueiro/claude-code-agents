@@ -164,10 +164,10 @@ select_model() {
 get_agent_display() {
     local agent="$1"
     case "$agent" in
-        architect) echo "🏗️  Architect|$ARCHITECT_COLOR" ;;
-        guardian) echo "🛡️  Guardian|$GUARDIAN_COLOR" ;;
-        connector) echo "🔌 Connector|$CONNECTOR_COLOR" ;;
-        documenter) echo "📝 Documenter|$DOCUMENTER_COLOR" ;;
+        architect) echo "Architect|$ARCHITECT_COLOR" ;;
+        guardian) echo "Guardian|$GUARDIAN_COLOR" ;;
+        connector) echo "Connector|$CONNECTOR_COLOR" ;;
+        documenter) echo "Documenter|$DOCUMENTER_COLOR" ;;
     esac
 }
 
@@ -194,30 +194,24 @@ route_request() {
     if [ -n "$special_mode" ]; then
         case "$special_mode" in
             ULTRATHINK)
-                echo -e "${BG_MAGENTA}${BOLD} 🧠 ULTRATHINK MODE ACTIVATED 🧠 ${NC}"
-                echo -e "${ULTRATHINK_COLOR}Deep analysis with maximum intelligence${NC}"
+                echo -e "${ULTRATHINK_COLOR}[ULTRATHINK] Deep analysis mode${NC}"
                 ;;
             CRITICAL)
-                echo -e "${BG_RED}${BOLD} ⚠️  CRITICAL MODE ACTIVATED ⚠️  ${NC}"
-                echo -e "${CRITICAL_COLOR}Maximum priority with Opus model${NC}"
+                echo -e "${CRITICAL_COLOR}[CRITICAL] Maximum priority${NC}"
                 ;;
             FAST)
-                echo -e "${BG_YELLOW}${BOLD} ⚡ FAST MODE ACTIVATED ⚡ ${NC}"
-                echo -e "${FAST_COLOR}Speed optimized with Haiku model${NC}"
+                echo -e "${FAST_COLOR}[FAST] Speed optimized${NC}"
                 ;;
             REVIEW)
-                echo -e "${BG_YELLOW}${BOLD} 🔍 REVIEW MODE ACTIVATED 🔍 ${NC}"
-                echo -e "${REVIEW_COLOR}Thorough analysis with Guardian${NC}"
+                echo -e "${REVIEW_COLOR}[REVIEW] Thorough analysis${NC}"
                 ;;
         esac
         echo ""
     fi
 
-    echo -e "${BOLD}═══════════════════════════════════════════${NC}"
-
+    echo -e "${BOLD}──────────────────────────────${NC}"
     # Show agent with color and model badge
     echo -e "${agent_color}${agent_name}${NC} ${badge}"
-    echo -e "${BOLD}───────────────────────────────────────────${NC}"
 
     case "$intent" in
         architect)
@@ -271,7 +265,7 @@ route_request() {
             ;;
     esac
 
-    echo -e "${BOLD}═══════════════════════════════════════════${NC}"
+    echo -e "${BOLD}──────────────────────────────${NC}"
 
     # Log to history for learning
     mkdir -p .claude/history
@@ -279,9 +273,6 @@ route_request() {
 
     # Update agent file with model selection
     echo "model: $model" > .claude/history/last_model_selection.txt
-
-    echo ""
-    echo -e "✅ Request processed. Agent activated with optimal model."
 }
 
 # Handle special commands
@@ -289,10 +280,10 @@ case "$COMMAND" in
     status)
         echo -e "${BOLD}Claude Agents Status${NC}"
         echo -e "${BOLD}───────────────────────${NC}"
-        echo -e "${ARCHITECT_COLOR}🏗️  Architect${NC} - Builds code ${SONNET_BADGE}/${OPUS_BADGE}"
-        echo -e "${GUARDIAN_COLOR}🛡️  Guardian${NC}  - Ensures quality ${SONNET_BADGE}/${OPUS_BADGE}"
-        echo -e "${CONNECTOR_COLOR}🔌 Connector${NC} - Handles integrations ${HAIKU_BADGE}/${SONNET_BADGE}"
-        echo -e "${DOCUMENTER_COLOR}📝 Documenter${NC} - Writes documentation ${HAIKU_BADGE}"
+        echo -e "${ARCHITECT_COLOR}Architect${NC}  - Builds code ${SONNET_BADGE}/${OPUS_BADGE}"
+        echo -e "${GUARDIAN_COLOR}Guardian${NC}   - Ensures quality ${SONNET_BADGE}/${OPUS_BADGE}"
+        echo -e "${CONNECTOR_COLOR}Connector${NC}  - Handles integrations ${HAIKU_BADGE}/${SONNET_BADGE}"
+        echo -e "${DOCUMENTER_COLOR}Documenter${NC} - Writes documentation ${HAIKU_BADGE}"
         echo ""
         echo "Model costs:"
         echo "  ${HAIKU_BADGE} Haiku:  \$0.80/1M input, \$4/1M output"
