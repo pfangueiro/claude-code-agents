@@ -258,6 +258,39 @@ ROUTER
 
 chmod +x .claude/router.sh
 
+# Handle CLAUDE.md for project context
+echo -e "${BLUE}→${NC} Checking for CLAUDE.md..."
+CLAUDE_SNIPPET="
+## AI Agents Available
+Architect: builds code | Guardian: fixes/secures | Connector: deploys | Documenter: explains
+Router: .claude/router.sh \"task\" shows optimal agent/model
+"
+
+if [ -f "CLAUDE.md" ]; then
+    echo -e "${YELLOW}!${NC} Found existing CLAUDE.md"
+    echo -e "${BLUE}→${NC} Add these 3 lines to your CLAUDE.md for agent awareness:"
+    echo -e "${CYAN}────────────────────────────────────────${NC}"
+    echo "$CLAUDE_SNIPPET"
+    echo -e "${CYAN}────────────────────────────────────────${NC}"
+    echo -e "${YELLOW}Note:${NC} This is the minimum context needed for Claude to use agents"
+elif [ -f "claude.md" ]; then
+    echo -e "${YELLOW}!${NC} Found existing claude.md"
+    echo -e "${BLUE}→${NC} Add these 3 lines to your claude.md for agent awareness:"
+    echo -e "${CYAN}────────────────────────────────────────${NC}"
+    echo "$CLAUDE_SNIPPET"
+    echo -e "${CYAN}────────────────────────────────────────${NC}"
+    echo -e "${YELLOW}Note:${NC} This is the minimum context needed for Claude to use agents"
+else
+    echo -e "${BLUE}→${NC} No CLAUDE.md found. Creating minimal version..."
+    cat > CLAUDE.md << CLAUDE_DOC
+# Project Context
+$CLAUDE_SNIPPET
+## Project Info
+Add your project-specific context here.
+CLAUDE_DOC
+    echo -e "${GREEN}✓${NC} Created CLAUDE.md with agent context"
+fi
+
 # Create optional config (not required)
 if [ "$PROJECT_TYPE" != "generic" ] && [ "$PROJECT_TYPE" != "new" ]; then
     echo -e "${BLUE}→${NC} Optimizing for $PROJECT_TYPE project..."
@@ -304,9 +337,10 @@ echo "  • Connector - Handles integrations"
 echo "  • Documenter - Writes documentation"
 echo
 echo -e "${BLUE}Try it now:${NC}"
-echo -e "  ${YELLOW}claude>${NC} \"Create a REST API for user management\""
+echo -e "  ${YELLOW}claude>${NC} Create a REST API for user management"
 echo
-echo -e "${BLUE}Or test the router:${NC}"
+echo -e "${BLUE}Or check recommendations:${NC}"
 echo -e "  ${YELLOW}.claude/router.sh${NC} \"Fix the bug in my login function\""
 echo
 echo -e "Need help? Check ${BLUE}QUICKSTART.md${NC}"
+echo -e "${CYAN}Important:${NC} If you had a CLAUDE.md, add the snippet shown above to it"
