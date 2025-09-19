@@ -18,19 +18,20 @@ Just describe what you want in natural language. The system automatically:
 2. **Analyzes complexity** of the task
 3. **Selects optimal model** (Haiku/Sonnet/Opus)
 4. **Shows visual feedback** with colors and costs
+5. **Activates the right agent** with the best model
 
 ```bash
 claude> "Create a REST API for user management"
 # 🏗️ Architect [S] - Uses Sonnet ($3/1M) for standard complexity
-# ✅ Designs it, Guardian secures it, Connector integrates it
+# ✅ Agent activated with optimal model for building
 
 claude> "Fix critical security vulnerability in production"
 # 🛡️ Guardian [O] - Uses Opus ($15/1M) for critical issues
-# ✅ Analyzes, patches, validates with maximum intelligence
+# ✅ Agent activated with maximum intelligence
 
 claude> "Document this function"
 # 📝 Documenter [H] - Uses Haiku ($0.80/1M) to save 95% on costs
-# ✅ Generates clear documentation efficiently
+# ✅ Agent activated with cost-optimized model
 ```
 
 ## The 4 Agents with Smart Model Selection
@@ -50,31 +51,31 @@ Each agent has one clear job and intelligently selects the best AI model:
 ```bash
 "Create a user authentication system with JWT"
 ```
-**What happens**: Architect designs → Guardian secures → Connector integrates
+**Selected**: 🏗️ Architect [S] - Uses Sonnet for standard complexity design
 
 ### 2. Fix a Problem
 ```bash
 "Fix the memory leak in this function"
 ```
-**What happens**: Guardian analyzes → fixes → tests
+**Selected**: 🛡️ Guardian [S] - Uses Sonnet for debugging and fixing
 
 ### 3. Improve Performance
 ```bash
 "Make this database query 10x faster"
 ```
-**What happens**: Guardian profiles → optimizes → validates
+**Selected**: 🛡️ Guardian [O] - Uses Opus for complex optimization
 
 ### 4. Add Features
 ```bash
 "Add real-time notifications to my app"
 ```
-**What happens**: Architect designs → Connector integrates WebSocket → Guardian tests
+**Selected**: 🏗️ Architect [S/O] - Model based on complexity
 
 ### 5. Deploy
 ```bash
 "Deploy this to AWS with auto-scaling"
 ```
-**What happens**: Connector configures → Guardian validates → deploys
+**Selected**: 🔌 Connector [S] - Uses Sonnet for production deployment
 
 ## Project Structure
 
