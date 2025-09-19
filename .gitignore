@@ -1,37 +1,26 @@
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
+# Claude Agents - Minimal .gitignore
 
-# Thumbnails
-._*
-
-# Files that might appear in the root of a volume
-.DocumentRevisions-V100
-.fseventsd
-.Spotlight-V100
-.TemporaryItems
-.Trashes
-.VolumeIcon.icns
-.com.apple.timemachine.donotpresent
-
-# Directories potentially created on remote AFP share
-.AppleDB
-.AppleDesktop
-Network Trash Folder
-Temporary Items
-.apdisk
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
+# History (personal data, don't commit)
+.claude/history/
 
 # Logs
 *.log
 
-# Dependencies
-node_modules/
-__pycache__/
-*.pyc
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp
+*.backup
+
+# Archives
+*.tar.gz
+*.zip
