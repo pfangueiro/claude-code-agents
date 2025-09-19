@@ -35,6 +35,25 @@ claude> Document this function
 # Claude will write docs efficiently
 ```
 
+### 🌟 Special Keywords (NEW!)
+
+Use these trigger words to activate special modes:
+
+| Keyword | Effect | Visual Indicator | Model |
+|---------|--------|-----------------|-------|
+| **ULTRATHINK** | Deep analysis mode | 🧠 Magenta banner | Forces Opus ($15/1M) |
+| **CRITICAL** | Maximum priority | ⚠️ Red banner | Forces Opus ($15/1M) |
+| **FAST** | Speed optimized | ⚡ Yellow banner | Forces Haiku ($0.80/1M) |
+| **REVIEW** | Thorough analysis | 🔍 Blue banner | Guardian + Opus |
+
+```bash
+# Examples:
+.claude/router.sh "ULTRATHINK about the architecture"
+.claude/router.sh "CRITICAL production bug"
+.claude/router.sh "FAST prototype this feature"
+.claude/router.sh "REVIEW code for security issues"
+```
+
 **Note**: The router.sh is a **planning tool** that shows you which agent/model would be optimal. The actual AI work happens in your Claude CLI session.
 
 ## The 4 Agents with Smart Model Selection
@@ -228,6 +247,10 @@ The system intelligently selects models based on task complexity:
 - **Simple tasks**: Haiku at $0.80/1M tokens (80% cheaper)
 - **Standard tasks**: Sonnet at $3/1M tokens (balanced)
 - **Complex/Critical**: Opus at $15/1M tokens (maximum intelligence)
+
+**Special Modes Override**:
+- **FAST**: Forces Haiku for maximum speed/minimum cost
+- **ULTRATHINK/CRITICAL/REVIEW**: Forces Opus for maximum intelligence
 
 **Result**: 70% average cost savings vs always using Opus
 
