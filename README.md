@@ -35,16 +35,16 @@ claude> Document this function
 # Claude will write docs efficiently
 ```
 
-### 🌟 Special Keywords (NEW!)
+### Special Keywords
 
 Use these trigger words to activate special modes:
 
-| Keyword | Effect | Visual Indicator | Model |
-|---------|--------|-----------------|-------|
-| **ULTRATHINK** | Deep analysis mode | 🧠 Magenta banner | Forces Opus ($15/1M) |
-| **CRITICAL** | Maximum priority | ⚠️ Red banner | Forces Opus ($15/1M) |
-| **FAST** | Speed optimized | ⚡ Yellow banner | Forces Haiku ($0.80/1M) |
-| **REVIEW** | Thorough analysis | 🔍 Blue banner | Guardian + Opus |
+| Keyword | Effect | Indicator | Model Override |
+|---------|--------|-----------|----------------|
+| **ULTRATHINK** | Deep analysis mode | [ULTRATHINK] in magenta | Forces Opus ($15/1M) |
+| **CRITICAL** | Maximum priority | [CRITICAL] in red | Forces Opus ($15/1M) |
+| **FAST** | Speed optimized | [FAST] in green | Forces Haiku ($0.80/1M) |
+| **REVIEW** | Thorough analysis | [REVIEW] in blue | Guardian + Opus |
 
 ```bash
 # Examples:
@@ -62,10 +62,10 @@ Each agent has one clear job and intelligently selects the best AI model:
 
 | Agent | Purpose | Activates When You Say | Model Selection |
 |-------|---------|------------------------|------------------|
-| **🏗️ Architect** | Designs and builds code | "create", "build", "implement", "design" | Sonnet ($3/1M) or Opus ($15/1M) for complex |
-| **🛡️ Guardian** | Quality, security, and performance | "test", "fix", "secure", "optimize" | Sonnet ($3/1M) or Opus ($15/1M) for critical |
-| **🔌 Connector** | External services and deployment | "deploy", "integrate", "connect" | Haiku ($0.80/1M) or Sonnet ($3/1M) for production |
-| **📝 Documenter** | Documentation and explanations | "explain", "document", "describe" | Always Haiku ($0.80/1M) - 95% savings |
+| **Architect** | Designs and builds code | "create", "build", "implement", "design" | Sonnet ($3/1M) or Opus ($15/1M) for complex |
+| **Guardian** | Quality, security, and performance | "test", "fix", "secure", "optimize" | Sonnet ($3/1M) or Opus ($15/1M) for critical |
+| **Connector** | External services and deployment | "deploy", "integrate", "connect" | Haiku ($0.80/1M) or Sonnet ($3/1M) for production |
+| **Documenter** | Documentation and explanations | "explain", "document", "describe" | Always Haiku ($0.80/1M) - 95% savings |
 
 ## Quick Examples
 
@@ -234,10 +234,10 @@ rm -rf .claude
 
 ## Why Only 4 Agents?
 
-- **🏗️ Architect**: Handles ALL design and creation (uses Sonnet/Opus)
-- **🛡️ Guardian**: Handles ALL quality and security (uses Sonnet/Opus)
-- **🔌 Connector**: Handles ALL integrations (uses Haiku/Sonnet)
-- **📝 Documenter**: Handles ALL documentation (always Haiku for savings)
+- **Architect**: Handles ALL design and creation (uses Sonnet/Opus)
+- **Guardian**: Handles ALL quality and security (uses Sonnet/Opus)
+- **Connector**: Handles ALL integrations (uses Haiku/Sonnet)
+- **Documenter**: Handles ALL documentation (always Haiku for savings)
 
 Each agent is powerful, focused, and cost-optimized. No overlap, no confusion, no waste.
 
