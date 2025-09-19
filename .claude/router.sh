@@ -24,37 +24,46 @@ detect_intent_and_complexity() {
     local intent=""
     local complexity="medium"
 
-    # Architect patterns
-    if echo "$input_lower" | grep -E "create|build|implement|design|setup|scaffold|architect" > /dev/null; then
+    # Architect patterns - expanded with more technical terms
+    if echo "$input_lower" | grep -E "create|build|implement|design|setup|scaffold|architect|develop|code|write|add|generate|construct|init|initialize|new|make|establish" > /dev/null; then
+        intent="architect"
+        # Also check for API/component/feature keywords
+    elif echo "$input_lower" | grep -E "api|rest|graphql|crud|endpoint|route|component|feature|function|class|module|interface|schema|model|database|table|migration|auth|jwt|oauth|login|signup|ui|ux|frontend|backend|service|microservice" > /dev/null; then
         intent="architect"
         # Complex architecture needs higher model
-        if echo "$input_lower" | grep -E "microservice|distributed|scalable|enterprise|complex|architecture" > /dev/null; then
+        if echo "$input_lower" | grep -E "microservice|distributed|scalable|enterprise|complex|architecture|kubernetes|k8s|docker|aws|gcp|azure|cloud|production|critical" > /dev/null; then
             complexity="high"
-        elif echo "$input_lower" | grep -E "simple|basic|quick|prototype" > /dev/null; then
+        elif echo "$input_lower" | grep -E "simple|basic|quick|prototype|demo|test|example|sample|tutorial|learning" > /dev/null; then
             complexity="low"
         else
             complexity="medium"
         fi
-    # Guardian patterns
-    elif echo "$input_lower" | grep -E "test|fix|secure|optimize|debug|audit|validate|improve" > /dev/null; then
+    # Guardian patterns - expanded with more quality/security terms
+    elif echo "$input_lower" | grep -E "test|fix|secure|optimize|debug|audit|validate|improve|refactor|clean|review|check|analyze|profile|benchmark|patch|repair|resolve|troubleshoot|diagnose|inspect" > /dev/null; then
+        intent="guardian"
+        # Also check for bug/error/issue keywords
+    elif echo "$input_lower" | grep -E "bug|error|issue|problem|crash|leak|memory|performance|slow|broken|fail|wrong|incorrect|vulnerability|security|xss|sql.injection|csrf|cors|penetration|pentest|owasp|cve" > /dev/null; then
         intent="guardian"
         # Security and optimization need better models
-        if echo "$input_lower" | grep -E "security|vulnerability|performance|critical|production" > /dev/null; then
+        if echo "$input_lower" | grep -E "security|vulnerability|performance|critical|production|memory.leak|crash|exploit|zero.day|penetration|compliance|audit|soc2|gdpr|pci" > /dev/null; then
             complexity="high"
         else
             complexity="medium"
         fi
-    # Connector patterns
-    elif echo "$input_lower" | grep -E "deploy|integrate|connect|publish|release|ship" > /dev/null; then
+    # Connector patterns - expanded with more deployment/integration terms
+    elif echo "$input_lower" | grep -E "deploy|integrate|connect|publish|release|ship|launch|push|upload|host|serve|configure|setup.ci|setup.cd|ci/cd|cicd|pipeline|webhook|api.key|environment|env|config|docker|container|kubernetes|k8s|helm|terraform|ansible" > /dev/null; then
+        intent="connector"
+        # Also check for cloud/service keywords
+    elif echo "$input_lower" | grep -E "aws|amazon|s3|ec2|lambda|gcp|google.cloud|azure|vercel|netlify|heroku|railway|render|fly.io|digitalocean|cloudflare|cdn|redis|postgres|mongodb|mysql|elasticsearch|rabbitmq|kafka|stripe|twilio|sendgrid|firebase|supabase" > /dev/null; then
         intent="connector"
         # Production deployments need care
-        if echo "$input_lower" | grep -E "production|kubernetes|aws|scaling|critical" > /dev/null; then
+        if echo "$input_lower" | grep -E "production|kubernetes|k8s|scaling|critical|high.availability|load.balance|auto.scale|disaster.recovery|backup|monitoring|observability|prometheus|grafana|datadog" > /dev/null; then
             complexity="medium"
         else
             complexity="low"
         fi
-    # Documenter patterns
-    elif echo "$input_lower" | grep -E "document|explain|describe|comment|readme" > /dev/null; then
+    # Documenter patterns - expanded with more documentation terms
+    elif echo "$input_lower" | grep -E "document|explain|describe|comment|readme|docs|documentation|annotate|clarify|guide|tutorial|manual|wiki|changelog|notes|instructions|help|faq|api.doc|swagger|openapi|jsdoc|docstring|markdown|md" > /dev/null; then
         intent="documenter"
         complexity="low" # Documentation is usually straightforward
     # Default to architect for creation tasks
