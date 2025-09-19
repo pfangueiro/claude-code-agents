@@ -13,6 +13,15 @@ DOCUMENTER_COLOR='\033[0;36m' # Cyan
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
+# Special trigger colors
+ULTRATHINK_COLOR='\033[1;35m'  # Bright Magenta
+CRITICAL_COLOR='\033[1;31m'    # Bright Red
+FAST_COLOR='\033[1;32m'        # Bright Green
+REVIEW_COLOR='\033[1;34m'      # Bright Blue
+BG_YELLOW='\033[43m'            # Yellow background
+BG_MAGENTA='\033[45m'           # Magenta background
+BG_RED='\033[41m'               # Red background
+
 # Model indicators
 HAIKU_BADGE="${BOLD}[H]${NC}"      # $0.80/1M - Fastest, cheapest
 SONNET_BADGE="${BOLD}[S]${NC}"     # $3.00/1M - Balanced
@@ -21,8 +30,28 @@ OPUS_BADGE="${BOLD}[O]${NC}"       # $15.00/1M - Most powerful
 # Detect intent and complexity from natural language
 detect_intent_and_complexity() {
     local input_lower=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+    local input_upper=$(echo "$1" | tr '[:lower:]' '[:upper:]')
     local intent=""
     local complexity="medium"
+    local special_mode=""
+
+    # Check for special trigger keywords FIRST (case-insensitive)
+    if echo "$input_upper" | grep -E "ULTRATHINK|DEEP.THINK|THINK.HARD" > /dev/null; then
+        special_mode="ULTRATHINK"
+        complexity="high"  # Force Opus for deep thinking
+    elif echo "$input_upper" | grep -E "CRITICAL|URGENT|EMERGENCY|PRODUCTION.DOWN" > /dev/null; then
+        special_mode="CRITICAL"
+        complexity="high"  # Force Opus for critical issues
+    elif echo "$input_upper" | grep -E "FAST|QUICK|SPEED|HURRY|ASAP" > /dev/null; then
+        special_mode="FAST"
+        complexity="low"   # Force Haiku for speed
+    elif echo "$input_upper" | grep -E "REVIEW|AUDIT|CHECK.ALL|THOROUGH" > /dev/null; then
+        special_mode="REVIEW"
+        intent="guardian"  # Force Guardian for reviews
+        complexity="high"  # Use Opus for thorough review
+        echo "$intent|$complexity|$special_mode"
+        return  # Return early for REVIEW mode
+    fi
 
     # Architect patterns - expanded with more technical terms
     if echo "$input_lower" | grep -E "create|build|implement|design|setup|scaffold|architect|develop|code|write|add|generate|construct|init|initialize|new|make|establish" > /dev/null; then
@@ -72,43 +101,61 @@ detect_intent_and_complexity() {
         complexity="medium"
     fi
 
-    echo "$intent|$complexity"
+    echo "$intent|$complexity|$special_mode"
 }
 
 # Select optimal model based on agent and complexity
 select_model() {
     local agent="$1"
     local complexity="$2"
+    local special_mode="$3"
     local model=""
     local badge=""
 
-    case "$agent" in
-        architect)
-            case "$complexity" in
-                high) model="opus"; badge="$OPUS_BADGE" ;;
-                medium) model="sonnet"; badge="$SONNET_BADGE" ;;
-                low) model="sonnet"; badge="$SONNET_BADGE" ;;
-            esac
-            ;;
-        guardian)
-            case "$complexity" in
-                high) model="opus"; badge="$OPUS_BADGE" ;;
-                medium) model="sonnet"; badge="$SONNET_BADGE" ;;
-                low) model="sonnet"; badge="$SONNET_BADGE" ;;
-            esac
-            ;;
-        connector)
-            case "$complexity" in
-                high) model="sonnet"; badge="$SONNET_BADGE" ;;
-                medium) model="haiku"; badge="$HAIKU_BADGE" ;;
-                low) model="haiku"; badge="$HAIKU_BADGE" ;;
-            esac
-            ;;
-        documenter)
-            # Documentation always uses haiku to save costs
-            model="haiku"; badge="$HAIKU_BADGE"
-            ;;
-    esac
+    # Special modes can override model selection
+    if [ "$special_mode" = "FAST" ]; then
+        # Force Haiku for FAST mode when possible
+        case "$agent" in
+            architect|guardian)
+                model="haiku"; badge="$HAIKU_BADGE"
+                ;;
+            connector|documenter)
+                model="haiku"; badge="$HAIKU_BADGE"
+                ;;
+        esac
+    elif [ "$special_mode" = "ULTRATHINK" ] || [ "$special_mode" = "CRITICAL" ] || [ "$special_mode" = "REVIEW" ]; then
+        # Force Opus for deep thinking modes
+        model="opus"; badge="$OPUS_BADGE"
+    else
+        # Normal model selection
+        case "$agent" in
+            architect)
+                case "$complexity" in
+                    high) model="opus"; badge="$OPUS_BADGE" ;;
+                    medium) model="sonnet"; badge="$SONNET_BADGE" ;;
+                    low) model="sonnet"; badge="$SONNET_BADGE" ;;
+                esac
+                ;;
+            guardian)
+                case "$complexity" in
+                    high) model="opus"; badge="$OPUS_BADGE" ;;
+                    medium) model="sonnet"; badge="$SONNET_BADGE" ;;
+                    low) model="sonnet"; badge="$SONNET_BADGE" ;;
+                esac
+                ;;
+            connector)
+                case "$complexity" in
+                    high) model="sonnet"; badge="$SONNET_BADGE" ;;
+                    medium) model="haiku"; badge="$HAIKU_BADGE" ;;
+                    low) model="haiku"; badge="$HAIKU_BADGE" ;;
+                esac
+                ;;
+            documenter)
+                # Documentation always uses haiku to save costs
+                model="haiku"; badge="$HAIKU_BADGE"
+                ;;
+        esac
+    fi
 
     echo "$model|$badge"
 }
@@ -129,18 +176,43 @@ route_request() {
     local result=$(detect_intent_and_complexity "$1")
     local intent=$(echo "$result" | cut -d'|' -f1)
     local complexity=$(echo "$result" | cut -d'|' -f2)
+    local special_mode=$(echo "$result" | cut -d'|' -f3)
 
     # Get primary agent display info
     local agent_info=$(get_agent_display "$intent")
     local agent_name=$(echo "$agent_info" | cut -d'|' -f1)
     local agent_color=$(echo "$agent_info" | cut -d'|' -f2)
 
-    # Get model selection
-    local model_info=$(select_model "$intent" "$complexity")
+    # Get model selection (pass special_mode too)
+    local model_info=$(select_model "$intent" "$complexity" "$special_mode")
     local model=$(echo "$model_info" | cut -d'|' -f1)
     local badge=$(echo "$model_info" | cut -d'|' -f2)
 
     echo ""
+
+    # Show special mode banner if triggered
+    if [ -n "$special_mode" ]; then
+        case "$special_mode" in
+            ULTRATHINK)
+                echo -e "${BG_MAGENTA}${BOLD} 🧠 ULTRATHINK MODE ACTIVATED 🧠 ${NC}"
+                echo -e "${ULTRATHINK_COLOR}Deep analysis with maximum intelligence${NC}"
+                ;;
+            CRITICAL)
+                echo -e "${BG_RED}${BOLD} ⚠️  CRITICAL MODE ACTIVATED ⚠️  ${NC}"
+                echo -e "${CRITICAL_COLOR}Maximum priority with Opus model${NC}"
+                ;;
+            FAST)
+                echo -e "${BG_YELLOW}${BOLD} ⚡ FAST MODE ACTIVATED ⚡ ${NC}"
+                echo -e "${FAST_COLOR}Speed optimized with Haiku model${NC}"
+                ;;
+            REVIEW)
+                echo -e "${BG_YELLOW}${BOLD} 🔍 REVIEW MODE ACTIVATED 🔍 ${NC}"
+                echo -e "${REVIEW_COLOR}Thorough analysis with Guardian${NC}"
+                ;;
+        esac
+        echo ""
+    fi
+
     echo -e "${BOLD}═══════════════════════════════════════════${NC}"
 
     # Show agent with color and model badge
@@ -150,6 +222,9 @@ route_request() {
     case "$intent" in
         architect)
             echo -e "Intent: ${BOLD}Build something new${NC}"
+            if [ -n "$special_mode" ]; then
+                echo -e "Mode: ${BOLD}${special_mode}${NC}"
+            fi
             echo -e "Complexity: ${complexity}"
             echo -e "Model: ${model} (optimal for ${complexity} complexity)"
             echo -e "Workflow: Architect → Guardian → Connector"
@@ -162,6 +237,9 @@ route_request() {
             ;;
         guardian)
             echo -e "Intent: ${BOLD}Fix or improve${NC}"
+            if [ -n "$special_mode" ]; then
+                echo -e "Mode: ${BOLD}${special_mode}${NC}"
+            fi
             echo -e "Complexity: ${complexity}"
             echo -e "Model: ${model} (${complexity} priority task)"
             echo -e "Workflow: Guardian only"
@@ -173,6 +251,9 @@ route_request() {
             ;;
         connector)
             echo -e "Intent: ${BOLD}Deploy or integrate${NC}"
+            if [ -n "$special_mode" ]; then
+                echo -e "Mode: ${BOLD}${special_mode}${NC}"
+            fi
             echo -e "Complexity: ${complexity}"
             echo -e "Model: ${model} (${complexity} risk deployment)"
             echo -e "Workflow: Connector → Guardian"

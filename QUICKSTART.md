@@ -159,6 +159,46 @@ claude> Deploy to production with GitHub Actions
 
 Total time: ~5 minutes for a production-ready app.
 
+## 🌟 Special Power Keywords
+
+Trigger special modes with these keywords:
+
+### ULTRATHINK - Deep Analysis
+```bash
+# When you need maximum intelligence
+.claude/router.sh "ULTRATHINK about the best database architecture"
+# 🧠 Activates Opus for deep thinking
+
+claude> ULTRATHINK about optimizing this algorithm
+```
+
+### CRITICAL - Emergency Mode
+```bash
+# For production issues
+.claude/router.sh "CRITICAL security vulnerability found"
+# ⚠️ Forces Opus with maximum priority
+
+claude> CRITICAL bug causing data loss
+```
+
+### FAST - Speed Mode
+```bash
+# When you need it NOW
+.claude/router.sh "FAST create a prototype"
+# ⚡ Uses Haiku for instant results
+
+claude> FAST mock up this interface
+```
+
+### REVIEW - Thorough Analysis
+```bash
+# For comprehensive reviews
+.claude/router.sh "REVIEW codebase for security issues"
+# 🔍 Activates Guardian with Opus
+
+claude> REVIEW this PR for best practices
+```
+
 ## Tips for Best Results
 
 ### Be Specific
