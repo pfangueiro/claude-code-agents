@@ -13,26 +13,29 @@ That's it. Start coding with AI.
 
 ## How It Works
 
-Just describe what you want in natural language. The system automatically:
-1. **Detects intent** from your request
-2. **Analyzes complexity** of the task
-3. **Selects optimal model** (Haiku/Sonnet/Opus)
-4. **Shows visual feedback** with colors and costs
-5. **Activates the right agent** with the best model
+The agents provide **guidance and context** for your AI coding sessions. The router helps you understand which agent and model would be best for your task:
 
+### Step 1: Analyze Your Request (Optional)
 ```bash
-claude> "Create a REST API for user management"
-# 🏗️ Architect [S] - Uses Sonnet ($3/1M) for standard complexity
-# ✅ Agent activated with optimal model for building
-
-claude> "Fix critical security vulnerability in production"
-# 🛡️ Guardian [O] - Uses Opus ($15/1M) for critical issues
-# ✅ Agent activated with maximum intelligence
-
-claude> "Document this function"
-# 📝 Documenter [H] - Uses Haiku ($0.80/1M) to save 95% on costs
-# ✅ Agent activated with cost-optimized model
+# See which agent and model would be used
+.claude/router.sh "Create a REST API"
+# Output: 🏗️ Architect [S] - Sonnet recommended
 ```
+
+### Step 2: Use with Claude CLI
+```bash
+# In your Claude CLI or AI tool, just work naturally:
+claude> Create a REST API for user management
+# Claude will build it using the Architect agent context
+
+claude> Fix the security issues in this code
+# Claude will analyze using Guardian agent patterns
+
+claude> Document this function
+# Claude will write docs efficiently
+```
+
+**Note**: The router.sh is a **planning tool** that shows you which agent/model would be optimal. The actual AI work happens in your Claude CLI session.
 
 ## The 4 Agents with Smart Model Selection
 
@@ -49,33 +52,43 @@ Each agent has one clear job and intelligently selects the best AI model:
 
 ### 1. Build Something New
 ```bash
-"Create a user authentication system with JWT"
+# Check which agent would be used (optional)
+.claude/router.sh "Create a user authentication system with JWT"
+# Output: 🏗️ Architect [S] - Sonnet recommended
+
+# Then in Claude CLI:
+claude> Create a user authentication system with JWT
 ```
-**Selected**: 🏗️ Architect [S] - Uses Sonnet for standard complexity design
 
 ### 2. Fix a Problem
 ```bash
-"Fix the memory leak in this function"
+# Check recommendation (optional)
+.claude/router.sh "Fix the memory leak in this function"
+# Output: 🛡️ Guardian [S] - Sonnet recommended
+
+# Then in Claude CLI:
+claude> Fix the memory leak in this function
 ```
-**Selected**: 🛡️ Guardian [S] - Uses Sonnet for debugging and fixing
 
 ### 3. Improve Performance
 ```bash
-"Make this database query 10x faster"
-```
-**Selected**: 🛡️ Guardian [O] - Uses Opus for complex optimization
+# Check recommendation (optional)
+.claude/router.sh "Make this database query 10x faster"
+# Output: 🛡️ Guardian [O] - Opus recommended for complex optimization
 
-### 4. Add Features
-```bash
-"Add real-time notifications to my app"
+# Then in Claude CLI:
+claude> Make this database query 10x faster
 ```
-**Selected**: 🏗️ Architect [S/O] - Model based on complexity
 
-### 5. Deploy
+### 4. Deploy
 ```bash
-"Deploy this to AWS with auto-scaling"
+# Check recommendation (optional)
+.claude/router.sh "Deploy this to AWS with auto-scaling"
+# Output: 🔌 Connector [S] - Sonnet recommended
+
+# Then in Claude CLI:
+claude> Deploy this to AWS with auto-scaling
 ```
-**Selected**: 🔌 Connector [S] - Uses Sonnet for production deployment
 
 ## Project Structure
 
@@ -117,42 +130,48 @@ cd your-project
 curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/install.sh | bash
 ```
 
-### Team Setup
+### What You Get
+After installation:
+1. **Agent context files** in `.claude/agents/` - Provide specialized knowledge
+2. **Router tool** at `.claude/router.sh` - Shows optimal agent/model selection
+3. **History tracking** in `.claude/history/` - Learns from your usage patterns
+
+### Using the System
 ```bash
-# Install once
-./install.sh
+# OPTIONAL: Check which agent/model is recommended
+.claude/router.sh "your request here"
 
-# Commit to git
-git add .claude
-git commit -m "Add AI agents"
-
-# Team members just pull
-git pull
+# MAIN USAGE: Just use Claude CLI normally
+claude> your actual request here
 ```
 
 ### CI/CD Integration
 ```yaml
 # .github/workflows/ai-assist.yml
-- name: AI Code Review
+- name: Check AI Recommendation
   run: |
+    # This just shows which agent/model would be used
     .claude/router.sh "Review this PR for security issues"
+    # Output: Would use Guardian [O] for security review
+
+    # Actual AI review would need Claude CLI integration
 ```
 
 ## Advanced Usage
 
-### Custom Workflows
-Create `.claude.yml` (optional):
-```yaml
-workflows:
-  review: [Guardian]
-  release: [Guardian, Connector]
-```
+### Understanding the System
 
-### Learning System
-The system learns your patterns:
-- Remembers successful workflows
-- Adapts to your coding style
-- Improves suggestions over time
+**What the router does:**
+- Analyzes your request intent
+- Detects task complexity
+- Recommends optimal agent and model
+- Tracks usage history for learning
+- Shows cost estimates
+
+**What YOU do:**
+- Use Claude CLI as normal
+- Optionally check router recommendations first
+- The agent contexts guide Claude's responses automatically
 
 ## Deployment
 
@@ -170,20 +189,23 @@ Works in GitHub Codespaces, Replit, etc.
 
 ## Troubleshooting
 
-**"Agents not responding"**
+**"How do I use this?"**
+→ Just use Claude CLI normally. The agents provide context automatically.
+
+**"What does router.sh do?"**
+→ It's a planning tool that shows which agent/model would be optimal. Run: `.claude/router.sh "your task"`
+
+**"Check system status"**
 → Run: `.claude/router.sh status`
 
-**"Wrong agent activated"**
-→ Be more specific: "Create REST API" vs "Create GraphQL API"
-
-**"Need different behavior"**
-→ Create `.claude.yml` with custom workflows
-
-**"Want to check costs"**
+**"View cost analysis"**
 → Run: `.claude/router.sh costs`
 
 **"See request history"**
 → Run: `.claude/router.sh history`
+
+**"Wrong agent recommended?"**
+→ Be more specific in your request description
 
 ## Uninstall
 
