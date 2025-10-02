@@ -25,10 +25,11 @@ fast_keyword_match() {
     echo "$count"
 }
 
-# Optimized case conversion (10% faster than tr)
+# Optimized case conversion
 fast_lowercase() {
     local text="$1"
-    echo "${text,,}"
+    # Fallback to tr for compatibility
+    echo "$text" | tr '[:upper:]' '[:lower:]'
 }
 
 # Optimized string split (faster than cut)
@@ -119,28 +120,28 @@ fast_calculate_confidence() {
 }
 
 # Cached keyword patterns (avoid repeated function calls)
-declare -g KEYWORD_CACHE_LOADED=false
-declare -g MOBILE_PRIMARY=""
-declare -g MOBILE_SECONDARY=""
-declare -g MOBILE_CONTEXT=""
-declare -g API_PRIMARY=""
-declare -g API_SECONDARY=""
-declare -g API_CONTEXT=""
-declare -g SCHEMA_PRIMARY=""
-declare -g SCHEMA_SECONDARY=""
-declare -g SCHEMA_CONTEXT=""
-declare -g PERF_PRIMARY=""
-declare -g PERF_SECONDARY=""
-declare -g PERF_CONTEXT=""
-declare -g SECURITY_PRIMARY=""
-declare -g SECURITY_SECONDARY=""
-declare -g SECURITY_CONTEXT=""
-declare -g A11Y_PRIMARY=""
-declare -g A11Y_SECONDARY=""
-declare -g A11Y_CONTEXT=""
-declare -g DOCS_PRIMARY=""
-declare -g DOCS_SECONDARY=""
-declare -g DOCS_CONTEXT=""
+KEYWORD_CACHE_LOADED=false
+MOBILE_PRIMARY=""
+MOBILE_SECONDARY=""
+MOBILE_CONTEXT=""
+API_PRIMARY=""
+API_SECONDARY=""
+API_CONTEXT=""
+SCHEMA_PRIMARY=""
+SCHEMA_SECONDARY=""
+SCHEMA_CONTEXT=""
+PERF_PRIMARY=""
+PERF_SECONDARY=""
+PERF_CONTEXT=""
+SECURITY_PRIMARY=""
+SECURITY_SECONDARY=""
+SECURITY_CONTEXT=""
+A11Y_PRIMARY=""
+A11Y_SECONDARY=""
+A11Y_CONTEXT=""
+DOCS_PRIMARY=""
+DOCS_SECONDARY=""
+DOCS_CONTEXT=""
 
 # Load keyword cache
 load_keyword_cache() {
