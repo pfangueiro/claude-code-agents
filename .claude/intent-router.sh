@@ -21,22 +21,30 @@ fi
 
 # Source performance utilities
 if [[ -f "$LIB_DIR/performance-utils.sh" ]]; then
-    source "$LIB_DIR/performance-utils.sh"
-    USE_FAST_MODE=true
+    # Temporarily disabled due to compatibility issues
+    # source "$LIB_DIR/performance-utils.sh"
+    USE_FAST_MODE=false
 else
     USE_FAST_MODE=false
 fi
 
-# ANSI Colors for visual feedback
-readonly MOBILE_COLOR='\033[0;35m'    # Magenta
-readonly API_COLOR='\033[0;31m'       # Red
-readonly SCHEMA_COLOR='\033[1;34m'    # Bright Blue
-readonly PERF_COLOR='\033[1;33m'      # Yellow
-readonly SECURITY_COLOR='\033[0;31m'  # Red
-readonly A11Y_COLOR='\033[0;36m'      # Cyan
-readonly DOCS_COLOR='\033[0;32m'      # Green
-readonly NC='\033[0m'                 # No Color
-readonly BOLD='\033[1m'
+# Source color system
+if [[ -f "$LIB_DIR/colors.sh" ]]; then
+    source "$LIB_DIR/colors.sh"
+    USE_COLORS=true
+else
+    USE_COLORS=false
+    # Fallback basic colors
+    readonly MOBILE_COLOR='\033[0;35m'    # Magenta
+    readonly API_COLOR='\033[0;31m'       # Red
+    readonly SCHEMA_COLOR='\033[1;34m'    # Bright Blue
+    readonly PERF_COLOR='\033[1;33m'      # Yellow
+    readonly SECURITY_COLOR='\033[0;31m'  # Red
+    readonly A11Y_COLOR='\033[0;36m'      # Cyan
+    readonly DOCS_COLOR='\033[0;32m'      # Green
+    readonly NC='\033[0m'                 # No Color
+    readonly BOLD='\033[1m'
+fi
 
 # Agent list
 readonly AGENT_NAMES=("mobile-ux" "api-reliability" "schema-guardian" "performance" "security" "accessibility" "documentation")
@@ -277,51 +285,106 @@ route_request() {
     # Log telemetry
     log_telemetry "agent_activated" "$agent" "$confidence" "$elapsed_ms" "success"
 
-    # Display result
-    local agent_color=$(get_agent_color "$agent")
-    local agent_name=$(get_agent_name "$agent")
-    if [[ "$agent" == "$FALLBACK_AGENT" ]]; then
-        agent_name="Generalist Agent"
-    fi
+    # Display result with enhanced colors
+    if [[ "$USE_COLORS" == true ]]; then
+        echo ""
+        print_agent_header "$agent" "$confidence"
+        echo ""
+        echo -e "${DIM}Processing time: ${elapsed_ms}ms${NC}"
+        echo -e "${DIM}Decision: $reason${NC}"
+    else
+        # Fallback display without advanced colors
+        local agent_color=$(get_agent_color "$agent")
+        local agent_name=$(get_agent_name "$agent")
+        if [[ "$agent" == "$FALLBACK_AGENT" ]]; then
+            agent_name="Generalist Agent"
+        fi
 
-    echo -e "\n${BOLD}════════════════════════════════════════${NC}"
-    echo -e "${agent_color}${BOLD}$agent_name${NC}"
-    echo -e "${BOLD}────────────────────────────────────────${NC}"
-    echo -e "Confidence: ${BOLD}$(printf "%.2f%%" $(echo "$confidence * 100" | bc))${NC}"
-    echo -e "Reason: $reason"
-    echo -e "Processing time: ${elapsed_ms}ms"
+        echo -e "\n${BOLD}════════════════════════════════════════${NC}"
+        echo -e "${agent_color}${BOLD}$agent_name${NC}"
+        echo -e "${BOLD}────────────────────────────────────────${NC}"
+        echo -e "Confidence: ${BOLD}$(printf "%.2f%%" $(echo "$confidence * 100" | bc))${NC}"
+        echo -e "Reason: $reason"
+        echo -e "Processing time: ${elapsed_ms}ms"
+    fi
 
     if [[ "$agent" != "$FALLBACK_AGENT" ]]; then
-        echo -e "\n${BOLD}Activation Keywords Matched:${NC}"
-        local input_lower=$(echo "$input" | tr '[:upper:]' '[:lower:]')
+        if [[ "$USE_COLORS" == true ]]; then
+            echo -e "\n${BOLD}${CYAN}Matched Keywords:${NC}"
+            local input_lower=$(echo "$input" | tr '[:upper:]' '[:lower:]')
 
-        # Show which keywords matched
-        local primary_pattern=$(get_primary_keywords "$agent")
-        if [[ -n "$primary_pattern" ]]; then
-            local matches=$(echo "$input_lower" | grep -oE "$primary_pattern" | sort -u | tr '\n' ', ')
-            if [[ -n "$matches" ]]; then
-                echo -e "  Primary: ${matches%, }"
+            # Get agent colors
+            local colors=$(get_agent_colors "$agent" 2>/dev/null || echo "")
+            local primary_color="${BRIGHT_GREEN}"
+            local secondary_color="${YELLOW}"
+            local context_color="${CYAN}"
+
+            if [[ -n "$colors" ]]; then
+                primary_color=$(echo "$colors" | cut -d'|' -f1)
+                secondary_color=$(echo "$colors" | cut -d'|' -f2)
             fi
-        fi
 
-        local secondary_pattern=$(get_secondary_keywords "$agent")
-        if [[ -n "$secondary_pattern" ]]; then
-            local matches=$(echo "$input_lower" | grep -oE "$secondary_pattern" | sort -u | tr '\n' ', ')
-            if [[ -n "$matches" ]]; then
-                echo -e "  Secondary: ${matches%, }"
+            # Show which keywords matched with colors
+            local primary_pattern=$(get_primary_keywords "$agent")
+            if [[ -n "$primary_pattern" ]]; then
+                local matches=$(echo "$input_lower" | grep -oE "$primary_pattern" | sort -u | tr '\n' ', ')
+                if [[ -n "$matches" ]]; then
+                    echo -e "  ${primary_color}● Primary:${NC} ${BOLD}${matches%, }${NC}"
+                fi
             fi
-        fi
 
-        local context_pattern=$(get_context_keywords "$agent")
-        if [[ -n "$context_pattern" ]]; then
-            local matches=$(echo "$input_lower" | grep -oE "$context_pattern" | sort -u | tr '\n' ', ')
-            if [[ -n "$matches" ]]; then
-                echo -e "  Context: ${matches%, }"
+            local secondary_pattern=$(get_secondary_keywords "$agent")
+            if [[ -n "$secondary_pattern" ]]; then
+                local matches=$(echo "$input_lower" | grep -oE "$secondary_pattern" | sort -u | tr '\n' ', ')
+                if [[ -n "$matches" ]]; then
+                    echo -e "  ${secondary_color}● Secondary:${NC} ${matches%, }"
+                fi
+            fi
+
+            local context_pattern=$(get_context_keywords "$agent")
+            if [[ -n "$context_pattern" ]]; then
+                local matches=$(echo "$input_lower" | grep -oE "$context_pattern" | sort -u | tr '\n' ', ')
+                if [[ -n "$matches" ]]; then
+                    echo -e "  ${context_color}● Context:${NC} ${DIM}${matches%, }${NC}"
+                fi
+            fi
+        else
+            # Original display
+            echo -e "\n${BOLD}Activation Keywords Matched:${NC}"
+            local input_lower=$(echo "$input" | tr '[:upper:]' '[:lower:]')
+
+            # Show which keywords matched
+            local primary_pattern=$(get_primary_keywords "$agent")
+            if [[ -n "$primary_pattern" ]]; then
+                local matches=$(echo "$input_lower" | grep -oE "$primary_pattern" | sort -u | tr '\n' ', ')
+                if [[ -n "$matches" ]]; then
+                    echo -e "  Primary: ${matches%, }"
+                fi
+            fi
+
+            local secondary_pattern=$(get_secondary_keywords "$agent")
+            if [[ -n "$secondary_pattern" ]]; then
+                local matches=$(echo "$input_lower" | grep -oE "$secondary_pattern" | sort -u | tr '\n' ', ')
+                if [[ -n "$matches" ]]; then
+                    echo -e "  Secondary: ${matches%, }"
+                fi
+            fi
+
+            local context_pattern=$(get_context_keywords "$agent")
+            if [[ -n "$context_pattern" ]]; then
+                local matches=$(echo "$input_lower" | grep -oE "$context_pattern" | sort -u | tr '\n' ', ')
+                if [[ -n "$matches" ]]; then
+                    echo -e "  Context: ${matches%, }"
+                fi
             fi
         fi
     fi
 
-    echo -e "${BOLD}════════════════════════════════════════${NC}\n"
+    if [[ "$USE_COLORS" == true ]]; then
+        echo ""
+    else
+        echo -e "${BOLD}════════════════════════════════════════${NC}\n"
+    fi
 
     # Return agent for further processing
     echo "$agent|$confidence"
