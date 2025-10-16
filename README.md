@@ -23,6 +23,12 @@
 curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/install.sh | bash
 ```
 
+### Alternative: Quick Install (If having issues)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/quick-install.sh | bash
+```
+
 ### That's It!
 
 Now just use natural language:
