@@ -17,9 +17,10 @@
 set -e
 
 # Configuration
-SCRIPT_VERSION="2.0.0"
+SCRIPT_VERSION="2.0.1"
 GITHUB_REPO="https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main"
 BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
+DEBUG="${DEBUG:-false}"
 
 # Colors
 RED='\033[0;31m'
@@ -73,6 +74,19 @@ print_header() {
     echo -e "${PURPLE}║${BOLD}     🤖 Claude Agents - Intelligent Installer v${SCRIPT_VERSION}     ${NC}${PURPLE}║${NC}"
     echo -e "${PURPLE}╚══════════════════════════════════════════════════════════╝${NC}"
     echo ""
+}
+
+check_connectivity() {
+    print_progress "Checking GitHub connectivity..."
+    local test_url="${GITHUB_REPO}/README.md"
+    if curl -fsSL "$test_url" -o /dev/null 2>/dev/null; then
+        print_info "GitHub connection verified"
+        return 0
+    else
+        print_error "Cannot reach GitHub repository"
+        echo "Please check your internet connection or try again later"
+        return 1
+    fi
 }
 
 print_progress() {
@@ -247,12 +261,38 @@ download_or_copy() {
         cp "$source_file" "$dest_file"
         echo -e "  ${GREEN}✓${NC} Copied $file_type"
     else
-        # Download from GitHub
+        # Download from GitHub - construct proper URL
         local url="${GITHUB_REPO}/${source_file}"
-        if curl -sSL "$url" -o "$dest_file" 2>/dev/null; then
-            echo -e "  ${GREEN}✓${NC} Downloaded $file_type"
+        # Remove leading ./ if present
+        url="${url#./}"
+
+        # Debug mode
+        if [ "$DEBUG" = "true" ]; then
+            echo "  DEBUG: Downloading from: $url"
+            echo "  DEBUG: Saving to: $dest_file"
+        fi
+
+        # Create directory if it doesn't exist
+        local dest_dir=$(dirname "$dest_file")
+        mkdir -p "$dest_dir"
+
+        # Try to download with better error handling
+        if curl -fsSL "$url" -o "$dest_file"; then
+            # Verify file was actually downloaded and not empty
+            if [ -s "$dest_file" ]; then
+                echo -e "  ${GREEN}✓${NC} Downloaded $file_type"
+            else
+                print_error "Downloaded empty file for $file_type"
+                rm -f "$dest_file"
+                return 1
+            fi
         else
-            print_error "Failed to get $file_type"
+            print_error "Failed to download $file_type"
+            if [ "$DEBUG" = "true" ]; then
+                echo "  DEBUG: Attempted URL: $url"
+                echo "  DEBUG: HTTP Response:"
+                curl -IsS "$url" | head -5
+            fi
             return 1
         fi
     fi
@@ -393,6 +433,12 @@ install_minimal() {
 install_full() {
     echo -e "\n${BOLD}Installing Full Agent System${NC}"
     echo "This will install all agents and supporting files"
+
+    # Check connectivity for downloads
+    if ! check_connectivity; then
+        echo -e "${RED}Installation requires internet connection to download files${NC}"
+        exit 1
+    fi
 
     backup_existing
     create_directories
