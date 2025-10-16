@@ -1,0 +1,230 @@
+{
+  "templates": {
+    "architecture-agent": {
+      "description": "System architect and design specialist. Use PROACTIVELY when designing new features, creating API contracts, or planning system architecture",
+      "keywords": {
+        "primary": ["architecture", "design", "api", "schema", "interface", "contract", "system-design"],
+        "secondary": ["blueprint", "structure", "framework", "pattern", "microservice", "monolith"],
+        "context": ["design the system", "create architecture", "api specification", "define interfaces"]
+      },
+      "tools": "Read, Write, WebFetch, WebSearch, Task, Glob, Grep",
+      "model": "sonnet",
+      "color": "purple",
+      "instructions": {
+        "analysis": "Analyze existing architecture patterns and identify improvements",
+        "design": "Create detailed architectural designs with diagrams when applicable",
+        "documentation": "Document architectural decisions and rationale (ADRs)",
+        "validation": "Ensure designs follow SOLID principles and best practices"
+      }
+    },
+    "code-reviewer": {
+      "description": "Code quality and review specialist. Use PROACTIVELY after code changes for quality assurance, best practices validation, and refactoring suggestions",
+      "keywords": {
+        "primary": ["review", "quality", "refactor", "clean-code", "lint", "style", "best-practices"],
+        "secondary": ["smell", "technical-debt", "complexity", "maintainability", "readability"],
+        "context": ["review the code", "check quality", "refactor this", "improve code"]
+      },
+      "tools": "Read, Grep, Glob, Edit, Task",
+      "model": "sonnet",
+      "color": "yellow",
+      "instructions": {
+        "scan": "Scan for code smells, anti-patterns, and potential bugs",
+        "validate": "Check against language-specific best practices and style guides",
+        "suggest": "Provide actionable refactoring suggestions with examples",
+        "metrics": "Report on code complexity, test coverage, and maintainability"
+      }
+    },
+    "security-scanner": {
+      "description": "Security vulnerability scanner and SSDLC enforcer. MUST BE USED for any security-related tasks, authentication, authorization, or when handling sensitive data",
+      "keywords": {
+        "primary": ["security", "vulnerability", "xss", "csrf", "injection", "auth", "authentication", "authorization", "owasp"],
+        "secondary": ["exploit", "threat", "attack", "penetration", "hardening", "encryption", "secrets"],
+        "context": ["secure the", "check security", "scan for vulnerabilities", "implement auth"]
+      },
+      "tools": "Read, Write, Grep, Bash, WebFetch, Task, Edit",
+      "model": "opus",
+      "color": "red",
+      "instructions": {
+        "scan": "Perform comprehensive security scanning (SAST, DAST, secrets detection)",
+        "owasp": "Validate against OWASP Top 10 and security best practices",
+        "remediate": "Provide specific fixes for identified vulnerabilities",
+        "compliance": "Check for SOC2, ISO 27001, and other compliance requirements"
+      }
+    },
+    "test-engineer": {
+      "description": "Testing specialist for unit, integration, and E2E tests. Use PROACTIVELY when writing or updating code to ensure comprehensive test coverage",
+      "keywords": {
+        "primary": ["test", "unit-test", "integration-test", "e2e", "coverage", "assertion", "mock", "stub"],
+        "secondary": ["spec", "describe", "it", "expect", "should", "fixture", "snapshot"],
+        "context": ["write tests", "test coverage", "add tests", "test this"]
+      },
+      "tools": "Read, Write, Edit, Bash, Grep, Task",
+      "model": "sonnet",
+      "color": "green",
+      "instructions": {
+        "analyze": "Analyze code coverage and identify untested paths",
+        "generate": "Generate comprehensive test cases including edge cases",
+        "implement": "Write tests using appropriate testing frameworks",
+        "validate": "Ensure tests follow AAA pattern (Arrange, Act, Assert)"
+      }
+    },
+    "performance-optimizer": {
+      "description": "Performance optimization specialist. Use when addressing performance issues, optimizing algorithms, or improving system efficiency",
+      "keywords": {
+        "primary": ["performance", "optimize", "speed", "slow", "bottleneck", "profile", "benchmark"],
+        "secondary": ["cache", "memory", "cpu", "latency", "throughput", "scalability", "load"],
+        "context": ["improve performance", "optimize this", "running slow", "speed up"]
+      },
+      "tools": "Read, Edit, Bash, Grep, Task",
+      "model": "sonnet",
+      "color": "orange",
+      "instructions": {
+        "profile": "Profile code to identify performance bottlenecks",
+        "analyze": "Analyze time and space complexity",
+        "optimize": "Implement optimizations (caching, algorithm improvements, etc.)",
+        "benchmark": "Measure and document performance improvements"
+      }
+    },
+    "devops-engineer": {
+      "description": "DevOps and deployment specialist. Use for CI/CD, infrastructure, containerization, and deployment tasks",
+      "keywords": {
+        "primary": ["deploy", "ci", "cd", "pipeline", "docker", "kubernetes", "aws", "terraform"],
+        "secondary": ["container", "orchestration", "infrastructure", "cloud", "automation", "helm"],
+        "context": ["deploy to", "set up ci", "configure pipeline", "dockerize"]
+      },
+      "tools": "Read, Write, Bash, Edit, WebFetch, Task",
+      "model": "sonnet",
+      "color": "blue",
+      "instructions": {
+        "pipeline": "Configure CI/CD pipelines with appropriate stages",
+        "containerize": "Create Docker containers and orchestration configs",
+        "infrastructure": "Define infrastructure as code (IaC)",
+        "monitor": "Set up monitoring, logging, and alerting"
+      }
+    },
+    "documentation-writer": {
+      "description": "Documentation specialist. Use for creating README files, API documentation, and user guides",
+      "keywords": {
+        "primary": ["document", "readme", "api-doc", "guide", "tutorial", "wiki", "manual"],
+        "secondary": ["explain", "describe", "clarify", "annotate", "comment", "reference"],
+        "context": ["write documentation", "document this", "create readme", "explain how"]
+      },
+      "tools": "Read, Write, Grep, WebFetch",
+      "model": "haiku",
+      "color": "cyan",
+      "instructions": {
+        "analyze": "Analyze code and understand functionality",
+        "structure": "Create well-organized documentation structure",
+        "write": "Write clear, concise documentation with examples",
+        "maintain": "Keep documentation synchronized with code changes"
+      }
+    },
+    "database-engineer": {
+      "description": "Database and data modeling specialist. Use for schema design, query optimization, and data migration tasks",
+      "keywords": {
+        "primary": ["database", "sql", "schema", "migration", "query", "index", "table"],
+        "secondary": ["nosql", "mongodb", "postgresql", "mysql", "redis", "orm", "normalization"],
+        "context": ["design database", "optimize query", "create migration", "model data"]
+      },
+      "tools": "Read, Write, Edit, Bash, Grep",
+      "model": "sonnet",
+      "color": "purple",
+      "instructions": {
+        "design": "Design normalized database schemas",
+        "optimize": "Optimize queries and create appropriate indexes",
+        "migrate": "Create safe, reversible migration scripts",
+        "validate": "Ensure data integrity and consistency"
+      }
+    },
+    "frontend-engineer": {
+      "description": "Frontend and UI/UX implementation specialist. Use for React, Vue, Angular, and other frontend framework tasks",
+      "keywords": {
+        "primary": ["frontend", "ui", "ux", "react", "vue", "angular", "component", "css"],
+        "secondary": ["responsive", "accessibility", "a11y", "styling", "layout", "state-management"],
+        "context": ["create ui", "build frontend", "style component", "implement design"]
+      },
+      "tools": "Read, Write, Edit, Bash, WebFetch",
+      "model": "sonnet",
+      "color": "pink",
+      "instructions": {
+        "implement": "Implement UI components following design systems",
+        "responsive": "Ensure responsive design across devices",
+        "accessibility": "Follow WCAG guidelines for accessibility",
+        "optimize": "Optimize bundle size and rendering performance"
+      }
+    },
+    "backend-engineer": {
+      "description": "Backend API and service implementation specialist. Use for server-side logic, API endpoints, and microservices",
+      "keywords": {
+        "primary": ["backend", "api", "endpoint", "service", "server", "rest", "graphql", "microservice"],
+        "secondary": ["middleware", "controller", "route", "handler", "business-logic", "validation"],
+        "context": ["create api", "implement backend", "build service", "add endpoint"]
+      },
+      "tools": "Read, Write, Edit, Bash, Grep, Task",
+      "model": "sonnet",
+      "color": "green",
+      "instructions": {
+        "implement": "Implement RESTful or GraphQL APIs",
+        "validate": "Add input validation and error handling",
+        "secure": "Implement authentication and authorization",
+        "document": "Generate API documentation (OpenAPI/Swagger)"
+      }
+    },
+    "ml-engineer": {
+      "description": "Machine learning and AI implementation specialist. Use for ML models, data pipelines, and AI integration",
+      "keywords": {
+        "primary": ["ml", "ai", "model", "training", "dataset", "neural", "tensorflow", "pytorch"],
+        "secondary": ["classification", "regression", "clustering", "nlp", "cv", "deep-learning"],
+        "context": ["train model", "implement ml", "create pipeline", "process data"]
+      },
+      "tools": "Read, Write, Edit, Bash, NotebookEdit, NotebookRead",
+      "model": "opus",
+      "color": "purple",
+      "instructions": {
+        "analyze": "Analyze data and select appropriate ML approaches",
+        "implement": "Implement and train ML models",
+        "evaluate": "Evaluate model performance and metrics",
+        "deploy": "Deploy models with appropriate serving infrastructure"
+      }
+    },
+    "incident-responder": {
+      "description": "Production incident response specialist. CRITICAL - Use immediately for production issues, outages, or emergency fixes",
+      "keywords": {
+        "primary": ["incident", "outage", "emergency", "critical", "production", "hotfix", "downtime"],
+        "secondary": ["alert", "error", "crash", "failure", "rollback", "restore", "recovery"],
+        "context": ["production is down", "critical issue", "emergency fix", "incident response"]
+      },
+      "tools": "Read, Edit, Bash, Grep, Task, Write",
+      "model": "opus",
+      "color": "red",
+      "instructions": {
+        "triage": "Quickly assess impact and identify root cause",
+        "mitigate": "Implement immediate fixes or workarounds",
+        "communicate": "Document incident timeline and actions taken",
+        "postmortem": "Create detailed postmortem with prevention measures"
+      }
+    }
+  },
+  "sdlc_phases": {
+    "planning": ["architecture-agent", "database-engineer"],
+    "development": ["frontend-engineer", "backend-engineer", "code-reviewer"],
+    "testing": ["test-engineer", "security-scanner"],
+    "deployment": ["devops-engineer", "incident-responder"],
+    "maintenance": ["performance-optimizer", "documentation-writer"],
+    "specialized": ["ml-engineer"]
+  },
+  "activation_rules": {
+    "confidence_threshold": 0.7,
+    "keyword_weights": {
+      "primary": 1.0,
+      "secondary": 0.5,
+      "context": 0.3
+    },
+    "priority_override": {
+      "critical": ["incident-responder", "security-scanner"],
+      "high": ["test-engineer", "code-reviewer"],
+      "medium": ["architecture-agent", "performance-optimizer"],
+      "low": ["documentation-writer"]
+    }
+  }
+}
