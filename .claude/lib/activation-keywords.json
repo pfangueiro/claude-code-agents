@@ -1,0 +1,171 @@
+{
+  "global_keywords": {
+    "critical_triggers": {
+      "keywords": ["CRITICAL", "EMERGENCY", "URGENT", "PRODUCTION-DOWN", "INCIDENT", "OUTAGE"],
+      "action": "force_opus_model",
+      "priority": 1
+    },
+    "security_triggers": {
+      "keywords": ["SECURITY", "VULNERABILITY", "EXPLOIT", "BREACH", "ATTACK", "PENETRATION"],
+      "action": "activate_security_agent",
+      "priority": 1
+    },
+    "quality_triggers": {
+      "keywords": ["REVIEW", "QUALITY", "BEST-PRACTICES", "CLEAN-CODE", "REFACTOR"],
+      "action": "activate_code_reviewer",
+      "priority": 2
+    },
+    "performance_triggers": {
+      "keywords": ["SLOW", "PERFORMANCE", "OPTIMIZE", "BOTTLENECK", "SCALING"],
+      "action": "activate_performance_optimizer",
+      "priority": 3
+    }
+  },
+  "sdlc_phase_keywords": {
+    "planning": {
+      "primary": ["plan", "requirement", "proposal", "specification", "feasibility", "scope", "roadmap"],
+      "secondary": ["analyze", "research", "investigate", "evaluate", "assess", "study"],
+      "phrases": ["need to plan", "gather requirements", "define the scope", "create a proposal"]
+    },
+    "design": {
+      "primary": ["architecture", "design", "blueprint", "schema", "model", "diagram", "interface"],
+      "secondary": ["structure", "pattern", "framework", "layout", "wireframe", "mockup"],
+      "phrases": ["design the system", "create architecture", "model the data", "define interfaces"]
+    },
+    "development": {
+      "primary": ["implement", "code", "build", "develop", "create", "write", "program"],
+      "secondary": ["function", "method", "class", "component", "module", "feature"],
+      "phrases": ["implement the feature", "write the code", "build the component", "develop the module"]
+    },
+    "testing": {
+      "primary": ["test", "validate", "verify", "check", "assert", "coverage", "quality"],
+      "secondary": ["unit", "integration", "e2e", "acceptance", "regression", "smoke"],
+      "phrases": ["write tests", "validate the code", "ensure quality", "test coverage"]
+    },
+    "security": {
+      "primary": ["security", "auth", "authentication", "authorization", "vulnerability", "threat"],
+      "secondary": ["encryption", "hash", "token", "session", "permission", "role", "rbac"],
+      "phrases": ["secure the application", "implement auth", "scan for vulnerabilities", "check security"]
+    },
+    "deployment": {
+      "primary": ["deploy", "release", "ship", "publish", "launch", "rollout", "production"],
+      "secondary": ["ci", "cd", "pipeline", "docker", "kubernetes", "terraform", "ansible"],
+      "phrases": ["deploy to production", "set up pipeline", "release the version", "configure deployment"]
+    },
+    "maintenance": {
+      "primary": ["maintain", "monitor", "update", "patch", "fix", "debug", "troubleshoot"],
+      "secondary": ["log", "metric", "alert", "incident", "ticket", "support", "hotfix"],
+      "phrases": ["fix the bug", "monitor the system", "update dependencies", "patch security"]
+    }
+  },
+  "technology_keywords": {
+    "frontend": {
+      "frameworks": ["react", "vue", "angular", "svelte", "nextjs", "nuxt", "gatsby"],
+      "styling": ["css", "sass", "scss", "tailwind", "styled-components", "emotion"],
+      "state": ["redux", "mobx", "vuex", "pinia", "zustand", "recoil"],
+      "testing": ["jest", "vitest", "cypress", "playwright", "testing-library"]
+    },
+    "backend": {
+      "languages": ["nodejs", "python", "java", "go", "rust", "csharp", "php", "ruby"],
+      "frameworks": ["express", "fastapi", "django", "spring", "gin", "actix", "laravel", "rails"],
+      "databases": ["postgresql", "mysql", "mongodb", "redis", "elasticsearch", "cassandra"],
+      "messaging": ["rabbitmq", "kafka", "sqs", "pubsub", "nats", "zeromq"]
+    },
+    "devops": {
+      "cloud": ["aws", "azure", "gcp", "digitalocean", "heroku", "vercel", "netlify"],
+      "containers": ["docker", "kubernetes", "helm", "compose", "swarm", "ecs", "gke"],
+      "ci_cd": ["jenkins", "github-actions", "gitlab-ci", "circleci", "travis", "bitbucket"],
+      "iac": ["terraform", "ansible", "puppet", "chef", "pulumi", "cloudformation"]
+    },
+    "mobile": {
+      "native": ["swift", "kotlin", "objective-c", "java-android"],
+      "hybrid": ["react-native", "flutter", "ionic", "xamarin", "nativescript"],
+      "testing": ["xctest", "espresso", "detox", "appium"]
+    },
+    "data": {
+      "ml": ["tensorflow", "pytorch", "scikit-learn", "keras", "xgboost", "lightgbm"],
+      "processing": ["spark", "hadoop", "flink", "beam", "airflow", "dagster"],
+      "analysis": ["pandas", "numpy", "r", "julia", "matlab", "sas"]
+    }
+  },
+  "action_keywords": {
+    "create": ["create", "make", "build", "generate", "construct", "initialize", "setup"],
+    "modify": ["update", "edit", "modify", "change", "alter", "revise", "refactor"],
+    "delete": ["delete", "remove", "destroy", "drop", "purge", "clean", "clear"],
+    "analyze": ["analyze", "inspect", "examine", "investigate", "review", "audit", "assess"],
+    "optimize": ["optimize", "improve", "enhance", "speed up", "refine", "tune", "boost"],
+    "fix": ["fix", "repair", "resolve", "patch", "debug", "troubleshoot", "correct"],
+    "document": ["document", "describe", "explain", "annotate", "comment", "write docs"],
+    "test": ["test", "validate", "verify", "check", "assert", "confirm", "ensure"]
+  },
+  "confidence_scoring": {
+    "weights": {
+      "exact_match": 1.0,
+      "primary_keyword": 0.8,
+      "secondary_keyword": 0.5,
+      "context_phrase": 0.4,
+      "technology_match": 0.3,
+      "action_verb": 0.2
+    },
+    "thresholds": {
+      "high_confidence": 0.8,
+      "medium_confidence": 0.6,
+      "low_confidence": 0.4,
+      "minimum_activation": 0.3
+    },
+    "boosters": {
+      "multiple_matches": 0.1,
+      "phrase_match": 0.2,
+      "explicit_request": 0.3
+    }
+  },
+  "natural_language_patterns": {
+    "imperatives": {
+      "patterns": ["^(please )?[A-Z][a-z]+ .*", "^[A-Z][a-z]+ the .*", "^Can you .*", "^Could you .*", "^I need .*", "^Help me .*"],
+      "examples": ["Create a new API endpoint", "Fix the authentication bug", "Can you optimize this query?", "Help me deploy to AWS"]
+    },
+    "questions": {
+      "patterns": ["^How (do I|can I|to) .*", "^What (is|are|should) .*", "^Where (is|are|should) .*", "^Why (is|does|doesn't) .*"],
+      "examples": ["How do I implement authentication?", "What is the best way to test this?", "Where should I deploy this?"]
+    },
+    "descriptions": {
+      "patterns": [".*is (slow|broken|failing).*", ".*doesn't work.*", ".*need(s)? to.*", ".*should be.*"],
+      "examples": ["The API is slow", "Authentication doesn't work", "This needs to be refactored", "The code should be more secure"]
+    }
+  },
+  "multi_agent_triggers": {
+    "full_stack": {
+      "keywords": ["full-stack", "fullstack", "entire application", "whole system"],
+      "agents": ["architecture-agent", "frontend-engineer", "backend-engineer", "database-engineer"]
+    },
+    "security_audit": {
+      "keywords": ["security audit", "vulnerability scan", "penetration test", "security review"],
+      "agents": ["security-scanner", "code-reviewer", "test-engineer"]
+    },
+    "performance_audit": {
+      "keywords": ["performance audit", "optimization review", "speed analysis", "bottleneck analysis"],
+      "agents": ["performance-optimizer", "code-reviewer", "database-engineer"]
+    },
+    "deployment_pipeline": {
+      "keywords": ["set up deployment", "create pipeline", "configure ci/cd", "deployment workflow"],
+      "agents": ["devops-engineer", "test-engineer", "security-scanner"]
+    }
+  },
+  "context_enhancers": {
+    "urgency": {
+      "high": ["asap", "immediately", "urgent", "critical", "emergency", "right now"],
+      "medium": ["soon", "quickly", "when possible", "priority"],
+      "low": ["eventually", "when you can", "no rush", "later"]
+    },
+    "scope": {
+      "large": ["entire", "whole", "all", "complete", "comprehensive", "full"],
+      "medium": ["several", "multiple", "some", "various", "few"],
+      "small": ["single", "one", "specific", "particular", "individual"]
+    },
+    "expertise": {
+      "expert": ["advanced", "expert", "complex", "sophisticated", "professional"],
+      "intermediate": ["standard", "typical", "common", "regular", "normal"],
+      "beginner": ["simple", "basic", "easy", "straightforward", "elementary"]
+    }
+  }
+}
