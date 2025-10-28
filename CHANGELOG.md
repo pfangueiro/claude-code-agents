@@ -5,6 +5,138 @@ All notable changes to Claude Agents will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2025-10-28
+
+### 🌐 MCP Integration & 4-Way Extensibility
+
+This release introduces **Model Context Protocol (MCP)** integration, adding external tools and data sources to the Claude Code platform. Combined with Skills, Slash Commands, and Subagents, this creates a comprehensive 4-way extensibility system.
+
+### Added
+
+#### MCP-Powered Skills
+- 🟢 **library-docs** skill (uses context7 MCP server)
+  - Fetch up-to-date documentation for 100+ libraries
+  - Support for React, Next.js, Vue, MongoDB, Supabase, PostgreSQL, and more
+  - Topic-focused documentation retrieval
+  - Version-specific query support
+  - Integration with documentation-maintainer agent
+
+- 🧠 **deep-analysis** skill (uses sequential-thinking MCP server)
+  - Structured multi-step reasoning for complex problems
+  - Up to 31,999 thinking tokens (vs 4,000 standard)
+  - Hypothesis generation and verification
+  - Course correction and branching
+  - Integration with architecture-planner and performance-optimizer agents
+
+#### Comprehensive Documentation
+- 📘 **EXTENSIBILITY.md** - Complete extensibility guide
+  - Comprehensive overview of all four mechanisms
+  - Skills (Blue): Knowledge & methodology
+  - MCP (Green): External tools & data
+  - Slash Commands (Red): User-triggered workflows
+  - Subagents (Orange): Isolated task execution
+  - Decision matrix for choosing mechanisms
+  - 5 integration patterns with real examples
+  - Best practices for each mechanism
+  - Validation and testing guidance
+
+#### Enhanced Documentation
+- 📝 **CLAUDE.md Updates**
+  - Added comprehensive MCP Integration section
+  - Documentation of both MCP servers (context7, sequential-thinking)
+  - MCP + Agent integration examples
+  - Configuration guidance
+  - Usage patterns and examples
+
+- 📖 **README.md Updates**
+  - Version badge updated to 2.2.0
+  - Skills badge updated to 6 included
+  - New MCP badge added
+  - Added "MCP Integration" to key features
+  - Added "4-Way Extensibility" feature
+  - New MCP Integration section with examples
+  - Four extensibility mechanisms diagram
+  - Architecture updated to show MCP-powered skills
+  - Links to EXTENSIBILITY.md
+
+### Enhanced
+
+- 🔌 **Four Extensibility Mechanisms**
+  - **Skills**: Modular knowledge packages (6 included)
+  - **MCP**: External integrations (2 servers configured)
+  - **Slash Commands**: User-triggered workflows
+  - **Subagents**: Isolated execution (11 agents)
+
+- 🎓 **Skills System**
+  - Now includes MCP-powered skills
+  - Clear integration patterns with MCP servers
+  - Enhanced agent-skill collaboration
+  - Updated power combos showing MCP usage
+
+- 📊 **Integration Patterns**
+  - Skill + MCP: library-docs fetches external data
+  - Skill + Agent: deep-analysis guides architecture-planner
+  - MCP + Agent: External tools enhance agent capabilities
+  - Full Integration: All mechanisms working together
+
+### Technical Details
+- **New Skills**: 2 MCP-powered (library-docs, deep-analysis)
+- **Total Skills**: 6 (skill-creator + git-workflow + code-review-checklist + deployment-runbook + library-docs + deep-analysis)
+- **MCP Servers**: 2 (context7, sequential-thinking)
+- **Documentation**: 800+ line extensibility guide
+- **Architecture**: 4-way extensibility system
+
+### MCP Configuration
+
+Add to Claude Code settings:
+
+```json
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@context7/mcp-server"]
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    }
+  }
+}
+```
+
+### Benefits
+
+**For Developers:**
+- Access up-to-date library documentation on-demand
+- Deep reasoning for complex architectural decisions
+- External tool integration via MCP
+- Clear decision matrix for extensibility choices
+
+**For Organizations:**
+- Comprehensive extensibility options
+- Integration with external APIs and services
+- Structured reasoning for critical decisions
+- Complete documentation of all mechanisms
+
+### Skills + MCP + Agents Integration
+
+| Agent | Skill | MCP Server | Result |
+|-------|-------|------------|--------|
+| **architecture-planner** | **deep-analysis** | sequential-thinking | Structured architectural decisions |
+| **documentation-maintainer** | **library-docs** | context7 | Documentation using library patterns |
+| **performance-optimizer** | **deep-analysis** | sequential-thinking | Root cause analysis |
+
+### What's Next?
+
+See **[EXTENSIBILITY.md](./EXTENSIBILITY.md)** for:
+- Complete guide to all four mechanisms
+- Decision matrices and integration patterns
+- Real-world examples from this project
+- Best practices and validation guidance
+
+---
+
 ## [2.0.0] - 2024-10-16
 
 ### 🚀 Major Release - Enterprise Agent System
@@ -226,9 +358,10 @@ This release adds a comprehensive skills system that extends the agent framework
 
 ## Upcoming Features
 
-### [2.2.0] - Planned
+### [2.3.0] - Planned
 - Skills installation automation (install.sh integration)
 - Additional demonstration skills
+- More MCP server integrations
 - Skills marketplace integration
 - Team collaboration features
 
