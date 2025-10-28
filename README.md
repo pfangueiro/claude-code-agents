@@ -1,9 +1,10 @@
 # 🤖 Claude Agents - Enterprise AI Agent System for SDLC/SSDLC
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents)
+[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents)
 [![Claude Compatible](https://img.shields.io/badge/Claude-Compatible-purple.svg)](https://claude.ai/code)
-[![Skills](https://img.shields.io/badge/Skills-4%20Included-green.svg)](https://claudeskills.info)
+[![Skills](https://img.shields.io/badge/Skills-6%20Included-green.svg)](https://claudeskills.info)
+[![MCP](https://img.shields.io/badge/MCP-Powered-brightgreen.svg)](https://modelcontextprotocol.io)
 
 **Auto-activating AI agents that respond to natural language** - no commands needed! Just describe what you want to build, and specialized agents automatically engage to help.
 
@@ -15,6 +16,8 @@
 - 🎯 **Full SDLC Coverage** - 11 specialized agents from planning to production
 - 🤝 **Multi-Agent Collaboration** - Agents work together seamlessly
 - 🎓 **Skills System** - Extend capabilities with modular knowledge packages
+- 🌐 **MCP Integration** - External tools and data via Model Context Protocol
+- 🔌 **4-Way Extensibility** - Skills, MCP, Slash Commands, and Subagents
 - 📊 **Enterprise Ready** - Production-grade with telemetry and monitoring
 
 ## 🚀 Quick Start
@@ -144,7 +147,9 @@ Updates to latest version.
 │   ├── skill-creator/         # Create new skills
 │   ├── git-workflow/          # Git best practices
 │   ├── code-review-checklist/ # Review guidelines
-│   └── deployment-runbook/    # Deployment procedures
+│   ├── deployment-runbook/    # Deployment procedures
+│   ├── library-docs/          # MCP: Library documentation
+│   └── deep-analysis/         # MCP: Deep reasoning
 ├── lib/
 │   ├── agent-templates.json  # Pre-built templates
 │   ├── sdlc-patterns.md      # SDLC phase detection
@@ -191,8 +196,89 @@ python3 .claude/skills/skill-creator/scripts/init_skill.py my-skill --path .clau
 - **code-quality** + **code-review-checklist** → Review with your standards
 - **devops-automation** + **deployment-runbook** → Deploy with your procedures
 - **documentation-maintainer** + **brand-guidelines** → Document with your style
+- **architecture-planner** + **deep-analysis** (MCP) → Structured architectural decisions
+- **documentation-maintainer** + **library-docs** (MCP) → Doc with library patterns
 
 See `.claude/skills/README.md` for complete documentation.
+
+## 🌐 MCP Integration
+
+**Model Context Protocol (MCP)** enables external tools and data sources to seamlessly integrate with Claude Code.
+
+### MCP-Powered Skills
+
+This project includes two MCP-powered skills demonstrating the integration:
+
+#### 1. **library-docs** (uses context7 MCP server)
+- **What**: Fetch up-to-date documentation for 100+ libraries
+- **Examples**: React, Next.js, Vue, MongoDB, Supabase, PostgreSQL
+- **Usage**: "Show me React hooks documentation"
+
+```javascript
+// Fetches official library documentation on-demand
+mcp__context7__get-library-docs({
+  context7CompatibleLibraryID: "/facebook/react",
+  topic: "hooks"
+})
+```
+
+#### 2. **deep-analysis** (uses sequential-thinking MCP server)
+- **What**: Structured multi-step reasoning for complex decisions
+- **Capabilities**: Up to 31,999 thinking tokens (vs 4,000 standard)
+- **Usage**: "Should we use microservices or monolith?"
+
+```javascript
+// Enables deep reasoning with hypothesis testing
+mcp__sequential-thinking-server__sequentialthinking({
+  thought: "Analyzing architectural trade-offs...",
+  thoughtNumber: 1,
+  totalThoughts: 10
+})
+```
+
+### Configuring MCP Servers
+
+Add to your Claude Code settings:
+
+```json
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@context7/mcp-server"]
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    }
+  }
+}
+```
+
+### Four Extensibility Mechanisms
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Claude Code Platform                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │  Skills  │  │   MCP    │  │  Slash   │  │Subagents │   │
+│  │  (Blue)  │  │ (Green)  │  │Commands  │  │ (Orange) │   │
+│  │Knowledge │  │  Tools   │  │  (Red)   │  │ Isolated │   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+| Mechanism | Purpose | Example |
+|-----------|---------|---------|
+| **Skills** | Knowledge & methodology | `git-workflow`, `library-docs` |
+| **MCP** | External tools & data | `context7`, `sequential-thinking` |
+| **Slash Commands** | User-triggered workflows | `/deploy-prod`, `/review-pr` |
+| **Subagents** | Isolated task execution | `architecture-planner`, `security-auditor` |
+
+**See [EXTENSIBILITY.md](./EXTENSIBILITY.md) for the complete guide on all four mechanisms.**
 
 ## 🔥 Advanced Features
 
