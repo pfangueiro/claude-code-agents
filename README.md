@@ -1,8 +1,9 @@
 # 🤖 Claude Agents - Enterprise AI Agent System for SDLC/SSDLC
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents)
 [![Claude Compatible](https://img.shields.io/badge/Claude-Compatible-purple.svg)](https://claude.ai/code)
+[![Skills](https://img.shields.io/badge/Skills-4%20Included-green.svg)](https://claudeskills.info)
 
 **Auto-activating AI agents that respond to natural language** - no commands needed! Just describe what you want to build, and specialized agents automatically engage to help.
 
