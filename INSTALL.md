@@ -80,6 +80,11 @@ CLAUDE.md                  # Agent auto-activation config
 │   ├── api-backend.md
 │   ├── incident-commander.md
 │   └── meta-agent.md
+├── skills/                # Modular knowledge packages
+│   ├── skill-creator/     # Create new skills
+│   ├── git-workflow/      # Git best practices (demo)
+│   ├── code-review-checklist/ # Review guidelines (demo)
+│   └── deployment-runbook/    # Deployment procedures (demo)
 ├── lib/                   # Supporting files
 │   ├── agent-templates.json
 │   ├── sdlc-patterns.md
