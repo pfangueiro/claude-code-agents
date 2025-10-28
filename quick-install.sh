@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Quick installer for Claude Agents v2.0
+# Quick installer for Claude Agents v2.2.0
 # This simplified version focuses on reliable downloads
 
 set -e

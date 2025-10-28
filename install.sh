@@ -17,7 +17,7 @@
 set -e
 
 # Configuration
-SCRIPT_VERSION="2.0.1"
+SCRIPT_VERSION="2.2.0"
 GITHUB_REPO="https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main"
 BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
 DEBUG="${DEBUG:-false}"
