@@ -129,6 +129,75 @@ The **meta-agent** can generate new specialized agents when needed:
 - **`.claude/lib/sdlc-patterns.md`**: SDLC phase detection patterns
 - **`.claude/lib/activation-keywords.json`**: Natural language activation database
 
+## 🎓 Skills System
+
+Skills extend the agent system by providing modular knowledge packages. While **agents execute tasks**, **skills provide specialized knowledge, tools, and resources**.
+
+### Agents vs Skills
+
+| **Agents** | **Skills** |
+|------------|------------|
+| Auto-activating task executors | Modular knowledge packages |
+| Execute SDLC/SSDLC workflows | Provide domain expertise & tools |
+| Examples: security-auditor, test-automation | Examples: git-workflow, brand-guidelines |
+
+### When to Create Skills
+
+Create a skill when you need to:
+
+1. **Bundle domain-specific knowledge** - Company APIs, schemas, business logic
+2. **Provide reusable tools** - Scripts that get rewritten repeatedly
+3. **Package resources** - Templates, boilerplate, documentation
+4. **Define specialized workflows** - Multi-step procedures for specific domains
+
+### Creating Skills
+
+Use the **skill-creator** to build new skills:
+
+```bash
+# Create a new skill
+python3 .claude/skills/skill-creator/scripts/init_skill.py my-skill --path .claude/skills
+
+# Validate the skill
+python3 .claude/skills/skill-creator/scripts/quick_validate.py .claude/skills/my-skill
+
+# Package for distribution
+python3 .claude/skills/skill-creator/scripts/package_skill.py .claude/skills/my-skill
+```
+
+### Skill Structure
+
+Every skill consists of:
+
+```
+my-skill/
+├── SKILL.md          # Required: skill definition & instructions
+└── Optional resources:
+    ├── scripts/      # Executable code (Python/Bash/etc.)
+    ├── references/   # Documentation loaded into context
+    └── assets/       # Files used in output (templates, images)
+```
+
+### Agent-Skill Integration
+
+Skills complement agents for powerful workflows:
+
+- **architecture-planner** + **api-spec** skill → Design with your standards
+- **code-quality** + **code-review-checklist** skill → Review with your criteria
+- **devops-automation** + **deployment-runbook** skill → Deploy with your procedures
+- **documentation-maintainer** + **brand-guidelines** skill → Document with your style
+
+### Example Skills
+
+The system includes demonstration skills:
+
+- **skill-creator**: Create and package new skills
+- **git-workflow**: Git best practices and workflows (coming soon)
+- **code-review-checklist**: Systematic code review guidelines (coming soon)
+- **deployment-runbook**: Deployment procedures and scripts (coming soon)
+
+See `.claude/skills/README.md` for complete documentation on creating and using skills.
+
 ## 🔒 Security-First Approach
 
 **CRITICAL:** The following agents ALWAYS use Opus model for maximum security:

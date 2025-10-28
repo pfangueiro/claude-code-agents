@@ -121,18 +121,120 @@ Users can upgrade using:
 - Simple cost tracking
 - Basic installation script
 
+## [2.1.0] - 2024-10-28
+
+### 🎓 Skills System Integration
+
+This release adds a comprehensive skills system that extends the agent framework with modular knowledge packages, enabling users to create custom domain expertise alongside the existing agent system.
+
+### Added
+
+#### Skills System
+- ✨ **Skills Infrastructure**
+  - `.claude/skills/` directory for modular knowledge packages
+  - Integration with existing 11-agent system
+  - Progressive disclosure (metadata → SKILL.md → bundled resources)
+  - Skill creation, validation, and packaging tools
+
+- 🛠️ **skill-creator Skill**
+  - `init_skill.py` - Create new skills from templates
+  - `package_skill.py` - Validate and package skills for distribution
+  - `quick_validate.py` - Quick validation during development
+  - Comprehensive skill creation methodology (6-step process)
+
+#### Demonstration Skills
+- 📚 **git-workflow**
+  - Git best practices and branching strategies
+  - Commit message guidelines (Conventional Commits)
+  - Pull request workflows
+  - Merge conflict resolution
+  - Git Flow, GitHub Flow, Trunk-Based Development
+
+- 🔍 **code-review-checklist**
+  - Systematic code review guidelines
+  - 10-category review framework
+  - Security checklist (OWASP Top 10)
+  - Performance anti-patterns
+  - Team collaboration best practices
+  - Complements code-quality agent
+
+- 🚀 **deployment-runbook**
+  - Deployment strategies (blue-green, canary, rolling)
+  - Pre/post-deployment checklists
+  - Health check automation scripts
+  - Rollback procedures
+  - Troubleshooting guides
+  - Complements devops-automation agent
+
+#### Documentation
+- 📖 **Comprehensive Skills Documentation**
+  - Updated CLAUDE.md with Skills System section
+  - Agent vs Skills comparison guide
+  - Skills integration examples
+  - README.md with skills features
+  - Updated architecture diagrams
+
+- 📘 **Skills README** (`.claude/skills/README.md`)
+  - What skills are and when to create them
+  - Skills vs agents comparison
+  - Step-by-step creation guide
+  - Integration patterns
+  - Real-world examples
+
+### Enhanced
+
+- 🎯 **Agent-Skill Integration**
+  - Skills complement agents for powerful workflows
+  - Examples: code-quality + code-review-checklist
+  - Clear guidance on when to use agents vs skills
+  - Progressive disclosure for efficient context management
+
+- 📊 **Architecture**
+  - Updated to show dual agent + skills system
+  - Clear separation of concerns
+  - Modular, extensible design
+
+### Technical Details
+- **New Skills**: 4 (skill-creator + 3 demonstrations)
+- **Scripts Added**: 3 Python utilities
+- **Documentation Pages**: 5+ comprehensive guides
+- **Directory Structure**: `.claude/skills/` with organized subdirectories
+
+### Benefits
+
+**For Users:**
+- Extend capabilities with domain-specific knowledge
+- Create reusable, shareable skill packages
+- Bundle scripts, references, and assets
+- Complement agents with specialized expertise
+
+**For Organizations:**
+- Codify company-specific knowledge (APIs, schemas, processes)
+- Standardize workflows across teams
+- Share best practices through skills
+- Reduce onboarding time with packaged knowledge
+
+### Skills vs Agents
+
+| **Agents** | **Skills** |
+|------------|------------|
+| Auto-activating task executors | Modular knowledge packages |
+| Execute SDLC workflows | Provide domain expertise & tools |
+| Examples: security-auditor, test-automation | Examples: git-workflow, brand-guidelines |
+
 ---
 
 ## Upcoming Features
 
-### [2.1.0] - Planned
-- VS Code extension
-- Web dashboard for telemetry
-- Additional specialized agents
-- Multi-language support
+### [2.2.0] - Planned
+- Skills installation automation (install.sh integration)
+- Additional demonstration skills
+- Skills marketplace integration
 - Team collaboration features
 
 ### [3.0.0] - Future
+- VS Code extension
+- Web dashboard for telemetry
 - AI model fine-tuning
 - Custom agent marketplace
 - Enterprise dashboard

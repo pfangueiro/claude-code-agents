@@ -13,6 +13,7 @@
 - 🔒 **Security First** - OWASP & DevSecOps practices built-in
 - 🎯 **Full SDLC Coverage** - 11 specialized agents from planning to production
 - 🤝 **Multi-Agent Collaboration** - Agents work together seamlessly
+- 🎓 **Skills System** - Extend capabilities with modular knowledge packages
 - 📊 **Enterprise Ready** - Production-grade with telemetry and monitoring
 
 ## 🚀 Quick Start
@@ -138,6 +139,11 @@ Updates to latest version.
 │   ├── api-backend.md
 │   ├── incident-commander.md
 │   └── meta-agent.md         # Creates new agents
+├── skills/                    # Modular knowledge packages
+│   ├── skill-creator/         # Create new skills
+│   ├── git-workflow/          # Git best practices
+│   ├── code-review-checklist/ # Review guidelines
+│   └── deployment-runbook/    # Deployment procedures
 ├── lib/
 │   ├── agent-templates.json  # Pre-built templates
 │   ├── sdlc-patterns.md      # SDLC phase detection
@@ -154,6 +160,38 @@ Smart model selection for ~70% savings:
 | **Haiku** | $0.80/1M tokens | Documentation (95% savings) |
 | **Sonnet** | $3/1M tokens | Standard development |
 | **Opus** | $15/1M tokens | Security & critical incidents |
+
+## 🎓 Skills System
+
+Extend agent capabilities with modular knowledge packages. While **agents execute tasks**, **skills provide specialized knowledge and tools**.
+
+### What Are Skills?
+
+| **Agents** | **Skills** |
+|------------|------------|
+| Auto-activating task executors | Modular knowledge packages |
+| Execute SDLC workflows | Provide domain expertise |
+| Examples: security-auditor, test-automation | Examples: git-workflow, brand-guidelines |
+
+### Creating Skills
+
+```bash
+# Create a new skill
+python3 .claude/skills/skill-creator/scripts/init_skill.py my-skill --path .claude/skills
+
+# Skills bundle:
+# - scripts/ (executable code)
+# - references/ (documentation)
+# - assets/ (templates, images)
+```
+
+### Agent + Skill Power Combos
+
+- **code-quality** + **code-review-checklist** → Review with your standards
+- **devops-automation** + **deployment-runbook** → Deploy with your procedures
+- **documentation-maintainer** + **brand-guidelines** → Document with your style
+
+See `.claude/skills/README.md` for complete documentation.
 
 ## 🔥 Advanced Features
 
