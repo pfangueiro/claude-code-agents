@@ -198,6 +198,103 @@ The system includes demonstration skills:
 
 See `.claude/skills/README.md` for complete documentation on creating and using skills.
 
+## 🌐 MCP (Model Context Protocol) Integration
+
+**MCP servers** provide external tools and data sources that extend Claude Code's capabilities. They work seamlessly with both skills and agents, enabling powerful integrations with external services.
+
+### What is MCP?
+
+MCP (Model Context Protocol) is a standardized protocol that allows Claude Code to connect to external services, APIs, and tools. MCP servers run as separate processes and expose tools that Claude can invoke.
+
+```
+┌──────────────┐         ┌──────────────┐         ┌──────────────┐
+│ Claude Code  │ ──────> │  MCP Server  │ ──────> │ External API │
+│              │ <────── │              │ <────── │  or Service  │
+└──────────────┘         └──────────────┘         └──────────────┘
+     Uses tools          Provides tools          Data source
+```
+
+### MCP-Powered Skills
+
+This project includes two MCP-powered skills that demonstrate the integration:
+
+#### 1. **library-docs** (uses context7 MCP server)
+- **What**: Fetches up-to-date documentation for 100+ libraries
+- **How**: Uses context7 MCP server to fetch official docs
+- **Examples**: React, Next.js, Vue, MongoDB, Supabase, PostgreSQL
+- **Usage**: "Show me React hooks documentation"
+
+```javascript
+// Example MCP tool invocation
+mcp__context7__resolve-library-id({ libraryName: "react" })
+// Returns: "/facebook/react"
+
+mcp__context7__get-library-docs({
+  context7CompatibleLibraryID: "/facebook/react",
+  topic: "hooks",
+  tokens: 5000
+})
+// Returns: React hooks documentation
+```
+
+#### 2. **deep-analysis** (uses sequential-thinking MCP server)
+- **What**: Structured multi-step reasoning for complex problems
+- **How**: Uses sequential-thinking MCP server for deep analysis
+- **Capabilities**: Up to 31,999 thinking tokens (vs 4,000 standard)
+- **Usage**: "Should we use microservices or monolith?"
+
+```javascript
+// Example MCP tool invocation
+mcp__sequential-thinking-server__sequentialthinking({
+  thought: "Let me analyze the architectural trade-offs...",
+  thoughtNumber: 1,
+  totalThoughts: 10,
+  nextThoughtNeeded: true
+})
+// Enables hypothesis generation, verification, and course correction
+```
+
+### MCP + Agent Integration
+
+MCP servers work with agents to enhance their capabilities:
+
+- **architecture-planner** + **deep-analysis** skill (sequential-thinking MCP) → Structured architectural decisions
+- **documentation-maintainer** + **library-docs** skill (context7 MCP) → Documentation using library patterns
+- **performance-optimizer** + **deep-analysis** skill (sequential-thinking MCP) → Root cause analysis
+
+### Configuring MCP Servers
+
+Add MCP servers to your Claude Code settings:
+
+```json
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@context7/mcp-server"]
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    }
+  }
+}
+```
+
+### When to Use MCP
+
+Use MCP servers when you need:
+- ✅ External data or API integrations
+- ✅ Sandboxed tool execution
+- ✅ Reusable capabilities across skills and agents
+- ✅ Up-to-date information from external sources
+
+### MCP Resources
+
+For comprehensive documentation on MCP integration, Skills, Slash Commands, and Subagents, see:
+- **[EXTENSIBILITY.md](./EXTENSIBILITY.md)** - Complete extensibility guide
+- **[MCP Documentation](https://modelcontextprotocol.io)** - Official MCP protocol docs
+
 ## 🔒 Security-First Approach
 
 **CRITICAL:** The following agents ALWAYS use Opus model for maximum security:
