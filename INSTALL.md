@@ -1,20 +1,38 @@
-# 🚀 Claude Agents - Installation Guide
+# Claude Agents - Installation Guide
 
-## One-Line Installation (Recommended)
+## Team Setup (Recommended)
 
-Run this command in your project root:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/install.sh | bash
-```
-
-Or with wget:
+Clone the repo and run the full team onboarding:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/install.sh | bash
+git clone git@github.com:pfangueiro/claude-code-agents.git
+cd claude-code-agents
+./install.sh --team-setup
 ```
+
+This installs everything: agents, skills, commands, hooks, statusline, keybindings, output styles, and global settings.
 
 ## Installation Options
+
+| Command | What it does |
+|---------|-------------|
+| `./install.sh --team-setup` | Full team onboarding (project + global config) |
+| `./install.sh` | Interactive mode (detects existing setup) |
+| `./install.sh --minimal` | CLAUDE.md only (agent activation) |
+| `./install.sh --full` | All agents + library files (project-level) |
+| `./install.sh --repair` | Fix missing components |
+| `./install.sh --update` | Update to latest version |
+
+### Team Setup
+```bash
+./install.sh --team-setup
+```
+- Installs all 11 agents, skills, and library files (project-level)
+- Installs slash commands (`.claude/commands/`)
+- Installs hooks, statusline, keybindings, output styles (`~/.claude/`)
+- Merges or installs global settings (`~/.claude/settings.json`)
+- Personalizes `~/.claude/CLAUDE.md` with your name and email
+- Checks prerequisites (`git`, `curl` required; `jq`, `npx` optional)
 
 ### Interactive Mode (Default)
 ```bash
@@ -58,6 +76,30 @@ wget -qO- https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/i
 
 ## What Gets Installed
 
+### Team Setup Mode (`--team-setup`)
+```
+# Project-level (current directory)
+CLAUDE.md                          # Agent auto-activation config
+.claude/
+├── agents/                        # 11 specialized agents
+├── commands/                      # Slash commands (/new-feature, /commit-pr, /create-jira)
+├── skills/                        # Modular knowledge packages
+├── lib/                           # Activation patterns & templates
+└── history/                       # Usage tracking (auto-created)
+
+# Global (~/.claude/)
+~/.claude/
+├── hooks/
+│   ├── notify.sh                  # Desktop notification hook
+│   └── post-edit-lint.sh          # Auto-lint after Write/Edit
+├── output-styles/
+│   └── concise.md                 # Code-first output style
+├── statusline.sh                  # Rich status bar
+├── keybindings.json               # Ctrl+S commit, Ctrl+P plan
+├── settings.json                  # Model, hooks, deny rules, attribution
+└── CLAUDE.md                      # Personal coding preferences
+```
+
 ### Minimal Mode
 ```
 CLAUDE.md                  # Agent auto-activation config
@@ -68,27 +110,8 @@ CLAUDE.md                  # Agent auto-activation config
 CLAUDE.md                  # Agent auto-activation config
 .claude/
 ├── agents/                # 11 specialized agents
-│   ├── architecture-planner.md
-│   ├── code-quality.md
-│   ├── security-auditor.md
-│   ├── test-automation.md
-│   ├── performance-optimizer.md
-│   ├── devops-automation.md
-│   ├── documentation-maintainer.md
-│   ├── database-architect.md
-│   ├── frontend-specialist.md
-│   ├── api-backend.md
-│   ├── incident-commander.md
-│   └── meta-agent.md
 ├── skills/                # Modular knowledge packages
-│   ├── skill-creator/     # Create new skills
-│   ├── git-workflow/      # Git best practices (demo)
-│   ├── code-review-checklist/ # Review guidelines (demo)
-│   └── deployment-runbook/    # Deployment procedures (demo)
 ├── lib/                   # Supporting files
-│   ├── agent-templates.json
-│   ├── sdlc-patterns.md
-│   └── activation-keywords.json
 └── history/               # Usage tracking (auto-created)
 ```
 
@@ -190,6 +213,7 @@ To keep agents but remove from CLAUDE.md:
 
 | Command | Action | Use When |
 |---------|--------|----------|
+| `./install.sh --team-setup` | Full onboarding | New team member |
 | `./install.sh` | Interactive | First time or unsure |
 | `./install.sh --minimal` | CLAUDE.md only | Quick setup |
 | `./install.sh --full` | Everything | Complete system |
