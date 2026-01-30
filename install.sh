@@ -4,21 +4,22 @@
 # Claude Agents - Intelligent Installation Script
 # ============================================================================
 # Detects existing components and deploys only what's needed
-# Supports minimal, full, repair, and update modes
+# Supports minimal, full, repair, update, and team-setup modes
 #
 # Usage:
-#   ./install.sh           - Interactive installation
-#   ./install.sh --minimal - Minimal CLAUDE.md only
-#   ./install.sh --full    - Complete agent system
-#   ./install.sh --repair  - Fix missing components
-#   ./install.sh --update  - Update existing installation
+#   ./install.sh              - Interactive installation
+#   ./install.sh --minimal    - Minimal CLAUDE.md only
+#   ./install.sh --full       - Complete agent system
+#   ./install.sh --repair     - Fix missing components
+#   ./install.sh --update     - Update existing installation
+#   ./install.sh --team-setup - Full team onboarding (agents + global config)
 # ============================================================================
 
 set -e
 
 # Configuration
-SCRIPT_VERSION="2.2.0"
-GITHUB_REPO="https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main"
+SCRIPT_VERSION="2.3.0"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
 DEBUG="${DEBUG:-false}"
 
@@ -74,19 +75,6 @@ print_header() {
     echo -e "${PURPLE}║${BOLD}     🤖 Claude Agents - Intelligent Installer v${SCRIPT_VERSION}     ${NC}${PURPLE}║${NC}"
     echo -e "${PURPLE}╚══════════════════════════════════════════════════════════╝${NC}"
     echo ""
-}
-
-check_connectivity() {
-    print_progress "Checking GitHub connectivity..."
-    local test_url="${GITHUB_REPO}/README.md"
-    if curl -fsSL "$test_url" -o /dev/null 2>/dev/null; then
-        print_info "GitHub connection verified"
-        return 0
-    else
-        print_error "Cannot reach GitHub repository"
-        echo "Please check your internet connection or try again later"
-        return 1
-    fi
 }
 
 print_progress() {
@@ -256,45 +244,22 @@ download_or_copy() {
     local dest_file="$2"
     local file_type="$3"
 
-    # Check if running from the repo
-    if [ -f "$source_file" ]; then
+    # Create directory if it doesn't exist
+    local dest_dir
+    dest_dir=$(dirname "$dest_file")
+    mkdir -p "$dest_dir"
+
+    # Check if running from the repo (local clone)
+    if [ -f "${SCRIPT_DIR}/${source_file}" ]; then
+        cp "${SCRIPT_DIR}/${source_file}" "$dest_file"
+        echo -e "  ${GREEN}✓${NC} Copied $file_type"
+    elif [ -f "$source_file" ]; then
         cp "$source_file" "$dest_file"
         echo -e "  ${GREEN}✓${NC} Copied $file_type"
     else
-        # Download from GitHub - construct proper URL
-        local url="${GITHUB_REPO}/${source_file}"
-        # Remove leading ./ if present
-        url="${url#./}"
-
-        # Debug mode
-        if [ "$DEBUG" = "true" ]; then
-            echo "  DEBUG: Downloading from: $url"
-            echo "  DEBUG: Saving to: $dest_file"
-        fi
-
-        # Create directory if it doesn't exist
-        local dest_dir=$(dirname "$dest_file")
-        mkdir -p "$dest_dir"
-
-        # Try to download with better error handling
-        if curl -fsSL "$url" -o "$dest_file"; then
-            # Verify file was actually downloaded and not empty
-            if [ -s "$dest_file" ]; then
-                echo -e "  ${GREEN}✓${NC} Downloaded $file_type"
-            else
-                print_error "Downloaded empty file for $file_type"
-                rm -f "$dest_file"
-                return 1
-            fi
-        else
-            print_error "Failed to download $file_type"
-            if [ "$DEBUG" = "true" ]; then
-                echo "  DEBUG: Attempted URL: $url"
-                echo "  DEBUG: HTTP Response:"
-                curl -IsS "$url" | head -5
-            fi
-            return 1
-        fi
+        print_error "File not found: $source_file"
+        print_info "Run this script from the cloned repository directory."
+        return 1
     fi
 }
 
@@ -416,6 +381,203 @@ EOF
 }
 
 # ============================================================================
+# Team Setup Functions
+# ============================================================================
+
+check_prerequisites() {
+    print_progress "Checking prerequisites..."
+
+    local missing_required=false
+
+    for cmd in git curl; do
+        if command -v "$cmd" &>/dev/null; then
+            echo -e "  ${GREEN}✓${NC} $cmd"
+        else
+            echo -e "  ${RED}✗${NC} $cmd (required)"
+            missing_required=true
+        fi
+    done
+
+    for cmd in jq npx; do
+        if command -v "$cmd" &>/dev/null; then
+            echo -e "  ${GREEN}✓${NC} $cmd"
+        else
+            echo -e "  ${YELLOW}!${NC} $cmd (optional — needed for statusline/MCP)"
+        fi
+    done
+
+    if [ "$missing_required" = true ]; then
+        print_error "Missing required tools. Install them and retry."
+        exit 1
+    fi
+
+    print_success "Prerequisites satisfied"
+}
+
+install_commands() {
+    echo -e "\n${BOLD}Installing Slash Commands:${NC}"
+
+    local src_dir="${SCRIPT_DIR}/.claude/commands"
+    local dest_dir=".claude/commands"
+
+    if [ ! -d "$src_dir" ]; then
+        print_info "No commands directory found in source — skipping"
+        return 0
+    fi
+
+    mkdir -p "$dest_dir"
+
+    for file in "$src_dir"/*.md; do
+        [ -f "$file" ] || continue
+        local name
+        name=$(basename "$file")
+        # Skip macOS resource fork files
+        [[ "$name" == ._* ]] && continue
+        if [ -f "$dest_dir/$name" ]; then
+            print_skip "Command $name already exists"
+        else
+            cp "$file" "$dest_dir/$name"
+            print_success "Installed command $name"
+        fi
+    done
+}
+
+install_global_config() {
+    echo -e "\n${BOLD}Installing Global Configuration:${NC}"
+
+    local src_dir="${SCRIPT_DIR}/global-config"
+
+    if [ ! -d "$src_dir" ]; then
+        print_error "global-config/ directory not found. Run from the repo root."
+        return 1
+    fi
+
+    # Create directories
+    mkdir -p ~/.claude/hooks
+    mkdir -p ~/.claude/output-styles
+
+    # Copy hooks (executable)
+    for hook in "$src_dir"/hooks/*.sh; do
+        [ -f "$hook" ] || continue
+        local name
+        name=$(basename "$hook")
+        cp "$hook" ~/.claude/hooks/"$name"
+        chmod +x ~/.claude/hooks/"$name"
+        print_success "Installed hook $name"
+    done
+
+    # Copy output styles
+    for style in "$src_dir"/output-styles/*; do
+        [ -f "$style" ] || continue
+        local name
+        name=$(basename "$style")
+        cp "$style" ~/.claude/output-styles/"$name"
+        print_success "Installed output style $name"
+    done
+
+    # Copy statusline
+    if [ -f "$src_dir/statusline.sh" ]; then
+        cp "$src_dir/statusline.sh" ~/.claude/statusline.sh
+        chmod +x ~/.claude/statusline.sh
+        print_success "Installed statusline.sh"
+    fi
+
+    # Copy keybindings
+    if [ -f "$src_dir/keybindings.json" ]; then
+        cp "$src_dir/keybindings.json" ~/.claude/keybindings.json
+        print_success "Installed keybindings.json"
+    fi
+
+    # Handle settings.json
+    if [ -f "$src_dir/settings.json.template" ]; then
+        if [ ! -f ~/.claude/settings.json ]; then
+            cp "$src_dir/settings.json.template" ~/.claude/settings.json
+            print_success "Installed settings.json from template"
+        else
+            echo ""
+            echo -e "  ${YELLOW}~/.claude/settings.json already exists.${NC}"
+            echo "  1) Keep existing"
+            echo "  2) Replace (backup created)"
+            echo "  3) Show diff"
+            echo ""
+            read -p "  Choose [1-3]: " settings_choice
+            case $settings_choice in
+                2)
+                    cp ~/.claude/settings.json ~/.claude/settings.json.backup
+                    cp "$src_dir/settings.json.template" ~/.claude/settings.json
+                    print_success "Replaced settings.json (backup: settings.json.backup)"
+                    ;;
+                3)
+                    diff ~/.claude/settings.json "$src_dir/settings.json.template" || true
+                    echo ""
+                    read -p "  Replace? [y/N]: " replace_yn
+                    if [[ "$replace_yn" =~ ^[Yy]$ ]]; then
+                        cp ~/.claude/settings.json ~/.claude/settings.json.backup
+                        cp "$src_dir/settings.json.template" ~/.claude/settings.json
+                        print_success "Replaced settings.json (backup: settings.json.backup)"
+                    else
+                        print_skip "Kept existing settings.json"
+                    fi
+                    ;;
+                *)
+                    print_skip "Kept existing settings.json"
+                    ;;
+            esac
+        fi
+    fi
+}
+
+personalize_setup() {
+    echo -e "\n${BOLD}Personalizing CLAUDE.md:${NC}"
+
+    local template="${SCRIPT_DIR}/global-config/CLAUDE.md.template"
+
+    if [ ! -f "$template" ]; then
+        print_info "CLAUDE.md.template not found — skipping personalization"
+        return 0
+    fi
+
+    if [ -f ~/.claude/CLAUDE.md ]; then
+        print_skip "~/.claude/CLAUDE.md already exists — skipping"
+        return 0
+    fi
+
+    # Auto-detect from git config
+    local detected_name
+    local detected_email
+    detected_name=$(git config user.name 2>/dev/null || echo "")
+    detected_email=$(git config user.email 2>/dev/null || echo "")
+
+    # Prompt for confirmation
+    if [ -n "$detected_name" ]; then
+        echo -e "  Detected name: ${CYAN}${detected_name}${NC}"
+        read -p "  Use this name? [Y/n]: " confirm_name
+        if [[ "$confirm_name" =~ ^[Nn]$ ]]; then
+            read -p "  Enter your name: " detected_name
+        fi
+    else
+        read -p "  Enter your name: " detected_name
+    fi
+
+    if [ -n "$detected_email" ]; then
+        echo -e "  Detected email: ${CYAN}${detected_email}${NC}"
+        read -p "  Use this email? [Y/n]: " confirm_email
+        if [[ "$confirm_email" =~ ^[Nn]$ ]]; then
+            read -p "  Enter your git email: " detected_email
+        fi
+    else
+        read -p "  Enter your git email: " detected_email
+    fi
+
+    # Generate CLAUDE.md from template
+    sed -e "s/__YOUR_NAME__/${detected_name}/g" \
+        -e "s/__YOUR_GIT_EMAIL__/${detected_email}/g" \
+        "$template" > ~/.claude/CLAUDE.md
+
+    print_success "Created ~/.claude/CLAUDE.md for ${detected_name}"
+}
+
+# ============================================================================
 # Installation Modes
 # ============================================================================
 
@@ -433,12 +595,6 @@ install_minimal() {
 install_full() {
     echo -e "\n${BOLD}Installing Full Agent System${NC}"
     echo "This will install all agents and supporting files"
-
-    # Check connectivity for downloads
-    if ! check_connectivity; then
-        echo -e "${RED}Installation requires internet connection to download files${NC}"
-        exit 1
-    fi
 
     backup_existing
     create_directories
@@ -677,15 +833,24 @@ main() {
             echo -e "${BOLD}Running in UPDATE mode${NC}"
             update_installation
             ;;
+        --team-setup)
+            echo -e "${BOLD}Running TEAM SETUP mode${NC}"
+            check_prerequisites
+            install_full
+            install_commands
+            install_global_config
+            personalize_setup
+            ;;
         --help)
             echo "Usage: ./install.sh [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --minimal   Install minimal CLAUDE.md only"
-            echo "  --full      Install complete agent system"
-            echo "  --repair    Fix missing components"
-            echo "  --update    Update to latest version"
-            echo "  --help      Show this help message"
+            echo "  --minimal      Install minimal CLAUDE.md only"
+            echo "  --full         Install complete agent system"
+            echo "  --repair       Fix missing components"
+            echo "  --update       Update to latest version"
+            echo "  --team-setup   Full team onboarding (agents + global config)"
+            echo "  --help         Show this help message"
             echo ""
             echo "No options = Interactive mode"
             exit 0
