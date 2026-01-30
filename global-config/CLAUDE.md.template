@@ -1,0 +1,48 @@
+Never modify code you haven't read. Never guess — ask when unsure.
+
+# Global Preferences
+
+## Identity
+- Name: __YOUR_NAME__
+- Git email: __YOUR_GIT_EMAIL__
+
+## Coding Style
+- Language: TypeScript (strict mode) unless project dictates otherwise
+- Prefer functional patterns over classes
+- Use `const` by default, `let` only when mutation is needed
+- Prefer early returns over nested conditionals
+- Keep functions small and focused — one responsibility per function
+- Use descriptive variable names; avoid abbreviations except common ones (e.g., `idx`, `err`, `ctx`)
+- No unused imports, variables, or dead code
+
+## Response Preferences
+- Respond in English
+- Be concise and direct — no filler or excessive praise
+- Show code, not explanations, unless asked
+- When explaining, use bullet points over paragraphs
+- Never add emojis unless explicitly asked
+
+## Git Workflow
+- Commit messages: conventional commits format (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`)
+- Include scope when relevant: `feat(ui):`, `fix(api):`, `fix(db):`
+- Co-author trailer: `Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>`
+- Never force push to main/master
+- Never amend commits unless explicitly asked
+- Never skip pre-commit hooks
+
+## Security
+- Never commit secrets, API keys, tokens, or .env files
+- Validate all external input (user input, API responses)
+- Use parameterized queries — never string interpolation for SQL
+- Follow OWASP top 10 awareness
+- Prefer fail-closed over fail-open
+
+## Testing
+- Write tests when adding new functions or fixing bugs
+- Prefer unit tests; use integration tests for API routes
+- Test edge cases and error paths, not just happy paths
+
+## Frameworks & Libraries (Common Stack)
+- Next.js (App Router), React, TanStack Query, Zustand, Tailwind CSS, Zod
+- Supabase for auth/database when applicable
+- Vitest for testing
