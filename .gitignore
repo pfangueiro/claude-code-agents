@@ -8,7 +8,12 @@
 
 # OS files
 .DS_Store
+._*
 Thumbs.db
+
+# Claude local settings (personal, not shared)
+.claude/settings.local.json
+.claude/.DS_Store
 
 # Editor files
 .vscode/
