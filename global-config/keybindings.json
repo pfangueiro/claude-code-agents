@@ -1,0 +1,12 @@
+[
+  {
+    "key": "ctrl+s",
+    "command": "commit",
+    "description": "Quick commit"
+  },
+  {
+    "key": "ctrl+p",
+    "command": "plan",
+    "description": "Enter plan mode"
+  }
+]
