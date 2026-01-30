@@ -83,12 +83,12 @@ print_progress() {
 
 print_success() {
     echo -e "${GREEN}✅${NC} $1"
-    ((STATS_INSTALLED++))
+    (( STATS_INSTALLED++ )) || true
 }
 
 print_skip() {
     echo -e "${YELLOW}⏭️${NC}  $1"
-    ((STATS_SKIPPED++))
+    (( STATS_SKIPPED++ )) || true
 }
 
 print_error() {
@@ -105,7 +105,7 @@ print_info() {
 
 detect_claude_directory() {
     print_progress "Checking for .claude directory..."
-    ((STATS_CHECKED++))
+    (( STATS_CHECKED++ )) || true
 
     if [ -d ".claude" ]; then
         print_info ".claude directory exists"
@@ -133,7 +133,7 @@ detect_agents() {
 
     echo -e "\n${BOLD}Agent Status:${NC}"
     for agent in "${AGENTS[@]}"; do
-        ((STATS_CHECKED++))
+        (( STATS_CHECKED++ )) || true
         if [ -f ".claude/agents/${agent}.md" ]; then
             echo -e "  ${GREEN}✓${NC} ${agent}"
             ((found_agents++))
@@ -160,7 +160,7 @@ detect_lib_files() {
 
     echo -e "\n${BOLD}Library Files:${NC}"
     for lib in "${LIB_FILES[@]}"; do
-        ((STATS_CHECKED++))
+        (( STATS_CHECKED++ )) || true
         if [ -f ".claude/lib/${lib}" ]; then
             echo -e "  ${GREEN}✓${NC} ${lib}"
             ((found_libs++))
@@ -180,7 +180,7 @@ detect_lib_files() {
 
 detect_claude_md() {
     print_progress "Checking CLAUDE.md configuration..."
-    ((STATS_CHECKED++))
+    (( STATS_CHECKED++ )) || true
 
     if [ ! -f "CLAUDE.md" ]; then
         print_info "CLAUDE.md not found"
@@ -227,12 +227,12 @@ backup_existing() {
 
         if [ -d ".claude" ]; then
             cp -r .claude "$BACKUP_DIR/"
-            ((STATS_BACKED_UP++))
+            (( STATS_BACKED_UP++ )) || true
         fi
 
         if [ -f "CLAUDE.md" ]; then
             cp CLAUDE.md "$BACKUP_DIR/"
-            ((STATS_BACKED_UP++))
+            (( STATS_BACKED_UP++ )) || true
         fi
 
         print_success "Backup created in $BACKUP_DIR"
@@ -670,7 +670,7 @@ update_installation() {
         print_progress "Updating ${agent}..."
         download_or_copy ".claude/agents/${agent}.md" ".claude/agents/${agent}.md" "$agent"
         print_success "Updated ${agent}"
-        ((STATS_UPDATED++))
+        (( STATS_UPDATED++ )) || true
     done
 
     # Update library files
@@ -679,7 +679,7 @@ update_installation() {
         print_progress "Updating ${lib}..."
         download_or_copy ".claude/lib/${lib}" ".claude/lib/${lib}" "$lib"
         print_success "Updated ${lib}"
-        ((STATS_UPDATED++))
+        (( STATS_UPDATED++ )) || true
     done
 }
 
