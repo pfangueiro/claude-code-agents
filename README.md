@@ -1,7 +1,7 @@
 # 🤖 Claude Agents - Enterprise AI Agent System for SDLC/SSDLC
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents)
+[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents)
 [![Claude Compatible](https://img.shields.io/badge/Claude-Compatible-purple.svg)](https://claude.ai/code)
 [![Skills](https://img.shields.io/badge/Skills-6%20Included-green.svg)](https://claudeskills.info)
 [![MCP](https://img.shields.io/badge/MCP-Powered-brightgreen.svg)](https://modelcontextprotocol.io)
@@ -22,25 +22,47 @@
 
 ## 🚀 Quick Start
 
-### One-Line Installation
+### Team Setup (Recommended)
+
+Clone the repo and run the team installer to get agents, skills, commands, hooks, statusline, keybindings, and output styles:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/install.sh | bash
+git clone git@github.com:pfangueiro/claude-code-agents.git
+cd claude-code-agents
+./install.sh --team-setup
 ```
 
-### Alternative: Quick Install (If having issues)
+This installs:
+
+| Component | Scope | What |
+|-----------|-------|------|
+| Agents (11) | Project `.claude/agents/` | Auto-activating SDLC specialists |
+| Skills (6+) | Project `.claude/skills/` | Modular knowledge packages |
+| Library files | Project `.claude/lib/` | Activation patterns & templates |
+| Slash commands | Project `.claude/commands/` | `/new-feature`, `/commit-pr`, `/create-jira` |
+| Hooks | Global `~/.claude/hooks/` | Notifications + auto-lint |
+| Statusline | Global `~/.claude/statusline.sh` | Rich status bar (model, git, cost, context) |
+| Keybindings | Global `~/.claude/keybindings.json` | Ctrl+S commit, Ctrl+P plan |
+| Output style | Global `~/.claude/output-styles/` | Concise, code-first responses |
+| Settings | Global `~/.claude/settings.json` | Model, hooks, deny rules, attribution |
+| CLAUDE.md | Global `~/.claude/CLAUDE.md` | Personal coding preferences |
+
+### Project-Only Installation
+
+If you only need agents for a specific project (no global config):
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/quick-install.sh | bash
+cd /path/to/your/project
+/path/to/claude-code-agents/install.sh --full
 ```
 
 ### That's It!
 
 Now just use natural language:
-- 📝 "Design a REST API for user management"
-- 🔒 "Check this code for security issues"
-- ⚡ "Why is this query running slow?"
-- 🚀 "Deploy this to AWS"
+- "Design a REST API for user management"
+- "Check this code for security issues"
+- "Why is this query running slow?"
+- "Deploy this to AWS"
 
 Agents will **automatically activate** based on your words!
 
@@ -96,7 +118,13 @@ graph LR
 
 ## 📦 Installation Options
 
-### Interactive Mode (Recommended)
+### Team Setup (Full Onboarding)
+```bash
+./install.sh --team-setup
+```
+Installs agents, skills, commands, hooks, statusline, keybindings, output styles, and global settings.
+
+### Interactive Mode
 ```bash
 ./install.sh
 ```
@@ -143,6 +171,10 @@ Updates to latest version.
 │   ├── api-backend.md
 │   ├── incident-commander.md
 │   └── meta-agent.md         # Creates new agents
+├── commands/                  # Slash commands
+│   ├── new-feature.md         # /new-feature PROJ-XXX desc
+│   ├── commit-pr.md           # /commit-pr [message]
+│   └── create-jira.md         # /create-jira type [epic] title
 ├── skills/                    # Modular knowledge packages
 │   ├── skill-creator/         # Create new skills
 │   ├── git-workflow/          # Git best practices
@@ -155,6 +187,14 @@ Updates to latest version.
 │   ├── sdlc-patterns.md      # SDLC phase detection
 │   └── activation-keywords.json # NLP activation patterns
 └── history/                   # Telemetry & learning
+
+global-config/                 # Team-shareable global config
+├── hooks/                     # Notification + auto-lint hooks
+├── output-styles/             # Concise output style
+├── statusline.sh              # Rich status bar
+├── keybindings.json           # Keyboard shortcuts
+├── settings.json.template     # Global settings template
+└── CLAUDE.md.template         # Personal preferences template
 ```
 
 ## 💰 Cost Optimization
@@ -412,9 +452,10 @@ Unlike traditional CLI tools that require memorizing commands, Claude Agents:
 
 ## 🚀 Getting Started
 
-1. **Install** (30 seconds)
+1. **Clone and install**
    ```bash
-   curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/install.sh | bash
+   git clone git@github.com:pfangueiro/claude-code-agents.git
+   cd claude-code-agents && ./install.sh --team-setup
    ```
 
 2. **Use natural language** (that's it!)
