@@ -173,7 +173,7 @@ Updates to latest version.
 │   ├── incident-commander.md
 │   └── meta-agent.md         # Creates new agents
 ├── commands/                  # Slash commands
-│   ├── new-feature.md         # /new-feature PROJ-XXX desc
+│   ├── new-feature.md         # /new-feature PROJ-123 desc
 │   ├── commit-pr.md           # /commit-pr [message]
 │   └── create-jira.md         # /create-jira type [epic] title
 ├── skills/                    # Modular knowledge packages (11 total)
