@@ -3,8 +3,10 @@
   "env": {
     "MAX_THINKING_TOKENS": "31999",
     "BASH_DEFAULT_TIMEOUT_MS": "60000",
-    "BASH_MAX_TIMEOUT_MS": "600000"
+    "BASH_MAX_TIMEOUT_MS": "600000",
+    "ENABLE_TOOL_SEARCH": "auto"
   },
+  "alwaysThinkingEnabled": true,
   "permissions": {
     "deny": [
       "Bash(rm -rf /)",
@@ -14,8 +16,39 @@
       "Bash(chmod -R 777 *)",
       "Bash(> /dev/sda*)",
       "Bash(mkfs.*)",
-      "Bash(dd if=*of=/dev/*)"
+      "Bash(dd if=*of=/dev/*)",
+      "Bash(git push --force origin main)",
+      "Bash(git push --force origin master)",
+      "Bash(npm publish --force)",
+      "Read(.env*)",
+      "Read(secrets/**)",
+      "Read(**/*.key)",
+      "Read(**/*.pem)",
+      "Edit(.env*)",
+      "Edit(secrets/**)",
+      "Write(.env*)",
+      "Write(secrets/**)"
+    ],
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:npmjs.org)",
+      "WebFetch(domain:stackoverflow.com)",
+      "WebFetch(domain:developer.mozilla.org)",
+      "WebFetch(domain:anthropic.com)"
     ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "network": {
+      "allowedDomains": [
+        "github.com",
+        "npmjs.org",
+        "registry.npmjs.org",
+        "api.github.com",
+        "raw.githubusercontent.com"
+      ]
+    }
   },
   "attribution": {
     "commit": "\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>",
@@ -33,6 +66,18 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/file-protection.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
@@ -41,6 +86,17 @@
             "type": "command",
             "command": "~/.claude/hooks/post-edit-lint.sh",
             "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '✨ Claude Code session started with full security and MCP integration'",
+            "timeout": 2
           }
         ]
       }
