@@ -4,7 +4,7 @@
 [![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents)
 [![Claude Compatible](https://img.shields.io/badge/Claude-Compatible-purple.svg)](https://claude.ai/code)
 [![Skills](https://img.shields.io/badge/Skills-11%20Included-green.svg)](https://claudeskills.info)
-[![MCP](https://img.shields.io/badge/MCP-6%20Servers-brightgreen.svg)](https://modelcontextprotocol.io)
+[![MCP](https://img.shields.io/badge/MCP-5%20Servers-brightgreen.svg)](https://modelcontextprotocol.io)
 
 **Auto-activating AI agents that respond to natural language** - no commands needed! Just describe what you want to build, and specialized agents automatically engage to help.
 
@@ -40,7 +40,7 @@ This installs:
 | Skills (11) | Project `.claude/skills/` | Modular knowledge packages |
 | Library files | Project `.claude/lib/` | Activation patterns & templates |
 | Slash commands (3) | Project `.claude/commands/` | `/new-feature`, `/commit-pr`, `/create-jira` |
-| MCP servers (6) | Global config | context7, sequential-thinking, playwright, github, postgres, brave-search |
+| MCP servers (5) | Global config | context7, sequential-thinking, playwright, github, postgres |
 | Hooks (3) | Global `~/.claude/hooks/` | Notifications, auto-lint, pre-commit |
 | Statusline | Global `~/.claude/statusline.sh` | Rich status bar (model, git, cost, context) |
 | Keybindings (6) | Global `~/.claude/keybindings.json` | Ctrl+S/P/T/R/J/D shortcuts |
@@ -282,7 +282,7 @@ mcp__sequential-thinking-server__sequentialthinking({
 })
 ```
 
-### Included MCP Servers (6 Total)
+### Included MCP Servers (5 Total)
 
 The team setup automatically configures these MCP servers:
 
@@ -293,7 +293,6 @@ The team setup automatically configures these MCP servers:
 | **playwright** | Browser automation & E2E testing | "Test login flow" |
 | **github** | PR/issue management, workflows | "Create PR from this branch" |
 | **postgres** | Database queries & optimization | "Analyze this query plan" |
-| **brave-search** | Web research & up-to-date information | "Search for best Next.js patterns" |
 
 ### Manual MCP Configuration
 
@@ -306,7 +305,6 @@ claude mcp add sequential-thinking-server -- npx @modelcontextprotocol/server-se
 claude mcp add playwright -- npx @executeautomation/playwright-mcp-server
 claude mcp add github -- npx -y @modelcontextprotocol/server-github
 claude mcp add postgres -- npx -y @modelcontextprotocol/server-postgres
-claude mcp add brave-search -- npx -y @modelcontextprotocol/server-brave-search
 ```
 
 ### Four Extensibility Mechanisms
