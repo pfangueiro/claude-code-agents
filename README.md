@@ -3,8 +3,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents)
 [![Claude Compatible](https://img.shields.io/badge/Claude-Compatible-purple.svg)](https://claude.ai/code)
-[![Skills](https://img.shields.io/badge/Skills-6%20Included-green.svg)](https://claudeskills.info)
-[![MCP](https://img.shields.io/badge/MCP-Powered-brightgreen.svg)](https://modelcontextprotocol.io)
+[![Skills](https://img.shields.io/badge/Skills-11%20Included-green.svg)](https://claudeskills.info)
+[![MCP](https://img.shields.io/badge/MCP-6%20Servers-brightgreen.svg)](https://modelcontextprotocol.io)
 
 **Auto-activating AI agents that respond to natural language** - no commands needed! Just describe what you want to build, and specialized agents automatically engage to help.
 
@@ -36,13 +36,14 @@ This installs:
 
 | Component | Scope | What |
 |-----------|-------|------|
-| Agents (11) | Project `.claude/agents/` | Auto-activating SDLC specialists |
-| Skills (6+) | Project `.claude/skills/` | Modular knowledge packages |
+| Agents (12) | Project `.claude/agents/` | Auto-activating SDLC specialists |
+| Skills (11) | Project `.claude/skills/` | Modular knowledge packages |
 | Library files | Project `.claude/lib/` | Activation patterns & templates |
-| Slash commands | Project `.claude/commands/` | `/new-feature`, `/commit-pr`, `/create-jira` |
-| Hooks | Global `~/.claude/hooks/` | Notifications + auto-lint |
+| Slash commands (3) | Project `.claude/commands/` | `/new-feature`, `/commit-pr`, `/create-jira` |
+| MCP servers (6) | Global config | context7, sequential-thinking, playwright, github, postgres, brave-search |
+| Hooks (3) | Global `~/.claude/hooks/` | Notifications, auto-lint, pre-commit |
 | Statusline | Global `~/.claude/statusline.sh` | Rich status bar (model, git, cost, context) |
-| Keybindings | Global `~/.claude/keybindings.json` | Ctrl+S commit, Ctrl+P plan |
+| Keybindings (6) | Global `~/.claude/keybindings.json` | Ctrl+S/P/T/R/J/D shortcuts |
 | Output style | Global `~/.claude/output-styles/` | Concise, code-first responses |
 | Settings | Global `~/.claude/settings.json` | Model, hooks, deny rules, attribution |
 | CLAUDE.md | Global `~/.claude/CLAUDE.md` | Personal coding preferences |
@@ -175,11 +176,16 @@ Updates to latest version.
 │   ├── new-feature.md         # /new-feature PROJ-XXX desc
 │   ├── commit-pr.md           # /commit-pr [message]
 │   └── create-jira.md         # /create-jira type [epic] title
-├── skills/                    # Modular knowledge packages
+├── skills/                    # Modular knowledge packages (11 total)
 │   ├── skill-creator/         # Create new skills
 │   ├── git-workflow/          # Git best practices
 │   ├── code-review-checklist/ # Review guidelines
 │   ├── deployment-runbook/    # Deployment procedures
+│   ├── api-guidelines/        # API design patterns
+│   ├── ui-guidelines/         # UI/UX best practices
+│   ├── ci-cd-templates/       # GitHub Actions, GitLab CI templates
+│   ├── api-contract-testing/  # OpenAPI validation & PACT
+│   ├── docker-deployment/     # Docker best practices
 │   ├── library-docs/          # MCP: Library documentation
 │   └── deep-analysis/         # MCP: Deep reasoning
 ├── lib/
@@ -189,11 +195,11 @@ Updates to latest version.
 └── history/                   # Telemetry & learning
 
 global-config/                 # Team-shareable global config
-├── hooks/                     # Notification + auto-lint hooks
+├── hooks/                     # 3 hooks: notify, post-edit-lint, pre-commit
 ├── output-styles/             # Concise output style
 ├── statusline.sh              # Rich status bar
-├── keybindings.json           # Keyboard shortcuts
-├── settings.json.template     # Global settings template
+├── keybindings.json           # 6 keyboard shortcuts
+├── settings.json.template     # Global settings (MCP, hooks, permissions)
 └── CLAUDE.md.template         # Personal preferences template
 ```
 
@@ -276,23 +282,31 @@ mcp__sequential-thinking-server__sequentialthinking({
 })
 ```
 
-### Configuring MCP Servers
+### Included MCP Servers (6 Total)
 
-Add to your Claude Code settings:
+The team setup automatically configures these MCP servers:
 
-```json
-{
-  "mcpServers": {
-    "context7": {
-      "command": "npx",
-      "args": ["-y", "@context7/mcp-server"]
-    },
-    "sequential-thinking": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
-    }
-  }
-}
+| MCP Server | Purpose | Example Usage |
+|------------|---------|---------------|
+| **context7** | Library documentation (React, Next.js, Vue, etc.) | "Show React hooks docs" |
+| **sequential-thinking** | Deep structured reasoning (31,999 tokens) | "Analyze microservices vs monolith" |
+| **playwright** | Browser automation & E2E testing | "Test login flow" |
+| **github** | PR/issue management, workflows | "Create PR from this branch" |
+| **postgres** | Database queries & optimization | "Analyze this query plan" |
+| **brave-search** | Web research & up-to-date information | "Search for best Next.js patterns" |
+
+### Manual MCP Configuration
+
+If not using team setup, add to your Claude Code settings:
+
+```bash
+# Install MCP servers
+claude mcp add context7 -- npx @upstash/context7-mcp@latest
+claude mcp add sequential-thinking-server -- npx @modelcontextprotocol/server-sequential-thinking
+claude mcp add playwright -- npx @executeautomation/playwright-mcp-server
+claude mcp add github -- npx -y @modelcontextprotocol/server-github
+claude mcp add postgres -- npx -y @modelcontextprotocol/server-postgres
+claude mcp add brave-search -- npx -y @modelcontextprotocol/server-brave-search
 ```
 
 ### Four Extensibility Mechanisms
@@ -319,6 +333,27 @@ Add to your Claude Code settings:
 | **Subagents** | Isolated task execution | `architecture-planner`, `security-auditor` |
 
 **See [EXTENSIBILITY.md](./EXTENSIBILITY.md) for the complete guide on all four mechanisms.**
+
+## ⌨️ Global Keybindings
+
+The team setup configures these keyboard shortcuts (works in all projects):
+
+| Keybinding | Command | Description |
+|------------|---------|-------------|
+| `Ctrl+S` | `commit` | Quick commit with auto-generated message |
+| `Ctrl+P` | `plan` | Enter plan mode for complex tasks |
+| `Ctrl+T` | `commit-pr` | Commit and create pull request |
+| `Ctrl+R` | `code-quality` | Trigger code review agent |
+| `Ctrl+J` | `create-jira` | Create JIRA ticket from context |
+| `Ctrl+D` | `deep-analysis` | Activate deep reasoning skill |
+
+## 🪝 Global Hooks
+
+Three hooks are configured for automation:
+
+1. **notify.sh** - Desktop notifications when Claude needs attention
+2. **post-edit-lint.sh** - Auto-lint TypeScript/JavaScript after Write/Edit
+3. **pre-commit.sh** - Validate conventional commit messages (manual Git integration)
 
 ## 🔥 Advanced Features
 
