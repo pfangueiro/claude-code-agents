@@ -1,6 +1,6 @@
 # Claude Code Commands
 
-This directory contains custom slash commands for the JPT (Product Tracker) project.
+This directory contains custom slash commands for streamlined development workflows.
 
 ## Available Commands
 
@@ -93,8 +93,8 @@ Commands may use Node.js scripts in `/scripts/` directory:
 - Check script has execute permissions: `chmod +x script.mjs`
 
 **JIRA errors:**
-- Verify git user.email matches JPT database user
-- Check JIRA instance is configured in database
+- Verify git user.email matches your JIRA user
+- Check JIRA instance configuration
 - Ensure user has JIRA permissions
 
 ## Contributing
@@ -111,5 +111,5 @@ To add a new command:
 ## Resources
 
 - [Claude Code Documentation](https://docs.claude.com/claude-code)
-- [JPT CLAUDE.md](../CLAUDE.md) - Project context
+- [CLAUDE.md](../CLAUDE.md) - Project context
 - [Slash Commands Guide](https://docs.claude.com/claude-code/slash-commands)
