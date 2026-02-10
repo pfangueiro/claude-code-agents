@@ -14,7 +14,7 @@ This reference guide helps the meta-agent identify which phase of the Software D
 - "define requirements for..."
 - "propose a solution for..."
 
-**Recommended Agents**: architecture-agent, database-engineer
+**Recommended Agents**: architecture-planner, database-architect
 **Tools Focus**: Research and documentation tools (Read, WebFetch, WebSearch, Write)
 **Model Preference**: Sonnet or Opus for complex systems
 
@@ -26,7 +26,7 @@ This reference guide helps the meta-agent identify which phase of the Software D
 - "model the data structure..."
 - "define the system architecture..."
 
-**Recommended Agents**: architecture-agent, database-engineer, backend-engineer
+**Recommended Agents**: architecture-planner, database-architect, api-backend
 **Tools Focus**: Design and documentation tools (Write, WebFetch, Task)
 **Model Preference**: Sonnet for standard designs, Opus for complex architectures
 
@@ -38,7 +38,7 @@ This reference guide helps the meta-agent identify which phase of the Software D
 - "build the component..."
 - "create the service..."
 
-**Recommended Agents**: frontend-engineer, backend-engineer, code-reviewer
+**Recommended Agents**: frontend-specialist, api-backend, code-quality
 **Tools Focus**: Full development tools (Read, Write, Edit, Bash)
 **Model Preference**: Sonnet for standard development, Haiku for simple tasks
 
@@ -50,7 +50,7 @@ This reference guide helps the meta-agent identify which phase of the Software D
 - "ensure quality of..."
 - "check for bugs in..."
 
-**Recommended Agents**: test-engineer, code-reviewer, performance-optimizer
+**Recommended Agents**: test-automation, code-quality, performance-optimizer
 **Tools Focus**: Testing and analysis tools (Read, Bash, Grep, Task)
 **Model Preference**: Sonnet for comprehensive testing
 
@@ -62,7 +62,7 @@ This reference guide helps the meta-agent identify which phase of the Software D
 - "ensure compliance with..."
 - "check for security issues..."
 
-**Recommended Agents**: security-scanner (ALWAYS)
+**Recommended Agents**: security-auditor (ALWAYS)
 **Tools Focus**: All tools for comprehensive scanning
 **Model Preference**: ALWAYS Opus for security-critical tasks
 
@@ -74,7 +74,7 @@ This reference guide helps the meta-agent identify which phase of the Software D
 - "configure deployment..."
 - "release the application..."
 
-**Recommended Agents**: devops-engineer, incident-responder (for hotfixes)
+**Recommended Agents**: devops-automation, incident-commander (for hotfixes)
 **Tools Focus**: Deployment tools (Bash, Write, Edit, WebFetch)
 **Model Preference**: Sonnet for standard deployments, Opus for production-critical
 
@@ -86,7 +86,7 @@ This reference guide helps the meta-agent identify which phase of the Software D
 - "update the documentation..."
 - "monitor the system..."
 
-**Recommended Agents**: incident-responder, performance-optimizer, documentation-writer
+**Recommended Agents**: incident-commander, performance-optimizer, documentation-maintainer
 **Tools Focus**: Monitoring and update tools (Read, Edit, Bash)
 **Model Preference**: Opus for incidents, Sonnet for optimization, Haiku for documentation
 
@@ -94,37 +94,37 @@ This reference guide helps the meta-agent identify which phase of the Software D
 
 ### Full Stack Development
 Phases: Design → Development → Testing → Deployment
-Agents: architecture-agent → frontend/backend-engineer → test-engineer → devops-engineer
+Agents: architecture-planner → frontend-specialist/api-backend → test-automation → devops-automation
 
 ### Security-First Development (SSDLC)
 Phases: Planning → Development → Security → Testing → Deployment
-Agents: security-scanner (throughout) + phase-specific agents
+Agents: security-auditor (throughout) + phase-specific agents
 
 ### Incident Response
 Phases: Detection → Triage → Mitigation → Recovery → Postmortem
-Agents: incident-responder (lead) + supporting specialists
+Agents: incident-commander (lead) + supporting specialists
 
 ### Performance Optimization
 Phases: Profiling → Analysis → Optimization → Testing → Deployment
-Agents: performance-optimizer → code-reviewer → test-engineer → devops-engineer
+Agents: performance-optimizer → code-quality → test-automation → devops-automation
 
 ## Agent Collaboration Patterns
 
 ### Sequential Pattern
 - Agent A completes → Agent B starts
-- Example: architecture-agent → backend-engineer
+- Example: architecture-planner → api-backend
 
 ### Parallel Pattern
 - Multiple agents work simultaneously
-- Example: frontend-engineer + backend-engineer
+- Example: frontend-specialist + api-backend
 
 ### Hierarchical Pattern
 - Lead agent coordinates sub-agents
-- Example: incident-responder coordinates multiple specialists
+- Example: incident-commander coordinates multiple specialists
 
 ### Review Pattern
 - Main agent → Review agent validates
-- Example: Any development agent → code-reviewer
+- Example: Any development agent → code-quality
 
 ## Priority Rules
 
@@ -132,22 +132,22 @@ Agents: performance-optimizer → code-reviewer → test-engineer → devops-eng
 - Production incidents
 - Security vulnerabilities
 - Data loss risks
-Agents: incident-responder, security-scanner
+Agents: incident-commander, security-auditor
 
 ### High Priority
 - Testing before deployment
 - Code review before merge
-Agents: test-engineer, code-reviewer
+Agents: test-automation, code-quality
 
 ### Medium Priority
 - Performance optimization
 - Architecture planning
-Agents: performance-optimizer, architecture-agent
+Agents: performance-optimizer, architecture-planner
 
 ### Low Priority
 - Documentation updates
 - Non-critical refactoring
-Agents: documentation-writer
+Agents: documentation-maintainer
 
 ## Best Practices for Agent Generation
 
