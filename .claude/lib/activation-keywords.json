@@ -136,19 +136,19 @@
   "multi_agent_triggers": {
     "full_stack": {
       "keywords": ["full-stack", "fullstack", "entire application", "whole system"],
-      "agents": ["architecture-agent", "frontend-engineer", "backend-engineer", "database-engineer"]
+      "agents": ["architecture-planner", "frontend-specialist", "api-backend", "database-architect"]
     },
     "security_audit": {
       "keywords": ["security audit", "vulnerability scan", "penetration test", "security review"],
-      "agents": ["security-scanner", "code-reviewer", "test-engineer"]
+      "agents": ["security-auditor", "code-quality", "test-automation"]
     },
     "performance_audit": {
       "keywords": ["performance audit", "optimization review", "speed analysis", "bottleneck analysis"],
-      "agents": ["performance-optimizer", "code-reviewer", "database-engineer"]
+      "agents": ["performance-optimizer", "code-quality", "database-architect"]
     },
     "deployment_pipeline": {
       "keywords": ["set up deployment", "create pipeline", "configure ci/cd", "deployment workflow"],
-      "agents": ["devops-engineer", "test-engineer", "security-scanner"]
+      "agents": ["devops-automation", "test-automation", "security-auditor"]
     }
   },
   "context_enhancers": {
