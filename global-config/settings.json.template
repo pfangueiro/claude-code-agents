@@ -38,17 +38,7 @@
     ]
   },
   "sandbox": {
-    "enabled": true,
-    "autoAllowBashIfSandboxed": true,
-    "network": {
-      "allowedDomains": [
-        "github.com",
-        "npmjs.org",
-        "registry.npmjs.org",
-        "api.github.com",
-        "raw.githubusercontent.com"
-      ]
-    }
+    "enabled": false
   },
   "attribution": {
     "commit": "\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>",
