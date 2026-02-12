@@ -721,6 +721,16 @@ install_full() {
     # Install slash commands
     install_commands
 
+    # Install MCP configuration
+    if [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
+        if [ -f ".mcp.json" ]; then
+            print_skip "MCP configuration (.mcp.json) already exists"
+        else
+            cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
+            print_success "Installed MCP configuration (.mcp.json)"
+        fi
+    fi
+
     # Handle CLAUDE.md
     if [ -f "CLAUDE.md" ]; then
         append_claude_md_section
@@ -767,6 +777,14 @@ repair_installation() {
     install_rules
     install_skills
     install_commands
+
+    # Repair MCP configuration
+    if [ ! -f ".mcp.json" ] && [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
+        cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
+        print_success "Installed MCP configuration (.mcp.json)"
+    else
+        print_skip "MCP configuration already present"
+    fi
 
     # Fix CLAUDE.md if needed
     if [ ! -f "CLAUDE.md" ]; then
@@ -846,6 +864,13 @@ update_installation() {
             print_success "Updated command $name"
             (( STATS_UPDATED++ )) || true
         done
+    fi
+
+    # Update MCP configuration
+    if [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
+        cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
+        print_success "Updated MCP configuration (.mcp.json)"
+        (( STATS_UPDATED++ )) || true
     fi
 }
 
