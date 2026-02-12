@@ -173,17 +173,16 @@ Agents: documentation-maintainer
 6. **No Testing**: Always include testing in workflows
 7. **Ignored Documentation**: Keep docs synchronized with code
 
-## Telemetry & Improvement
+## Planned: Observability
 
-Track these metrics for generated agents:
+The following metrics are recommended for future tracking:
 - Activation accuracy (did the right agent activate?)
 - Task completion rate
 - Model cost efficiency
 - Security issue detection rate
 - Collaboration effectiveness
-- User satisfaction
 
-Use telemetry data to continuously improve:
+These metrics can inform improvements to:
 - Keyword patterns
 - Tool assignments
 - Model selections
