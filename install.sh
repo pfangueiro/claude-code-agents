@@ -56,6 +56,7 @@ LIB_FILES=(
     "agent-templates.json"
     "sdlc-patterns.md"
     "activation-keywords.json"
+    "agent-coordination.md"
 )
 
 # Statistics
@@ -97,6 +98,41 @@ print_error() {
 
 print_info() {
     echo -e "${BLUE}ℹ️${NC}  $1"
+}
+
+# ============================================================================
+# Preflight Checks
+# ============================================================================
+
+preflight_checks() {
+    local errors=0
+
+    # Check write permissions
+    if [ ! -w "." ]; then
+        print_error "No write permission in current directory: $(pwd)"
+        ((errors++))
+    fi
+
+    # Check disk space (need at least 1MB)
+    local available_kb
+    available_kb=$(df -k . 2>/dev/null | awk 'NR==2 {print $4}')
+    if [ -n "$available_kb" ] && [ "$available_kb" -lt 1024 ]; then
+        print_error "Insufficient disk space (need at least 1MB, have ${available_kb}KB)"
+        ((errors++))
+    fi
+
+    # Validate source directory has agent files
+    if [ ! -d "${SCRIPT_DIR}/.claude/agents" ]; then
+        print_error "Source directory missing .claude/agents/. Run from the cloned repo."
+        ((errors++))
+    fi
+
+    if [ $errors -gt 0 ]; then
+        print_error "Preflight checks failed with $errors error(s). Aborting."
+        exit 1
+    fi
+
+    print_success "Preflight checks passed"
 }
 
 # ============================================================================
@@ -216,8 +252,36 @@ create_directories() {
     mkdir -p .claude/agents
     mkdir -p .claude/lib
     mkdir -p .claude/history
+    mkdir -p .claude/rules
 
     print_success "Directory structure created"
+}
+
+install_rules() {
+    echo -e "\n${BOLD}Installing Rules:${NC}"
+
+    local src_dir="${SCRIPT_DIR}/.claude/rules"
+    local dest_dir=".claude/rules"
+
+    if [ ! -d "$src_dir" ]; then
+        print_info "No rules directory found in source — skipping"
+        return 0
+    fi
+
+    mkdir -p "$dest_dir"
+
+    for file in "$src_dir"/*.md; do
+        [ -f "$file" ] || continue
+        local name
+        name=$(basename "$file")
+        [[ "$name" == ._* ]] && continue
+        if [ -f "$dest_dir/$name" ]; then
+            print_skip "Rule $name already exists"
+        else
+            cp "$file" "$dest_dir/$name"
+            print_success "Installed rule $name"
+        fi
+    done
 }
 
 backup_existing() {
@@ -270,8 +334,12 @@ install_agent() {
         print_skip "Agent ${agent} already exists"
     else
         print_progress "Installing ${agent} agent..."
-        download_or_copy ".claude/agents/${agent}.md" ".claude/agents/${agent}.md" "$agent"
-        print_success "Installed ${agent}"
+        if download_or_copy ".claude/agents/${agent}.md" ".claude/agents/${agent}.md" "$agent"; then
+            print_success "Installed ${agent}"
+        else
+            print_error "Failed to install agent ${agent}"
+            return 1
+        fi
     fi
 }
 
@@ -282,8 +350,12 @@ install_lib_file() {
         print_skip "Library file ${lib} already exists"
     else
         print_progress "Installing ${lib}..."
-        download_or_copy ".claude/lib/${lib}" ".claude/lib/${lib}" "$lib"
-        print_success "Installed ${lib}"
+        if download_or_copy ".claude/lib/${lib}" ".claude/lib/${lib}" "$lib"; then
+            print_success "Installed ${lib}"
+        else
+            print_error "Failed to install library file ${lib}"
+            return 1
+        fi
     fi
 }
 
@@ -596,26 +668,36 @@ install_full() {
     echo -e "\n${BOLD}Installing Full Agent System${NC}"
     echo "This will install all agents and supporting files"
 
+    local install_errors=0
+
     backup_existing
     create_directories
 
     # Install all agents
     echo -e "\n${BOLD}Installing Agents:${NC}"
     for agent in "${AGENTS[@]}"; do
-        install_agent "$agent"
+        install_agent "$agent" || ((install_errors++))
     done
 
     # Install library files
     echo -e "\n${BOLD}Installing Library Files:${NC}"
     for lib in "${LIB_FILES[@]}"; do
-        install_lib_file "$lib"
+        install_lib_file "$lib" || ((install_errors++))
     done
+
+    # Install rules
+    install_rules
 
     # Handle CLAUDE.md
     if [ -f "CLAUDE.md" ]; then
         append_claude_md_section
     else
         install_minimal_claude_md
+    fi
+
+    if [ $install_errors -gt 0 ]; then
+        print_error "$install_errors component(s) failed to install"
+        return 1
     fi
 }
 
@@ -823,6 +905,7 @@ main() {
             ;;
         --full)
             echo -e "${BOLD}Running in FULL mode${NC}"
+            preflight_checks
             install_full
             ;;
         --repair)
@@ -836,8 +919,10 @@ main() {
         --team-setup)
             echo -e "${BOLD}Running TEAM SETUP mode${NC}"
             check_prerequisites
+            preflight_checks
             install_full
             install_commands
+            install_rules
             install_global_config
             personalize_setup
             ;;

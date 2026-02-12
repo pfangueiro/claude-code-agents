@@ -1,3 +1,8 @@
+---
+name: api-guidelines
+description: Comprehensive guidelines for building secure, consistent, and modern API endpoints in Next.js with TypeScript
+---
+
 # API Guidelines Skill
 
 ## Overview
