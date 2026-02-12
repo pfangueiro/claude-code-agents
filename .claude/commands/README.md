@@ -84,6 +84,21 @@ Scans the project or a specified path for security vulnerabilities.
 - File permission checks
 - Generates report with Critical/High/Medium/Low findings
 
+### `/compact` - Session Handoff & Compact
+Summarizes current session context into HANDOFF.md and compacts the conversation.
+
+**Usage:**
+```
+/compact
+/compact remember to fix the webhook parsing
+```
+
+**Features:**
+- Gathers session context (tasks, files, decisions, what worked/didn't)
+- Writes structured HANDOFF.md at project root
+- Preserves context for the next session
+- Runs `/compact` to free conversation context
+
 ## Command Development
 
 ### Structure

@@ -4,7 +4,7 @@
 [![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://docs.anthropic.com/en/docs/claude-code)
 [![Agents](https://img.shields.io/badge/Agents-12-orange.svg)](#-available-agents)
-[![Skills](https://img.shields.io/badge/Skills-11-green.svg)](#-skills-system)
+[![Skills](https://img.shields.io/badge/Skills-12-green.svg)](#-skills-system)
 [![MCP](https://img.shields.io/badge/MCP-5%20Servers-brightgreen.svg)](#-mcp-integration)
 
 **12 auto-activating AI agents for every phase of software development.** Just describe what you want to build — the right specialists engage automatically.
@@ -39,8 +39,8 @@ Agents activate automatically based on your words.
 | Component | Count | What It Does |
 |-----------|-------|--------------|
 | **Agents** | 12 | Auto-activating SDLC specialists (planning through production) |
-| **Skills** | 11 | Modular knowledge packages (git, Docker, CI/CD, API design, etc.) |
-| **Slash Commands** | 5 | `/commit-pr`, `/review-pr`, `/security-scan`, `/new-feature`, `/create-jira` |
+| **Skills** | 12 | Modular knowledge packages (git, Docker, CI/CD, API design, handoff, etc.) |
+| **Slash Commands** | 6 | `/commit-pr`, `/review-pr`, `/security-scan`, `/compact`, `/new-feature`, `/create-jira` |
 | **MCP Servers** | 5 | context7, sequential-thinking, playwright, github, postgres |
 | **Rules** | 2 | Auto-enforced security and code quality standards |
 | **Hooks** | 3 | Desktop notifications, auto-lint, pre-commit validation |
@@ -123,6 +123,7 @@ cd /path/to/your/project
 | `/commit-pr` | `/commit-pr [message]` | Stage, commit, push, create PR, update JIRA |
 | `/review-pr` | `/review-pr 123` | Code quality + security + testing review |
 | `/security-scan` | `/security-scan [path]` | OWASP scanning, secrets detection, dependency audit |
+| `/compact` | `/compact [note]` | Write HANDOFF.md with session context, then compact conversation |
 | `/new-feature` | `/new-feature PROJ-123 desc` | Create feature branch from latest main |
 | `/create-jira` | `/create-jira epic Title` | Create JIRA issue and assign to you |
 
@@ -130,7 +131,7 @@ cd /path/to/your/project
 
 ## Skills System
 
-Skills provide domain knowledge that agents apply. 11 included:
+Skills provide domain knowledge that agents apply. 12 included:
 
 | Skill | What It Provides |
 |-------|-----------------|
@@ -144,6 +145,7 @@ Skills provide domain knowledge that agents apply. 11 included:
 | **docker-deployment** | Multi-stage builds, Docker Compose, security |
 | **library-docs** | MCP-powered: fetch docs for React, Next.js, Vue, etc. |
 | **deep-analysis** | MCP-powered: 31,999-token structured reasoning |
+| **handoff** | Session continuity — write HANDOFF.md for cross-session context |
 | **skill-creator** | Create your own custom skills |
 
 ### Create Your Own Skill
@@ -192,8 +194,8 @@ Two rule files in `.claude/rules/` are automatically loaded by Claude Code in ev
 ```
 .claude/
 ├── agents/          # 12 auto-activating SDLC agents
-├── commands/        # 5 slash commands
-├── skills/          # 11 modular knowledge packages
+├── commands/        # 6 slash commands
+├── skills/          # 12 modular knowledge packages
 ├── rules/           # 2 auto-enforced rule sets
 ├── lib/             # Templates, patterns, coordination protocol
 └── history/         # Session history
