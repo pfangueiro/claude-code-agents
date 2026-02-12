@@ -486,6 +486,33 @@ check_prerequisites() {
     print_success "Prerequisites satisfied"
 }
 
+install_skills() {
+    echo -e "\n${BOLD}Installing Skills:${NC}"
+
+    local src_dir="${SCRIPT_DIR}/.claude/skills"
+    local dest_dir=".claude/skills"
+
+    if [ ! -d "$src_dir" ]; then
+        print_info "No skills directory found in source — skipping"
+        return 0
+    fi
+
+    mkdir -p "$dest_dir"
+
+    for skill_dir in "$src_dir"/*/; do
+        [ -d "$skill_dir" ] || continue
+        local name
+        name=$(basename "$skill_dir")
+        [[ "$name" == ._* ]] && continue
+        if [ -f "$dest_dir/$name/SKILL.md" ]; then
+            print_skip "Skill $name already exists"
+        else
+            cp -r "$skill_dir" "$dest_dir/$name"
+            print_success "Installed skill $name"
+        fi
+    done
+}
+
 install_commands() {
     echo -e "\n${BOLD}Installing Slash Commands:${NC}"
 
@@ -688,6 +715,12 @@ install_full() {
     # Install rules
     install_rules
 
+    # Install skills
+    install_skills
+
+    # Install slash commands
+    install_commands
+
     # Handle CLAUDE.md
     if [ -f "CLAUDE.md" ]; then
         append_claude_md_section
@@ -730,6 +763,11 @@ repair_installation() {
         fi
     done
 
+    # Repair rules, skills, and commands
+    install_rules
+    install_skills
+    install_commands
+
     # Fix CLAUDE.md if needed
     if [ ! -f "CLAUDE.md" ]; then
         install_minimal_claude_md
@@ -763,6 +801,52 @@ update_installation() {
         print_success "Updated ${lib}"
         (( STATS_UPDATED++ )) || true
     done
+
+    # Update rules, skills, and commands (re-copy from source)
+    echo -e "\n${BOLD}Updating Rules:${NC}"
+    local src_rules="${SCRIPT_DIR}/.claude/rules"
+    if [ -d "$src_rules" ]; then
+        mkdir -p .claude/rules
+        for file in "$src_rules"/*.md; do
+            [ -f "$file" ] || continue
+            local name
+            name=$(basename "$file")
+            [[ "$name" == ._* ]] && continue
+            cp "$file" ".claude/rules/$name"
+            print_success "Updated rule $name"
+            (( STATS_UPDATED++ )) || true
+        done
+    fi
+
+    echo -e "\n${BOLD}Updating Skills:${NC}"
+    local src_skills="${SCRIPT_DIR}/.claude/skills"
+    if [ -d "$src_skills" ]; then
+        mkdir -p .claude/skills
+        for skill_dir in "$src_skills"/*/; do
+            [ -d "$skill_dir" ] || continue
+            local name
+            name=$(basename "$skill_dir")
+            [[ "$name" == ._* ]] && continue
+            cp -r "$skill_dir" ".claude/skills/$name"
+            print_success "Updated skill $name"
+            (( STATS_UPDATED++ )) || true
+        done
+    fi
+
+    echo -e "\n${BOLD}Updating Slash Commands:${NC}"
+    local src_cmds="${SCRIPT_DIR}/.claude/commands"
+    if [ -d "$src_cmds" ]; then
+        mkdir -p .claude/commands
+        for file in "$src_cmds"/*.md; do
+            [ -f "$file" ] || continue
+            local name
+            name=$(basename "$file")
+            [[ "$name" == ._* ]] && continue
+            cp "$file" ".claude/commands/$name"
+            print_success "Updated command $name"
+            (( STATS_UPDATED++ )) || true
+        done
+    fi
 }
 
 # ============================================================================
@@ -921,8 +1005,6 @@ main() {
             check_prerequisites
             preflight_checks
             install_full
-            install_commands
-            install_rules
             install_global_config
             personalize_setup
             ;;
