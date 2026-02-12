@@ -18,7 +18,7 @@
 - 🎓 **Skills System** - Extend capabilities with modular knowledge packages
 - 🌐 **MCP Integration** - External tools and data via Model Context Protocol
 - 🔌 **4-Way Extensibility** - Skills, MCP, Slash Commands, and Subagents
-- 📊 **Enterprise Ready** - Production-grade with telemetry and monitoring
+- 📊 **Enterprise Ready** - Production-grade with extensible architecture
 
 ## 🚀 Quick Start
 
@@ -39,7 +39,7 @@ This installs:
 | Agents (12) | Project `.claude/agents/` | Auto-activating SDLC specialists |
 | Skills (11) | Project `.claude/skills/` | Modular knowledge packages |
 | Library files | Project `.claude/lib/` | Activation patterns & templates |
-| Slash commands (3) | Project `.claude/commands/` | `/new-feature`, `/commit-pr`, `/create-jira` |
+| Slash commands (5) | Project `.claude/commands/` | `/new-feature`, `/commit-pr`, `/create-jira`, `/review-pr`, `/security-scan` |
 | MCP servers (5) | Global config | context7, sequential-thinking, playwright, github, postgres |
 | Hooks (3) | Global `~/.claude/hooks/` | Notifications, auto-lint, pre-commit |
 | Statusline | Global `~/.claude/statusline.sh` | Rich status bar (model, git, cost, context) |
@@ -175,7 +175,9 @@ Updates to latest version.
 ├── commands/                  # Slash commands
 │   ├── new-feature.md         # /new-feature PROJ-123 desc
 │   ├── commit-pr.md           # /commit-pr [message]
-│   └── create-jira.md         # /create-jira type [epic] title
+│   ├── create-jira.md         # /create-jira type [epic] title
+│   ├── review-pr.md           # /review-pr <number>
+│   └── security-scan.md       # /security-scan [path]
 ├── skills/                    # Modular knowledge packages (11 total)
 │   ├── skill-creator/         # Create new skills
 │   ├── git-workflow/          # Git best practices
@@ -188,11 +190,15 @@ Updates to latest version.
 │   ├── docker-deployment/     # Docker best practices
 │   ├── library-docs/          # MCP: Library documentation
 │   └── deep-analysis/         # MCP: Deep reasoning
+├── rules/                     # Auto-loaded rules
+│   ├── security.md            # Security rules (always enforced)
+│   └── code-quality.md        # Code quality standards
 ├── lib/
-│   ├── agent-templates.json  # Pre-built templates
-│   ├── sdlc-patterns.md      # SDLC phase detection
-│   └── activation-keywords.json # NLP activation patterns
-└── history/                   # Telemetry & learning
+│   ├── agent-templates.json   # Pre-built templates
+│   ├── sdlc-patterns.md       # SDLC phase detection
+│   ├── activation-keywords.json # NLP activation patterns
+│   └── agent-coordination.md  # Multi-agent coordination protocol
+└── history/                   # Session history (planned: telemetry)
 
 global-config/                 # Team-shareable global config
 ├── hooks/                     # 3 hooks: notify, post-edit-lint, pre-commit
@@ -371,12 +377,12 @@ The **meta-agent** can generate new specialized agents:
 - **DevSecOps** best practices embedded
 - **Opus model** always used for security tasks
 
-### Telemetry & Learning
+### Planned: Observability
 
-- Tracks activation accuracy
-- Monitors task completion rates
-- Optimizes model selection
-- Refines activation patterns
+- Activation accuracy tracking
+- Task completion metrics
+- Model selection optimization
+- Activation pattern refinement
 
 ## 📖 Usage Examples
 
@@ -446,14 +452,12 @@ Use the meta-agent to generate new specialists:
 4. Push to the branch (`git push origin feature/NewAgent`)
 5. Open a Pull Request
 
-## 📊 Performance Metrics
+## 📊 Design Goals
 
-Based on real-world usage:
-
-- ⚡ **90ms** average activation time
-- 📈 **30% productivity gain** through intelligent routing
-- 💰 **70% cost reduction** via smart model selection
-- 🎯 **85% activation accuracy** with NLP patterns
+- 💰 **~70% cost reduction** via smart model selection (Haiku/Sonnet/Opus)
+- 🎯 **Natural language activation** with keyword pattern matching
+- 🔒 **Security-first** with Opus for all security and critical tasks
+- 🤝 **Multi-agent collaboration** across SDLC phases
 
 ## 🔒 Security
 
@@ -479,7 +483,7 @@ Unlike traditional CLI tools that require memorizing commands, Claude Agents:
 
 1. **Understand context** - Agents activate based on what you're trying to do
 2. **Work together** - Multiple agents collaborate automatically
-3. **Learn and improve** - Telemetry refines activation patterns
+3. **Extensible** - Skills, MCP, slash commands, and subagents
 4. **Save money** - Optimal model selection for each task
 5. **Zero friction** - No commands to remember
 

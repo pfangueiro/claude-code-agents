@@ -80,7 +80,7 @@ This is **Claude Agents** - an enterprise-grade AI agent system with 11 speciali
 
 ## 🔄 Agent Collaboration Patterns
 
-Agents work together in workflows:
+Agents work together in workflows. See `.claude/lib/agent-coordination.md` for the formal coordination protocol.
 
 ### Full Stack Development Flow
 1. **architecture-planner** → Designs system
@@ -328,13 +328,13 @@ This will trigger:
 5. **test-automation** - Generates tests
 6. **documentation-maintainer** - Documents the API
 
-## 📈 Continuous Improvement
+## 📈 Planned: Continuous Improvement
 
-The agent system includes telemetry and learning:
-- Tracks activation accuracy
-- Monitors task completion rates
-- Optimizes model selection
-- Refines activation patterns
+The following observability features are planned for a future release:
+- Activation accuracy tracking
+- Task completion metrics
+- Model selection optimization
+- Activation pattern refinement
 
 ---
 

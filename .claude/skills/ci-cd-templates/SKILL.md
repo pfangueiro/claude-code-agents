@@ -1,3 +1,8 @@
+---
+name: ci-cd-templates
+description: Production-ready CI/CD pipeline templates for GitHub Actions, GitLab CI, and CircleCI
+---
+
 # CI/CD Templates Skill
 
 Provides production-ready CI/CD pipeline templates for GitHub Actions, GitLab CI, and CircleCI.
