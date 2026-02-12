@@ -1,24 +1,39 @@
 {
   "mcpServers": {
     "context7": {
-      "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp"]
+      "command": "/Users/pfang/.nvm/versions/node/v24.13.1/bin/npx",
+      "args": ["-y", "@upstash/context7-mcp"],
+      "env": {
+        "PATH": "/Users/pfang/.nvm/versions/node/v24.13.1/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      }
     },
     "sequential-thinking": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+      "command": "/Users/pfang/.nvm/versions/node/v24.13.1/bin/npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "env": {
+        "PATH": "/Users/pfang/.nvm/versions/node/v24.13.1/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      }
     },
     "playwright": {
-      "command": "npx",
-      "args": ["-y", "@executeautomation/playwright-mcp-server"]
+      "command": "/Users/pfang/.nvm/versions/node/v24.13.1/bin/npx",
+      "args": ["-y", "@executeautomation/playwright-mcp-server"],
+      "env": {
+        "PATH": "/Users/pfang/.nvm/versions/node/v24.13.1/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      }
     },
     "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"]
+      "command": "/Users/pfang/.nvm/versions/node/v24.13.1/bin/npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "PATH": "/Users/pfang/.nvm/versions/node/v24.13.1/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      }
     },
     "postgres": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-postgres"]
+      "command": "/Users/pfang/.nvm/versions/node/v24.13.1/bin/npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "env": {
+        "PATH": "/Users/pfang/.nvm/versions/node/v24.13.1/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      }
     }
   }
 }
