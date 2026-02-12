@@ -5,6 +5,47 @@ All notable changes to Claude Agents will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-02-12
+
+### Quality, Coordination & Extensibility Release
+
+This release fixes credibility gaps between documentation and reality, adds missing infrastructure, and incorporates improvements from the latest Claude Code features.
+
+### Fixed
+
+- **False telemetry/metrics claims**: Removed fabricated metrics ("90ms activation", "30% productivity", "85% accuracy") from README.md
+- **Telemetry references**: Marked telemetry as "Planned" across README.md, CLAUDE.md, and sdlc-patterns.md — no longer claimed as existing
+- **EXTENSIBILITY.md directory references**: Fixed all `.claude/subagents/` references to `.claude/agents/`
+- **EXTENSIBILITY.md version**: Updated from 2.2.0 to 2.3.0
+- **meta-agent.md broken tools**: Removed non-existent `firecrawl` MCP tools, added `WebSearch`
+- **meta-agent.md URLs**: Fixed documentation URLs from `docs.claude.com` to `docs.anthropic.com`
+- **meta-agent.md telemetry**: Replaced "Generate Telemetry Hooks" with "Define Success Criteria"
+- **install.sh error handling**: `install_agent()` and `install_lib_file()` now check return codes from `download_or_copy()`
+
+### Added
+
+- **validate.sh**: New validation script checking all agent files (frontmatter, sections), lib files (JSON validity), skills (SKILL.md), MCP config, slash commands, and cross-references
+- **Agent coordination protocol** (`.claude/lib/agent-coordination.md`): Formal protocol for sequential handoffs, parallel coordination, review chains, error recovery, and priority rules
+- **.claude/rules/ directory**: Auto-loaded rules for security and code quality
+  - `security.md`: Secrets, input validation, auth, HTTP security, dependencies
+  - `code-quality.md`: Dead code, function design, error handling, naming
+- **`/review-pr` slash command**: PR review for code quality, security (OWASP), testing, documentation
+- **`/security-scan` slash command**: Security scanning with secrets detection, dependency checks, OWASP patterns, file permissions
+- **install.sh preflight checks**: Write permissions, disk space, source directory validation
+- **install.sh rules installation**: New `install_rules()` function and `.claude/rules/` directory creation
+- **install.sh error counting**: `install_errors` counter in `install_full()`
+- **EXTENSIBILITY.md meta-agent listing**: Added missing `meta-agent` to agents list
+
+### Changed
+
+- README.md "Enterprise Ready" description updated from "telemetry and monitoring" to "extensible architecture"
+- README.md `history/` directory description updated from "Telemetry & learning" to "Session history (planned: telemetry)"
+- README.md "Why Claude Agents?" section updated to reference extensibility instead of telemetry
+- CLAUDE.md "Continuous Improvement" section marked as planned
+- Commands README updated with `/review-pr` and `/security-scan` documentation
+
+---
+
 ## [2.2.0] - 2025-10-28
 
 ### 🌐 MCP Integration & 4-Way Extensibility
@@ -232,7 +273,7 @@ This release transforms Claude Agents into a comprehensive enterprise-grade SDLC
 - **Configuration Files**: 15+
 - **Agent Definitions**: 11
 - **Test Coverage**: Comprehensive
-- **Performance**: 90ms activation time
+- **Performance**: Keyword-based activation
 
 ### Breaking Changes
 - Old agent format deprecated
@@ -357,13 +398,6 @@ This release adds a comprehensive skills system that extends the agent framework
 ---
 
 ## Upcoming Features
-
-### [2.3.0] - Planned
-- Skills installation automation (install.sh integration)
-- Additional demonstration skills
-- More MCP server integrations
-- Skills marketplace integration
-- Team collaboration features
 
 ### [3.0.0] - Future
 - VS Code extension

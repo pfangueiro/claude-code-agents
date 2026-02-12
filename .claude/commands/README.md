@@ -54,6 +54,36 @@ Creates a new JIRA issue (Epic or Story/Task) and assigns it to you.
 - Adds "claude-created" label
 - Returns clickable JIRA URL
 
+### `/review-pr` - Review Pull Request
+Reviews a pull request for code quality, security (OWASP), testing, and documentation.
+
+**Usage:**
+```
+/review-pr 123
+```
+
+**Features:**
+- Fetches PR details and diff via `gh`
+- Analyzes code quality, security, testing, docs
+- Generates structured report (Critical/Suggestions/Nits)
+- Optionally posts review as GitHub comment
+
+### `/security-scan` - Security Scan
+Scans the project or a specified path for security vulnerabilities.
+
+**Usage:**
+```
+/security-scan
+/security-scan src/
+```
+
+**Features:**
+- Secrets detection (API keys, tokens, passwords)
+- Dependency vulnerability checks
+- OWASP code pattern scanning
+- File permission checks
+- Generates report with Critical/High/Medium/Low findings
+
 ## Command Development
 
 ### Structure

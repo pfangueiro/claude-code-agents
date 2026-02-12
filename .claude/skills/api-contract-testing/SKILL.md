@@ -1,3 +1,8 @@
+---
+name: api-contract-testing
+description: Tools and patterns for API contract testing using OpenAPI, JSON Schema, and contract-first development
+---
+
 # API Contract Testing Skill
 
 Provides tools and patterns for API contract testing using OpenAPI, JSON Schema, and contract-first development.

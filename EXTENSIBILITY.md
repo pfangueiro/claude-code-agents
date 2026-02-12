@@ -2,8 +2,8 @@
 
 **The Complete Guide to Extending Claude Code with Skills, MCP, Slash Commands, and Subagents**
 
-Version: 2.2.0
-Last Updated: 2025-10-28
+Version: 2.3.0
+Last Updated: 2026-02-12
 
 ---
 
@@ -384,12 +384,12 @@ Using the **deployment-runbook** skill and **security-auditor** agent:
 
 ### What Are Subagents?
 
-Subagents are specialized agents (defined in `.claude/subagents/`) that execute complex tasks in complete isolation. They're part of the Claude Agents system.
+Subagents are specialized agents (defined in `.claude/agents/`) that execute complex tasks in complete isolation. They're part of the Claude Agents system.
 
 ### Agent Anatomy
 
 ```
-.claude/subagents/
+.claude/agents/
 ├── architecture-planner.md
 ├── security-auditor.md
 ├── test-automation.md
@@ -905,7 +905,7 @@ claude-code-agents/
 │   │   ├── library-docs/          # MCP-powered
 │   │   └── deep-analysis/         # MCP-powered
 │   │
-│   ├── subagents/                 # Agents (Orange)
+│   ├── agents/                    # Agents (Orange)
 │   │   ├── architecture-planner.md
 │   │   ├── security-auditor.md
 │   │   ├── test-automation.md
@@ -962,6 +962,7 @@ claude-code-agents/
 - `api-backend`: Backend API development
 - `incident-commander`: Emergency response and triage
 - `code-quality`: Code review and quality assessment
+- `meta-agent`: Generates new specialized agents
 
 ---
 
@@ -985,6 +986,6 @@ By understanding when and how to use each mechanism, you can create powerful, ma
 
 ---
 
-**Version**: 2.2.0 - MCP Integration Release
+**Version**: 2.3.0 - Quality & Coordination Release
 **License**: MIT
 **Maintainer**: Claude Agents Project

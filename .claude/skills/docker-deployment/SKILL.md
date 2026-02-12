@@ -1,3 +1,8 @@
+---
+name: docker-deployment
+description: Production-ready Docker configurations, multi-stage builds, and deployment best practices
+---
+
 # Docker Deployment Skill
 
 Provides production-ready Docker configurations, multi-stage builds, and deployment best practices.
