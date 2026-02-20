@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is **Claude Agents** - an enterprise-grade AI agent system with 11 specialized SDLC/SSDLC agents that **auto-activate based on natural language**. The system automatically selects the optimal Claude model (Haiku/Sonnet/Opus) based on task complexity, achieving ~70% cost savings while ensuring comprehensive coverage of all software development phases.
+This is **Claude Agents** - an enterprise-grade AI agent system with 12 specialized SDLC/SSDLC agents and 14 skills that **auto-activate based on natural language**. The system automatically selects the optimal Claude model (Haiku/Sonnet/Opus) based on task complexity, achieving ~70% cost savings while ensuring comprehensive coverage of all software development phases.
 
 ## 🚨 IMPORTANT: AUTO-ACTIVATION SYSTEM
 
@@ -115,6 +115,9 @@ Just describe what you need:
 - "Review my React component for best practices" → **code-quality** + **frontend-specialist** activate
 - "Check for security vulnerabilities" → **security-auditor** activates with Opus
 - "Deploy this to AWS" → **devops-automation** activates
+- "/execute migrate from REST to GraphQL" → **execute** skill decomposes, plans, and orchestrates
+- "/investigate app crashes on document delete" → **investigate** skill runs 8-phase root cause protocol
+- "/deep-analysis should we use microservices or monolith?" → **deep-analysis** skill reasons through trade-offs
 
 ## 🛠️ Advanced Agent System
 
@@ -182,19 +185,26 @@ my-skill/
 
 Skills complement agents for powerful workflows:
 
-- **architecture-planner** + **api-spec** skill → Design with your standards
+- **`/execute`** orchestrates agents automatically: decompose → plan → launch agents in parallel batches
+- **`/investigate`** calls **deep-analysis** in Phase 4 and **test-automation** in Phase 8
+- **architecture-planner** + **deep-analysis** skill → Reasoned architectural decisions
 - **code-quality** + **code-review-checklist** skill → Review with your criteria
 - **devops-automation** + **deployment-runbook** skill → Deploy with your procedures
-- **documentation-maintainer** + **brand-guidelines** skill → Document with your style
 
-### Example Skills
+### Orchestration Skills
 
-The system includes demonstration skills:
+Three powerful skills for structured task execution:
+
+- **`/execute <goal>`**: Orchestrated task engine — decomposes goals into atomic tasks, plans dependencies, selects optimal agents/tools, executes in parallel batches, and tracks progress. Use for multi-step implementation goals.
+- **`/investigate <symptom>`**: 8-phase root cause analysis — OBSERVE → REPRODUCE → TRACE → HYPOTHESIZE → PROVE → ROOT CAUSE → FIX → PREVENT. Uses 5 Whys, competing hypotheses, evidence classification, and git forensics. Never jumps to a fix.
+- **`/deep-analysis <problem>`**: Structured multi-step reasoning via sequential-thinking MCP — branching, revision, hypothesis testing. Use for architecture decisions, trade-off evaluation, complex debugging.
+
+### Reference Skills
 
 - **skill-creator**: Create and package new skills
-- **git-workflow**: Git best practices and workflows (coming soon)
-- **code-review-checklist**: Systematic code review guidelines (coming soon)
-- **deployment-runbook**: Deployment procedures and scripts (coming soon)
+- **git-workflow**: Git best practices and workflows
+- **code-review-checklist**: Systematic code review guidelines
+- **deployment-runbook**: Deployment procedures and scripts
 
 See `.claude/skills/README.md` for complete documentation on creating and using skills.
 
@@ -240,12 +250,12 @@ mcp__context7__get-library-docs({
 #### 2. **deep-analysis** (uses sequential-thinking MCP server)
 - **What**: Structured multi-step reasoning for complex problems
 - **How**: Uses sequential-thinking MCP server for deep analysis
-- **Capabilities**: Up to 31,999 thinking tokens (vs 4,000 standard)
-- **Usage**: "Should we use microservices or monolith?"
+- **Capabilities**: Up to 31,999 thinking tokens, branching, revision
+- **Usage**: `/deep-analysis "Should we use microservices or monolith?"`
 
 ```javascript
 // Example MCP tool invocation
-mcp__sequential-thinking-server__sequentialthinking({
+mcp__sequential-thinking__sequentialthinking({
   thought: "Let me analyze the architectural trade-offs...",
   thoughtNumber: 1,
   totalThoughts: 10,
