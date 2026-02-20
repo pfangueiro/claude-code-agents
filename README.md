@@ -4,7 +4,7 @@
 [![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://docs.anthropic.com/en/docs/claude-code)
 [![Agents](https://img.shields.io/badge/Agents-12-orange.svg)](#-available-agents)
-[![Skills](https://img.shields.io/badge/Skills-12-green.svg)](#-skills-system)
+[![Skills](https://img.shields.io/badge/Skills-14-green.svg)](#-skills-system)
 [![MCP](https://img.shields.io/badge/MCP-5%20Servers-brightgreen.svg)](#-mcp-integration)
 
 **12 auto-activating AI agents for every phase of software development.** Just describe what you want to build — the right specialists engage automatically.
@@ -39,7 +39,7 @@ Agents activate automatically based on your words.
 | Component | Count | What It Does |
 |-----------|-------|--------------|
 | **Agents** | 12 | Auto-activating SDLC specialists (planning through production) |
-| **Skills** | 12 | Modular knowledge packages (git, Docker, CI/CD, API design, handoff, etc.) |
+| **Skills** | 14 | Modular knowledge packages (git, Docker, CI/CD, API design, execute, investigate, etc.) |
 | **Slash Commands** | 6 | `/commit-pr`, `/review-pr`, `/security-scan`, `/compact`, `/new-feature`, `/create-jira` |
 | **MCP Servers** | 5 | context7, sequential-thinking, playwright, github, postgres |
 | **Rules** | 2 | Auto-enforced security and code quality standards |
@@ -98,7 +98,7 @@ See [`.claude/lib/agent-coordination.md`](.claude/lib/agent-coordination.md) for
 | **Minimal** | `./install.sh --minimal` | Just CLAUDE.md with agent activation |
 | **Repair** | `./install.sh --repair` | Fix missing components |
 | **Update** | `./install.sh --update` | Update to latest version |
-| **Validate** | `./validate.sh` | Verify all 79 checks pass |
+| **Validate** | `./validate.sh` | Verify all 86 checks pass |
 
 ### Deploy to an Existing Project
 
@@ -111,7 +111,7 @@ cd /path/to/your/project
 
 ```bash
 ./validate.sh
-# All validations passed! (79/79 checks)
+# All validations passed! (86/86 checks)
 ```
 
 ---
@@ -131,7 +131,7 @@ cd /path/to/your/project
 
 ## Skills System
 
-Skills provide domain knowledge that agents apply. 12 included:
+Skills provide domain knowledge that agents apply. 14 included:
 
 | Skill | What It Provides |
 |-------|-----------------|
@@ -143,8 +143,10 @@ Skills provide domain knowledge that agents apply. 12 included:
 | **ui-guidelines** | React/Next.js patterns, Ant Design, responsive design |
 | **ci-cd-templates** | GitHub Actions, GitLab CI, deployment strategies |
 | **docker-deployment** | Multi-stage builds, Docker Compose, security |
+| **execute** | Orchestrated task engine: decompose goals, plan dependencies, parallel execution |
+| **investigate** | 8-phase root cause analysis: observe, reproduce, trace, hypothesize, prove, fix, prevent |
 | **library-docs** | MCP-powered: fetch docs for React, Next.js, Vue, etc. |
-| **deep-analysis** | MCP-powered: 31,999-token structured reasoning |
+| **deep-analysis** | MCP-powered: structured reasoning with branching and revision (rewritten) |
 | **handoff** | Session continuity — write HANDOFF.md for cross-session context |
 | **skill-creator** | Create your own custom skills |
 
