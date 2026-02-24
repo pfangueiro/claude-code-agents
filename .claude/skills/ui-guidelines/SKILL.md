@@ -1,6 +1,6 @@
 ---
 name: ui-guidelines
-description: Comprehensive UI/UX guidelines for building React/Next.js components with Ant Design, shadcn/ui charts, and consistent styling. Use when creating forms, tables, modals, cards, or any UI component. Enforces color palette (#F79400 Brand orange), typography, spacing (8px/12px/16px/24px), animations, and component patterns specific to the application.
+description: Comprehensive UI/UX guidelines for building React/Next.js components with Ant Design, shadcn/ui charts, and consistent styling. Use when creating forms, tables, modals, cards, or any UI component. Enforces color palette, typography, spacing (8px/12px/16px/24px), animations, and component patterns specific to the application.
 ---
 
 # UI Guidelines for Application
@@ -46,7 +46,7 @@ Every component must:
 ### Step 3: Apply Core Design Tokens
 
 **Colors:**
-- Brand Orange: `#F79402` (primary brand color - Brand)
+- Brand Orange: `#F79402` (primary brand color)
 - Product Owner: `#7C4DFF` (purple)
 - Tech Owner: `#52c41a` (green)
 - Error/Overdue: `#ff4d4f` (red)
@@ -204,7 +204,7 @@ const { token } = theme.useToken();
 ```
 
 **Key details:**
-- Selected state: border `#F79400` (brand orange)
+- Selected state: border with brand primary color
 - Subtle shadow: `0 1px 2px rgba(0, 0, 0, 0.04)`
 - Border radius: `8px`
 - Use `token.colorBorder` for unselected state
