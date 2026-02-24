@@ -802,11 +802,48 @@ repair_installation() {
     fi
 }
 
+clean_old_agents() {
+    # Remove agent files from v1.0 that have been renamed or replaced
+    local OLD_AGENTS=(
+        "architect.md"
+        "connector.md"
+        "documenter.md"
+        "guardian.md"
+        "accessibility.md"
+        "api-reliability.md"
+        "documentation.md"
+        "mobile-ux.md"
+        "performance.md"
+        "schema-guardian.md"
+        "security.md"
+    )
+
+    local cleaned=0
+    for agent in "${OLD_AGENTS[@]}"; do
+        if [ -f ".claude/agents/${agent}" ]; then
+            rm ".claude/agents/${agent}"
+            echo -e "  ${GREEN}✓${NC} Removed old ${agent}"
+            ((cleaned++))
+        fi
+    done
+
+    if [ $cleaned -gt 0 ]; then
+        print_success "Cleaned $cleaned old v1.0 agent file(s)"
+    fi
+}
+
 update_installation() {
     echo -e "\n${BOLD}Updating Installation${NC}"
     echo "This will update all components to latest version"
 
     backup_existing
+
+    # Ensure all directories exist (old installs may lack skills/, commands/, rules/)
+    mkdir -p .claude/agents .claude/lib .claude/rules .claude/skills .claude/commands
+
+    # Clean old v1.0 agents that have been renamed
+    echo -e "\n${BOLD}Cleaning Old Components:${NC}"
+    clean_old_agents
 
     # Update all agents
     echo -e "\n${BOLD}Updating Agents:${NC}"
@@ -885,6 +922,17 @@ update_installation() {
         fi
     else
         print_skip "MCP configuration (.mcp.json) already exists"
+    fi
+
+    # Handle CLAUDE.md — append agent section if missing, create if absent
+    if [ -f "CLAUDE.md" ]; then
+        if grep -q "Auto-Activating" CLAUDE.md 2>/dev/null; then
+            print_skip "CLAUDE.md already has agent configuration"
+        else
+            append_claude_md_section
+        fi
+    else
+        install_minimal_claude_md
     fi
 }
 
@@ -973,7 +1021,7 @@ verify_installation() {
         all_good=false
     fi
 
-    if [ "$MODE" = "--full" ] || [ "$choice" = "2" ]; then
+    if [ "$MODE" = "--full" ] || [ "$MODE" = "--update" ] || [ "$choice" = "2" ] || [ "$choice" = "4" ]; then
         if [ -d ".claude/agents" ] && [ -d ".claude/lib" ]; then
             print_success "Directory structure verified"
         else
