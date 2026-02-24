@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is **Claude Agents** - an enterprise-grade AI agent system with 12 specialized SDLC/SSDLC agents and 14 skills that **auto-activate based on natural language**. The system automatically selects the optimal Claude model (Haiku/Sonnet/Opus) based on task complexity, achieving ~70% cost savings while ensuring comprehensive coverage of all software development phases.
+This is **Claude Agents** - an enterprise-grade AI agent system with 12 specialized SDLC/SSDLC agents and 15 skills that **auto-activate based on natural language**. The system automatically selects the optimal Claude model (Haiku/Sonnet/Opus) based on task complexity, achieving ~70% cost savings while ensuring comprehensive coverage of all software development phases.
 
 ## 🚨 IMPORTANT: AUTO-ACTIVATION SYSTEM
 
@@ -193,8 +193,9 @@ Skills complement agents for powerful workflows:
 
 ### Orchestration Skills
 
-Three powerful skills for structured task execution:
+Four powerful skills for structured task execution:
 
+- **`/deep-read <target>`**: 6-phase codebase reading engine — SCOPE → MAP → TRACE → DEEP READ → CONNECT → REPORT. Reads actual source code line by line with file:line citations. Source code is the source of truth. Use when you need to truly understand how code works.
 - **`/execute <goal>`**: Orchestrated task engine — decomposes goals into atomic tasks, plans dependencies, selects optimal agents/tools, executes in parallel batches, and tracks progress. Use for multi-step implementation goals.
 - **`/investigate <symptom>`**: 8-phase root cause analysis — OBSERVE → REPRODUCE → TRACE → HYPOTHESIZE → PROVE → ROOT CAUSE → FIX → PREVENT. Uses 5 Whys, competing hypotheses, evidence classification, and git forensics. Never jumps to a fix.
 - **`/deep-analysis <problem>`**: Structured multi-step reasoning via sequential-thinking MCP — branching, revision, hypothesis testing. Use for architecture decisions, trade-off evaluation, complex debugging.
