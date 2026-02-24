@@ -21,6 +21,27 @@ How deep-analysis connects with other skills and agents in the toolchain.
 - `/investigate` — full 8-phase root cause protocol with evidence, fix, and prevention
 - `/deep-analysis` — structured reasoning only, no code changes
 
+### /deep-read (codebase reading engine)
+
+`/deep-read` produces thorough source-code understanding that feeds directly into `/deep-analysis` for reasoning.
+
+```
+/deep-read "the billing pipeline"
+  Phases 1-4: Scope, Map, Trace, Deep Read (reads actual source code)
+  Phase 5: CONNECT → may call deep-analysis for pattern synthesis
+  Phase 6: Report with file:line citations
+```
+
+**When to use which:**
+- `/deep-read` — understand how code works by reading it systematically
+- `/deep-analysis` — reason about decisions, trade-offs, or design problems
+
+**Combined workflow:**
+```
+/deep-read "payment processing flow"   → Understand the current implementation
+/deep-analysis "should we refactor to event sourcing?"  → Reason about the change
+```
+
 ### /execute (orchestrated task engine)
 
 `/execute` may invoke deep-analysis when a sub-task requires complex reasoning during implementation.
@@ -79,15 +100,17 @@ How deep-analysis connects with other skills and agents in the toolchain.
 ## Decision Tree: Which Tool for the Job
 
 ```
-Complex problem requiring reasoning?
-├── YES: Is it a bug/crash/error?
-│   ├── YES: Use /investigate (full protocol)
-│   └── NO: Is it a design/architecture decision?
-│       ├── YES: Use /deep-analysis
-│       └── NO: Is it a multi-step implementation?
-│           ├── YES: Use /execute
-│           └── NO: Use /deep-analysis
-└── NO: Use regular response or direct tool calls
+Do you need to understand existing code first?
+├── YES: Use /deep-read (then chain to other skills as needed)
+└── NO: Complex problem requiring reasoning?
+    ├── YES: Is it a bug/crash/error?
+    │   ├── YES: Use /investigate (full protocol)
+    │   └── NO: Is it a design/architecture decision?
+    │       ├── YES: Use /deep-analysis
+    │       └── NO: Is it a multi-step implementation?
+    │           ├── YES: Use /execute
+    │           └── NO: Use /deep-analysis
+    └── NO: Use regular response or direct tool calls
 ```
 
 ---
@@ -96,6 +119,9 @@ Complex problem requiring reasoning?
 
 | Scenario | Sequence |
 |----------|----------|
+| Codebase onboarding | /deep-read |
+| Understand then redesign | /deep-read → /deep-analysis → /execute |
+| Code review with full context | /deep-read → code-quality agent |
 | Architecture decision + implementation | /deep-analysis → /execute |
 | Performance issue investigation | /investigate (uses deep-analysis in Phase 4) |
 | Technology selection + migration | /deep-analysis → architecture-planner → /execute |
