@@ -722,14 +722,20 @@ install_full() {
     install_commands
 
     # Install MCP configuration
-    if [ -f ".mcp.json" ]; then
+    if [ -f ".mcp.json" ] && grep -q '/Users/\|/home/' ".mcp.json" 2>/dev/null; then
+        # Existing config has hardcoded user paths — replace with portable template
+        if [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
+            cp "${SCRIPT_DIR}/.mcp.json.example" ".mcp.json"
+            print_success "Replaced MCP configuration (removed hardcoded paths)"
+        fi
+    elif [ -f ".mcp.json" ]; then
         print_skip "MCP configuration (.mcp.json) already exists"
-    elif [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
-        cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
-        print_success "Installed MCP configuration (.mcp.json)"
     elif [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
         cp "${SCRIPT_DIR}/.mcp.json.example" ".mcp.json"
         print_success "Installed MCP configuration (.mcp.json from template)"
+    elif [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
+        cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
+        print_success "Installed MCP configuration (.mcp.json)"
     fi
 
     # Handle CLAUDE.md
@@ -780,14 +786,19 @@ repair_installation() {
     install_commands
 
     # Repair MCP configuration
-    if [ -f ".mcp.json" ]; then
+    if [ -f ".mcp.json" ] && grep -q '/Users/\|/home/' ".mcp.json" 2>/dev/null; then
+        if [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
+            cp "${SCRIPT_DIR}/.mcp.json.example" ".mcp.json"
+            print_success "Replaced MCP configuration (removed hardcoded paths)"
+        fi
+    elif [ -f ".mcp.json" ]; then
         print_skip "MCP configuration already present"
-    elif [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
-        cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
-        print_success "Installed MCP configuration (.mcp.json)"
     elif [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
         cp "${SCRIPT_DIR}/.mcp.json.example" ".mcp.json"
         print_success "Installed MCP configuration (.mcp.json from template)"
+    elif [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
+        cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
+        print_success "Installed MCP configuration (.mcp.json)"
     else
         print_skip "No MCP configuration template found"
     fi
@@ -909,15 +920,23 @@ update_installation() {
         done
     fi
 
-    # Update MCP configuration (don't overwrite user's local config)
+    # Update MCP configuration
     if [ ! -f ".mcp.json" ]; then
-        if [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
+        # No config exists — install from template
+        if [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
+            cp "${SCRIPT_DIR}/.mcp.json.example" ".mcp.json"
+            print_success "Installed MCP configuration (.mcp.json from template)"
+            (( STATS_UPDATED++ )) || true
+        elif [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
             cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
             print_success "Installed MCP configuration (.mcp.json)"
             (( STATS_UPDATED++ )) || true
-        elif [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
+        fi
+    elif grep -q '/Users/\|/home/' ".mcp.json" 2>/dev/null; then
+        # Existing config has hardcoded user paths — replace with portable template
+        if [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
             cp "${SCRIPT_DIR}/.mcp.json.example" ".mcp.json"
-            print_success "Installed MCP configuration (.mcp.json from template)"
+            print_success "Replaced MCP configuration (removed hardcoded paths)"
             (( STATS_UPDATED++ )) || true
         fi
     else
