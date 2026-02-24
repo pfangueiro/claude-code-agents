@@ -722,13 +722,14 @@ install_full() {
     install_commands
 
     # Install MCP configuration
-    if [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
-        if [ -f ".mcp.json" ]; then
-            print_skip "MCP configuration (.mcp.json) already exists"
-        else
-            cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
-            print_success "Installed MCP configuration (.mcp.json)"
-        fi
+    if [ -f ".mcp.json" ]; then
+        print_skip "MCP configuration (.mcp.json) already exists"
+    elif [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
+        cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
+        print_success "Installed MCP configuration (.mcp.json)"
+    elif [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
+        cp "${SCRIPT_DIR}/.mcp.json.example" ".mcp.json"
+        print_success "Installed MCP configuration (.mcp.json from template)"
     fi
 
     # Handle CLAUDE.md
@@ -779,11 +780,16 @@ repair_installation() {
     install_commands
 
     # Repair MCP configuration
-    if [ ! -f ".mcp.json" ] && [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
+    if [ -f ".mcp.json" ]; then
+        print_skip "MCP configuration already present"
+    elif [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
         cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
         print_success "Installed MCP configuration (.mcp.json)"
+    elif [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
+        cp "${SCRIPT_DIR}/.mcp.json.example" ".mcp.json"
+        print_success "Installed MCP configuration (.mcp.json from template)"
     else
-        print_skip "MCP configuration already present"
+        print_skip "No MCP configuration template found"
     fi
 
     # Fix CLAUDE.md if needed
@@ -866,11 +872,19 @@ update_installation() {
         done
     fi
 
-    # Update MCP configuration
-    if [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
-        cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
-        print_success "Updated MCP configuration (.mcp.json)"
-        (( STATS_UPDATED++ )) || true
+    # Update MCP configuration (don't overwrite user's local config)
+    if [ ! -f ".mcp.json" ]; then
+        if [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
+            cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
+            print_success "Installed MCP configuration (.mcp.json)"
+            (( STATS_UPDATED++ )) || true
+        elif [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
+            cp "${SCRIPT_DIR}/.mcp.json.example" ".mcp.json"
+            print_success "Installed MCP configuration (.mcp.json from template)"
+            (( STATS_UPDATED++ )) || true
+        fi
+    else
+        print_skip "MCP configuration (.mcp.json) already exists"
     fi
 }
 

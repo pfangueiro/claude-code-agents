@@ -15,6 +15,9 @@ Thumbs.db
 .claude/settings.local.json
 .claude/.DS_Store
 
+# MCP config (contains machine-specific paths - use .mcp.json.example as template)
+.mcp.json
+
 # Editor files
 .vscode/
 .idea/
