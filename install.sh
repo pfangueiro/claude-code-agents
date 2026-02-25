@@ -399,6 +399,15 @@ You: "I need to build a user authentication system"
 5. **test-automation** → Generates tests
 6. **documentation-maintainer** → Documents the API
 
+### 🎯 Orchestration Skills (Slash Commands)
+
+Use these for structured, multi-phase task execution:
+
+- **`/deep-read <target>`** — 6-phase codebase reading engine. Reads actual source code line by line with file:line citations.
+- **`/execute <goal>`** — Orchestrated task engine. Decomposes goals into atomic tasks, plans dependencies, executes in parallel batches.
+- **`/investigate <symptom>`** — 8-phase root cause analysis. Uses 5 Whys, competing hypotheses, evidence classification.
+- **`/deep-analysis <problem>`** — Structured multi-step reasoning via sequential-thinking MCP. For architecture decisions and trade-offs.
+
 ### 🔒 Security First
 
 - **security-auditor** & **incident-commander** always use Opus for maximum intelligence
@@ -444,12 +453,36 @@ append_claude_md_section() {
 - **Backend:** "API", "endpoint" → `api-backend`
 - **Emergency:** "CRITICAL", "outage" → `incident-commander` (Opus)
 
+**Orchestration Skills (Slash Commands):**
+- `/deep-read <target>` — 6-phase codebase reading engine
+- `/execute <goal>` — Orchestrated task execution with parallel batches
+- `/investigate <symptom>` — 8-phase root cause analysis
+- `/deep-analysis <problem>` — Structured multi-step reasoning
+
 **Example:** Say "build a REST API with authentication" and watch multiple agents collaborate automatically.
 
 <!-- ============ CLAUDE AGENTS AUTO-ACTIVATION SECTION END ============ -->
 EOF
 
     print_success "Appended agent configuration to CLAUDE.md"
+}
+
+append_orchestration_skills_section() {
+    print_progress "Adding orchestration skills to CLAUDE.md..."
+
+    cat >> CLAUDE.md << 'EOF'
+
+### 🎯 Orchestration Skills (Slash Commands)
+
+Use these for structured, multi-phase task execution:
+
+- **`/deep-read <target>`** — 6-phase codebase reading engine. Reads actual source code line by line with file:line citations.
+- **`/execute <goal>`** — Orchestrated task engine. Decomposes goals into atomic tasks, plans dependencies, executes in parallel batches.
+- **`/investigate <symptom>`** — 8-phase root cause analysis. Uses 5 Whys, competing hypotheses, evidence classification.
+- **`/deep-analysis <problem>`** — Structured multi-step reasoning via sequential-thinking MCP. For architecture decisions and trade-offs.
+EOF
+
+    print_success "Added orchestration skills section to CLAUDE.md"
 }
 
 # ============================================================================
@@ -946,7 +979,12 @@ update_installation() {
     # Handle CLAUDE.md — append agent section if missing, create if absent
     if [ -f "CLAUDE.md" ]; then
         if grep -q "Auto-Activating" CLAUDE.md 2>/dev/null; then
-            print_skip "CLAUDE.md already has agent configuration"
+            # Has agent config — check if orchestration skills are present
+            if grep -q "Orchestration Skills" CLAUDE.md 2>/dev/null; then
+                print_skip "CLAUDE.md already has agent configuration"
+            else
+                append_orchestration_skills_section
+            fi
         else
             append_claude_md_section
         fi
