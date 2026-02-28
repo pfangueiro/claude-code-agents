@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is **Claude Agents** - an enterprise-grade AI agent system with 12 specialized SDLC/SSDLC agents, 15 skills, and 7 slash commands that **auto-activate based on natural language**. The system automatically selects the optimal Claude model (Haiku/Sonnet/Opus) based on task complexity, achieving ~70% cost savings while ensuring comprehensive coverage of all software development phases.
+This is **Claude Agents** - an enterprise-grade AI agent system with 12 specialized SDLC/SSDLC agents, 15 skills, and 6 slash commands that **auto-activate based on natural language**. The system automatically selects the optimal Claude model (Haiku/Sonnet/Opus) based on task complexity, achieving ~70% cost savings while ensuring comprehensive coverage of all software development phases.
 
 ## 🚨 IMPORTANT: AUTO-ACTIVATION SYSTEM
 
