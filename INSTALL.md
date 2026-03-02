@@ -31,6 +31,7 @@ This installs everything: agents, skills, commands, hooks, statusline, keybindin
 - Installs slash commands (`.claude/commands/`)
 - Installs hooks, statusline, keybindings, output styles (`~/.claude/`)
 - Merges or installs global settings (`~/.claude/settings.json`)
+- Installs observability dashboard to `~/.claude/analytics/` with `claude-obs` alias
 - Personalizes `~/.claude/CLAUDE.md` with your name and email
 - Checks prerequisites (`git`, `curl` required; `jq`, `npx` optional)
 
