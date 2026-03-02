@@ -64,7 +64,7 @@ Once added, just use natural language:
 
 For the complete agent system with all features:
 1. Copy the entire `.claude/` directory to your project
-2. Use the full `CLAUDE.md` (175 lines) for comprehensive documentation
+2. Use the full `CLAUDE.md` (63 lines) for comprehensive documentation
 
 ## Support
 

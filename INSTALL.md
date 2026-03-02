@@ -27,7 +27,7 @@ This installs everything: agents, skills, commands, hooks, statusline, keybindin
 ```bash
 ./install.sh --team-setup
 ```
-- Installs all 11 agents, skills, and library files (project-level)
+- Installs all 12 agents, skills, and library files (project-level)
 - Installs slash commands (`.claude/commands/`)
 - Installs hooks, statusline, keybindings, output styles (`~/.claude/`)
 - Merges or installs global settings (`~/.claude/settings.json`)
@@ -54,7 +54,7 @@ This installs everything: agents, skills, commands, hooks, statusline, keybindin
 ```bash
 ./install.sh --full
 ```
-- Installs all 11 agents
+- Installs all 12 agents
 - Adds supporting library files
 - Complete system deployment
 

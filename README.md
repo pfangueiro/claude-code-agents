@@ -4,7 +4,7 @@
 [![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://docs.anthropic.com/en/docs/claude-code)
 [![Agents](https://img.shields.io/badge/Agents-12-orange.svg)](#-available-agents)
-[![Skills](https://img.shields.io/badge/Skills-14-green.svg)](#-skills-system)
+[![Skills](https://img.shields.io/badge/Skills-15-green.svg)](#-skills-system)
 [![MCP](https://img.shields.io/badge/MCP-5%20Servers-brightgreen.svg)](#-mcp-integration)
 
 **12 auto-activating AI agents for every phase of software development.** Just describe what you want to build — the right specialists engage automatically.
@@ -39,10 +39,10 @@ Agents activate automatically based on your words.
 | Component | Count | What It Does |
 |-----------|-------|--------------|
 | **Agents** | 12 | Auto-activating SDLC specialists (planning through production) |
-| **Skills** | 14 | Modular knowledge packages (git, Docker, CI/CD, API design, execute, investigate, etc.) |
+| **Skills** | 15 | Modular knowledge packages (git, Docker, CI/CD, API design, execute, investigate, etc.) |
 | **Slash Commands** | 6 | `/commit-pr`, `/review-pr`, `/security-scan`, `/compact`, `/new-feature`, `/create-jira` |
 | **MCP Servers** | 5 | context7, sequential-thinking, playwright, github, postgres |
-| **Rules** | 2 | Auto-enforced security and code quality standards |
+| **Rules** | 4 | Auto-enforced security, code quality, fix quality, and verification standards |
 | **Hooks** | 3 | Desktop notifications, auto-lint, pre-commit validation |
 | **Keybindings** | 6 | Ctrl+S (commit), Ctrl+T (PR), Ctrl+R (review), etc. |
 
@@ -98,7 +98,7 @@ See [`.claude/lib/agent-coordination.md`](.claude/lib/agent-coordination.md) for
 | **Minimal** | `./install.sh --minimal` | Just CLAUDE.md with agent activation |
 | **Repair** | `./install.sh --repair` | Fix missing components |
 | **Update** | `./install.sh --update` | Update to latest version |
-| **Validate** | `./validate.sh` | Verify all 86 checks pass |
+| **Validate** | `./validate.sh` | Verify all 91 checks pass |
 
 ### Deploy to an Existing Project
 
@@ -111,7 +111,7 @@ cd /path/to/your/project
 
 ```bash
 ./validate.sh
-# All validations passed! (86/86 checks)
+# All validations passed! (91/91 checks)
 ```
 
 ---
@@ -131,7 +131,7 @@ cd /path/to/your/project
 
 ## Skills System
 
-Skills provide domain knowledge that agents apply. 14 included:
+Skills provide domain knowledge that agents apply. 15 included:
 
 | Skill | What It Provides |
 |-------|-----------------|
@@ -147,6 +147,7 @@ Skills provide domain knowledge that agents apply. 14 included:
 | **investigate** | 8-phase root cause analysis: observe, reproduce, trace, hypothesize, prove, fix, prevent |
 | **library-docs** | MCP-powered: fetch docs for React, Next.js, Vue, etc. |
 | **deep-analysis** | MCP-powered: structured reasoning with branching and revision (rewritten) |
+| **deep-read** | 6-phase codebase reading engine: scope, map, trace, deep read, connect, report |
 | **handoff** | Session continuity — write HANDOFF.md for cross-session context |
 | **skill-creator** | Create your own custom skills |
 
@@ -184,10 +185,12 @@ claude mcp add postgres -- npx -y @modelcontextprotocol/server-postgres
 
 ## Auto-Enforced Rules
 
-Two rule files in `.claude/rules/` are automatically loaded by Claude Code in every session:
+Four rule files in `.claude/rules/` are automatically loaded by Claude Code in every session:
 
 - **security.md** — No secrets in commits, parameterized queries, input validation, security headers, least privilege
 - **code-quality.md** — No dead code, single responsibility, early returns, explicit error handling, descriptive naming
+- **fix-quality.md** — Root cause analysis before fixing, never suppress errors, minimal changes, test-driven fixing
+- **verification.md** — Verify after every implementation, run tests, build to catch errors, test-driven bug fixes
 
 ---
 
@@ -197,8 +200,8 @@ Two rule files in `.claude/rules/` are automatically loaded by Claude Code in ev
 .claude/
 ├── agents/          # 12 auto-activating SDLC agents
 ├── commands/        # 6 slash commands
-├── skills/          # 12 modular knowledge packages
-├── rules/           # 2 auto-enforced rule sets
+├── skills/          # 15 modular knowledge packages
+├── rules/           # 4 auto-enforced rule sets
 ├── lib/             # Templates, patterns, coordination protocol
 └── history/         # Session history
 
