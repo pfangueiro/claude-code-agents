@@ -210,7 +210,7 @@ def api_models(params):
             ORDER BY cost DESC
         """).fetchall()
 
-        total_cost = sum(dict(r)["cost"] for r in rows) or 1
+        total_cost = sum((dict(r)["cost"] or 0) for r in rows) or 1
         results = []
         for row in rows:
             d = dict(row)
