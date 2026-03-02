@@ -679,7 +679,7 @@ install_analytics() {
             print_success "Installed analytics $file"
         else
             print_error "Missing observability/$file"
-            ((errors++))
+            ((errors++)) || true
         fi
     done
 
@@ -1207,7 +1207,6 @@ main() {
             preflight_checks
             install_full
             install_global_config
-            install_analytics
             personalize_setup
             ;;
         --help)

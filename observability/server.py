@@ -332,7 +332,11 @@ def main():
     i = 0
     while i < len(args):
         if args[i] == "--port" and i + 1 < len(args):
-            port = int(args[i + 1])
+            try:
+                port = int(args[i + 1])
+            except ValueError:
+                print(f"Invalid port: {args[i + 1]}", file=sys.stderr)
+                sys.exit(1)
             i += 2
         elif args[i] == "--open":
             auto_open = True
