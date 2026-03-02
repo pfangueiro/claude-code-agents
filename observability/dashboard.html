@@ -361,7 +361,7 @@ function shortModel(model) {
   if (!model) return '--';
   return model
     .replace('claude-', '')
-    .replace(/-20\d{6}$/g, '');
+    .replace(/-\d{8}$/g, '');
 }
 
 // ---------------------------------------------------------------------------
