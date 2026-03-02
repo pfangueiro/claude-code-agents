@@ -278,6 +278,35 @@ else
 fi
 
 # ============================================================================
+# Analytics / Observability Validation
+# ============================================================================
+
+section "Checking Analytics (Observability)"
+
+if [ -d "observability" ]; then
+    for analytics_file in collector.py server.py dashboard.html schema.sql; do
+        if [ -f "observability/${analytics_file}" ]; then
+            pass "Analytics: $analytics_file exists"
+        else
+            fail "Analytics: missing observability/${analytics_file}"
+        fi
+    done
+
+    # Validate schema.sql has expected tables
+    if [ -f "observability/schema.sql" ]; then
+        for table in sessions api_calls agent_activations tool_usage ingestion_state; do
+            if grep -q "CREATE TABLE.*${table}" "observability/schema.sql" 2>/dev/null; then
+                pass "schema.sql: has $table table"
+            else
+                fail "schema.sql: missing $table table"
+            fi
+        done
+    fi
+else
+    warn "No observability/ directory found (optional)"
+fi
+
+# ============================================================================
 # Summary
 # ============================================================================
 
