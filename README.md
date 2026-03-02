@@ -245,24 +245,42 @@ You: "CRITICAL: Production API is returning 500 errors!"
 
 ## Observability Dashboard
 
-Built-in observability that reads Claude Code's native JSONL session logs — zero cloud dependencies.
+Built-in analytics dashboard that reads Claude Code's native JSONL session logs — zero cloud dependencies, Python stdlib only, single SQLite database.
 
 ```bash
-# Collect data from all projects
-python3 ~/.claude/analytics/collector.py
+# Quick start (after install --team-setup)
+claude-obs
 
-# Launch dashboard (opens browser)
-python3 ~/.claude/analytics/server.py --open
+# Or run manually
+python3 ~/.claude/analytics/collector.py    # Ingest JSONL → SQLite
+python3 ~/.claude/analytics/server.py --open # Serve dashboard at localhost:3141
 ```
 
-**What you get:**
-- Cost tracking across all 60+ projects (per-model pricing)
-- Agent activation counts and patterns
-- Token usage breakdowns (input, output, cache)
-- Session history with duration and model info
-- Daily trend charts with configurable time ranges
+**Dashboard panels:**
+- **Summary cards** — total cost, projects, sessions, agent activations, input/output tokens
+- **Daily cost & sessions** — dual-axis bar+line chart with configurable time ranges (7d/14d/30d/All)
+- **Cost by project** — horizontal bar chart ranking projects by spend
+- **Agent activations** — which agents are used most and across how many projects
+- **Model distribution** — doughnut chart showing Opus/Sonnet/Haiku cost split
+- **Top projects by tokens** — token consumption per project
+- **Sessions table** — recent sessions with project, duration, cost, model, and agents used
 
-Installed automatically with `--team-setup`. Data stays local in `~/.claude/analytics/claude-obs.db`.
+**Architecture:**
+- **Data source**: `~/.claude/projects/**/*.jsonl` (Claude Code writes these automatically)
+- **Collector** (`collector.py`): incremental JSONL scanner with per-file watermarks, per-model cost estimation (Opus/Sonnet/Haiku pricing)
+- **Storage**: SQLite with WAL mode at `~/.claude/analytics/claude-obs.db`
+- **Server** (`server.py`): 6 JSON API endpoints + static file server on `localhost:3141`
+- **Dashboard** (`dashboard.html`): single-file dark-themed UI with Chart.js
+
+**CLI options:**
+```bash
+python3 collector.py --full          # Re-ingest everything (ignore watermarks)
+python3 collector.py --db /path/to.db # Custom database path
+python3 server.py --port 8080        # Custom port
+python3 server.py --open             # Auto-open browser
+```
+
+Installed automatically with `--team-setup`. Data stays entirely local.
 
 ---
 
