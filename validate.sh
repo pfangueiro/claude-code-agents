@@ -110,6 +110,7 @@ EXPECTED_LIBS=(
     "sdlc-patterns.md"
     "activation-keywords.json"
     "agent-coordination.md"
+    "mcp-guide.md"
 )
 
 section "Checking Library Files (${#EXPECTED_LIBS[@]} expected)"
