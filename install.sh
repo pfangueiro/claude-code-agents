@@ -385,6 +385,7 @@ This project has specialized AI agents that **automatically activate** when you 
 | "create UI" | **frontend-specialist** | Builds responsive components |
 | "create API" | **api-backend** | Implements backend services |
 | "production is down!" | **incident-commander** 🚨 | Emergency response (Opus) |
+| "create an agent" | **meta-agent** | Generates new specialized agents |
 
 ### 💡 Example
 
@@ -453,6 +454,7 @@ append_claude_md_section() {
 - **Frontend:** "UI", "React" → `frontend-specialist`
 - **Backend:** "API", "endpoint" → `api-backend`
 - **Emergency:** "CRITICAL", "outage" → `incident-commander` (Opus)
+- **Agent Creation:** "create agent", "generate agent" → `meta-agent`
 
 **Orchestration Skills (Slash Commands):**
 - `/deep-read <target>` — 6-phase codebase reading engine
@@ -827,7 +829,7 @@ install_full() {
     fi
 
     # Install analytics dashboard (global, once per machine)
-    install_analytics
+    install_analytics || ((install_errors++)) || true
 
     if [ $install_errors -gt 0 ]; then
         print_error "$install_errors component(s) failed to install"
@@ -897,7 +899,7 @@ repair_installation() {
     fi
 
     # Repair analytics dashboard
-    install_analytics
+    install_analytics || print_error "Analytics installation failed"
 }
 
 clean_old_agents() {
@@ -1031,7 +1033,7 @@ update_installation() {
     fi
 
     # Update analytics dashboard (installs if missing, updates if present)
-    install_analytics
+    install_analytics || print_error "Analytics installation failed"
 
     # Handle CLAUDE.md — append agent section if missing, create if absent
     if [ -f "CLAUDE.md" ]; then
