@@ -897,13 +897,22 @@ If you have existing documentation or workflows:
 ```
 claude-code-agents/
 ├── .claude/
-│   ├── skills/                    # Skills (Blue)
+│   ├── skills/                    # Skills (Blue) — 15 total
 │   │   ├── skill-creator/
 │   │   ├── git-workflow/
 │   │   ├── code-review-checklist/
 │   │   ├── deployment-runbook/
+│   │   ├── api-guidelines/
+│   │   ├── api-contract-testing/
+│   │   ├── ui-guidelines/
+│   │   ├── ci-cd-templates/
+│   │   ├── docker-deployment/
+│   │   ├── handoff/
+│   │   ├── execute/               # Orchestration
+│   │   ├── investigate/           # Orchestration
+│   │   ├── deep-read/             # Orchestration
 │   │   ├── library-docs/          # MCP-powered
-│   │   └── deep-analysis/         # MCP-powered
+│   │   └── deep-analysis/         # MCP-powered + Orchestration
 │   │
 │   ├── agents/                    # Agents (Orange)
 │   │   ├── architecture-planner.md
@@ -916,15 +925,29 @@ claude-code-agents/
 │   │   ├── frontend-specialist.md
 │   │   ├── api-backend.md
 │   │   ├── incident-commander.md
-│   │   └── code-quality.md
+│   │   ├── code-quality.md
+│   │   └── meta-agent.md
 │   │
-│   ├── commands/                  # Slash Commands (Red)
-│   │   └── (user-defined commands)
+│   ├── commands/                  # Slash Commands (Red) — 6 total
+│   │   ├── commit-pr.md
+│   │   ├── compact.md
+│   │   ├── create-jira.md
+│   │   ├── new-feature.md
+│   │   ├── review-pr.md
+│   │   └── security-scan.md
+│   │
+│   ├── rules/                     # Auto-enforced rules — 4 total
+│   │   ├── security.md
+│   │   ├── code-quality.md
+│   │   ├── fix-quality.md
+│   │   └── verification.md
 │   │
 │   └── lib/                       # Shared infrastructure
 │       ├── agent-templates.json
 │       ├── sdlc-patterns.md
-│       └── activation-keywords.json
+│       ├── activation-keywords.json
+│       ├── agent-coordination.md
+│       └── mcp-guide.md
 │
 ├── EXTENSIBILITY.md               # This guide
 ├── CLAUDE.md                      # Claude Code instructions
@@ -942,11 +965,20 @@ claude-code-agents/
 - [Claude Code Documentation](https://docs.claude.com/claude-code)
 - [MCP Documentation](https://modelcontextprotocol.io)
 
-### Skills in This Project
+### Skills in This Project (15)
 - `skill-creator`: Create new skills from templates
 - `git-workflow`: Git best practices and conventions
 - `code-review-checklist`: Systematic code review framework
 - `deployment-runbook`: Deployment strategies and automation
+- `api-guidelines`: REST/GraphQL patterns, input validation, error handling
+- `api-contract-testing`: OpenAPI validation, PACT testing, mock servers
+- `ui-guidelines`: React/Next.js patterns, Ant Design, responsive design
+- `ci-cd-templates`: GitHub Actions, GitLab CI, deployment strategies
+- `docker-deployment`: Multi-stage builds, Docker Compose, security
+- `handoff`: Session continuity via HANDOFF.md
+- `execute`: Orchestrated task engine with parallel batch execution
+- `investigate`: 8-phase root cause analysis protocol
+- `deep-read`: 6-phase codebase reading engine
 - `library-docs`: MCP-powered library documentation (context7)
 - `deep-analysis`: MCP-powered deep reasoning (sequential-thinking)
 
