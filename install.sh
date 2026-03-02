@@ -826,6 +826,9 @@ install_full() {
         install_minimal_claude_md
     fi
 
+    # Install analytics dashboard (global, once per machine)
+    install_analytics
+
     if [ $install_errors -gt 0 ]; then
         print_error "$install_errors component(s) failed to install"
         return 1
@@ -892,6 +895,9 @@ repair_installation() {
     else
         print_skip "CLAUDE.md already configured"
     fi
+
+    # Repair analytics dashboard
+    install_analytics
 }
 
 clean_old_agents() {
@@ -1024,20 +1030,8 @@ update_installation() {
         print_skip "MCP configuration (.mcp.json) already exists"
     fi
 
-    # Update analytics if installed
-    if [ -d ~/.claude/analytics ]; then
-        echo -e "\n${BOLD}Updating Analytics:${NC}"
-        local src_obs="${SCRIPT_DIR}/observability"
-        if [ -d "$src_obs" ]; then
-            for file in collector.py server.py dashboard.html schema.sql; do
-                if [ -f "$src_obs/$file" ]; then
-                    cp "$src_obs/$file" ~/.claude/analytics/"$file"
-                    print_success "Updated analytics $file"
-                    (( STATS_UPDATED++ )) || true
-                fi
-            done
-        fi
-    fi
+    # Update analytics dashboard (installs if missing, updates if present)
+    install_analytics
 
     # Handle CLAUDE.md — append agent section if missing, create if absent
     if [ -f "CLAUDE.md" ]; then
