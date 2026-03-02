@@ -82,7 +82,7 @@ This installs everything: agents, skills, commands, hooks, statusline, keybindin
 # Project-level (current directory)
 CLAUDE.md                          # Agent auto-activation config
 .claude/
-├── agents/                        # 11 specialized agents
+├── agents/                        # 12 specialized agents
 ├── commands/                      # Slash commands (/new-feature, /commit-pr, /create-jira)
 ├── skills/                        # Modular knowledge packages
 ├── lib/                           # Activation patterns & templates
@@ -110,7 +110,7 @@ CLAUDE.md                  # Agent auto-activation config
 ```
 CLAUDE.md                  # Agent auto-activation config
 .claude/
-├── agents/                # 11 specialized agents
+├── agents/                # 12 specialized agents
 ├── skills/                # Modular knowledge packages
 ├── lib/                   # Supporting files
 └── history/               # Usage tracking (auto-created)

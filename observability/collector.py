@@ -316,11 +316,8 @@ def process_jsonl_file(conn, jsonl_path, project, full_mode=False):
                 if session_id and duration_ms:
                     turn_durations.append((session_id, duration_ms))
 
-                    # Count turns
-                    if session_id in session_data:
-                        session_data[session_id]["total_turns"] = (
-                            session_data[session_id].get("total_turns", 0) + 1
-                        )
+                    # Count turns (tracked via UPDATE, not in-memory)
+                    pass
 
             records_processed += 1
 
@@ -335,8 +332,7 @@ def process_jsonl_file(conn, jsonl_path, project, full_mode=False):
             "ended_at, claude_version, total_turns) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(session_id) DO UPDATE SET "
-            "ended_at = MAX(sessions.ended_at, excluded.ended_at), "
-            "total_turns = sessions.total_turns + excluded.total_turns",
+            "ended_at = MAX(sessions.ended_at, excluded.ended_at)",
             (
                 sid,
                 sdata["project"],
@@ -382,10 +378,12 @@ def process_jsonl_file(conn, jsonl_path, project, full_mode=False):
             (sid, proj, tname, count, ts),
         )
 
-    # Update session durations from turn_duration records
+    # Update session durations and turn counts from turn_duration records
     for sid, dur_ms in turn_durations:
         conn.execute(
-            "UPDATE sessions SET duration_ms = COALESCE(duration_ms, 0) + ? "
+            "UPDATE sessions SET "
+            "duration_ms = COALESCE(duration_ms, 0) + ?, "
+            "total_turns = COALESCE(total_turns, 0) + 1 "
             "WHERE session_id = ?",
             (dur_ms, sid),
         )
