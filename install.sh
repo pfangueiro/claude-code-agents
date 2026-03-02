@@ -57,6 +57,7 @@ LIB_FILES=(
     "sdlc-patterns.md"
     "activation-keywords.json"
     "agent-coordination.md"
+    "mcp-guide.md"
 )
 
 # Statistics
