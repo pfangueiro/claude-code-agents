@@ -660,6 +660,53 @@ install_global_config() {
     fi
 }
 
+install_analytics() {
+    echo -e "\n${BOLD}Installing Analytics (Observability Dashboard):${NC}"
+
+    local src_dir="${SCRIPT_DIR}/observability"
+
+    if [ ! -d "$src_dir" ]; then
+        print_info "observability/ directory not found — skipping analytics"
+        return 0
+    fi
+
+    mkdir -p ~/.claude/analytics
+
+    local errors=0
+    for file in collector.py server.py dashboard.html schema.sql; do
+        if [ -f "$src_dir/$file" ]; then
+            cp "$src_dir/$file" ~/.claude/analytics/"$file"
+            print_success "Installed analytics $file"
+        else
+            print_error "Missing observability/$file"
+            ((errors++))
+        fi
+    done
+
+    if [ "$errors" -gt 0 ]; then
+        return 1
+    fi
+
+    # Add claude-obs alias (idempotent)
+    local shell_rc=""
+    if [ -f "$HOME/.zshrc" ]; then
+        shell_rc="$HOME/.zshrc"
+    elif [ -f "$HOME/.bashrc" ]; then
+        shell_rc="$HOME/.bashrc"
+    fi
+
+    if [ -n "$shell_rc" ]; then
+        if ! grep -q "claude-obs" "$shell_rc" 2>/dev/null; then
+            echo '' >> "$shell_rc"
+            echo '# Claude Code Observability' >> "$shell_rc"
+            echo 'alias claude-obs="python3 ~/.claude/analytics/collector.py; python3 ~/.claude/analytics/server.py --open"' >> "$shell_rc"
+            print_success "Added claude-obs alias to $(basename "$shell_rc")"
+        else
+            print_skip "claude-obs alias already in $(basename "$shell_rc")"
+        fi
+    fi
+}
+
 personalize_setup() {
     echo -e "\n${BOLD}Personalizing CLAUDE.md:${NC}"
 
@@ -977,6 +1024,21 @@ update_installation() {
         print_skip "MCP configuration (.mcp.json) already exists"
     fi
 
+    # Update analytics if installed
+    if [ -d ~/.claude/analytics ]; then
+        echo -e "\n${BOLD}Updating Analytics:${NC}"
+        local src_obs="${SCRIPT_DIR}/observability"
+        if [ -d "$src_obs" ]; then
+            for file in collector.py server.py dashboard.html schema.sql; do
+                if [ -f "$src_obs/$file" ]; then
+                    cp "$src_obs/$file" ~/.claude/analytics/"$file"
+                    print_success "Updated analytics $file"
+                    (( STATS_UPDATED++ )) || true
+                fi
+            done
+        fi
+    fi
+
     # Handle CLAUDE.md — append agent section if missing, create if absent
     if [ -f "CLAUDE.md" ]; then
         if grep -q "Auto-Activating" CLAUDE.md 2>/dev/null; then
@@ -1151,6 +1213,7 @@ main() {
             preflight_checks
             install_full
             install_global_config
+            install_analytics
             personalize_setup
             ;;
         --help)

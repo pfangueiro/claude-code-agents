@@ -243,6 +243,29 @@ You: "CRITICAL: Production API is returning 500 errors!"
 
 ---
 
+## Observability Dashboard
+
+Built-in observability that reads Claude Code's native JSONL session logs — zero cloud dependencies.
+
+```bash
+# Collect data from all projects
+python3 ~/.claude/analytics/collector.py
+
+# Launch dashboard (opens browser)
+python3 ~/.claude/analytics/server.py --open
+```
+
+**What you get:**
+- Cost tracking across all 60+ projects (per-model pricing)
+- Agent activation counts and patterns
+- Token usage breakdowns (input, output, cache)
+- Session history with duration and model info
+- Daily trend charts with configurable time ranges
+
+Installed automatically with `--team-setup`. Data stays local in `~/.claude/analytics/claude-obs.db`.
+
+---
+
 ## Contributing
 
 1. Fork the repository
@@ -256,7 +279,7 @@ You: "CRITICAL: Production API is returning 500 errors!"
 ## Roadmap
 
 - [ ] VS Code extension
-- [ ] Observability dashboard
+- [x] Observability dashboard
 - [ ] Additional specialized agents
 - [ ] Multi-language support
 - [ ] Team collaboration features

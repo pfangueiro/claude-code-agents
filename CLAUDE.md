@@ -25,6 +25,7 @@ Agents activate automatically from natural language. Just describe what you want
 | **frontend-specialist** | frontend, UI, UX, React, Vue, Angular, component, CSS | Sonnet |
 | **api-backend** | backend, API, endpoint, service, REST, GraphQL, microservice | Sonnet |
 | **incident-commander** | CRITICAL, EMERGENCY, INCIDENT, OUTAGE, production down | **Opus** |
+| **meta-agent** | create agent, generate agent, agent template, SDLC agent | **Opus** |
 
 Agent collaboration patterns: see `.claude/lib/agent-coordination.md`
 
@@ -47,6 +48,10 @@ Creating skills: `python3 .claude/skills/skill-creator/scripts/init_skill.py <na
 ## MCP Integration
 
 MCP servers provide external tools that extend Claude Code. See `.claude/lib/mcp-guide.md` for configuration and usage.
+
+## Observability
+
+Built-in dashboard aggregating Claude Code JSONL session logs across all projects. Files in `observability/`, installed to `~/.claude/analytics/`. Run `claude-obs` to collect data and open the dashboard.
 
 ## Security-First
 

@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code Observability</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --cyan: #39d2c0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  header h1 span { color: var(--accent); }
+
+  .controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .controls button {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s;
+  }
+
+  .controls button:hover { border-color: var(--accent); color: var(--text); }
+  .controls button.active { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+
+  .refresh-indicator {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  /* Summary cards */
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  .card .value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.2;
+  }
+
+  .card .label {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .card.cost .value { color: var(--green); }
+  .card.sessions .value { color: var(--accent); }
+  .card.agents .value { color: var(--purple); }
+  .card.tokens .value { color: var(--cyan); }
+
+  /* Charts grid */
+  .charts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    min-width: 0;
+  }
+
+  .chart-card.full-width { grid-column: 1 / -1; }
+
+  .chart-card h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .chart-container {
+    position: relative;
+    width: 100%;
+    height: 280px;
+  }
+
+  /* Tables */
+  .table-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+
+  .table-card h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  th {
+    text-align: left;
+    color: var(--text-dim);
+    font-weight: 500;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  th:hover { color: var(--accent); }
+
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(88, 166, 255, 0.04); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    background: rgba(188, 140, 255, 0.15);
+    color: var(--purple);
+    margin: 1px 3px;
+  }
+
+  .mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
+  .cost { color: var(--green); font-weight: 600; }
+  .dim { color: var(--text-dim); }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+  }
+
+  .empty-state h2 { font-size: 18px; margin-bottom: 8px; color: var(--text); }
+
+  @media (max-width: 768px) {
+    .charts { grid-template-columns: 1fr; }
+    .summary { grid-template-columns: repeat(2, 1fr); }
+    body { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1><span>Claude Code</span> Observability</h1>
+    <div class="controls">
+      <span class="refresh-indicator" id="lastRefresh"></span>
+      <button data-days="7">7d</button>
+      <button data-days="14" class="active">14d</button>
+      <button data-days="30">30d</button>
+      <button data-days="0">All</button>
+    </div>
+  </header>
+
+  <div class="summary">
+    <div class="card cost">
+      <div class="value" id="totalCost">--</div>
+      <div class="label">Estimated Cost</div>
+    </div>
+    <div class="card sessions">
+      <div class="value" id="projectCount">--</div>
+      <div class="label">Projects</div>
+    </div>
+    <div class="card sessions">
+      <div class="value" id="sessionCount">--</div>
+      <div class="label">Sessions</div>
+    </div>
+    <div class="card agents">
+      <div class="value" id="agentCount">--</div>
+      <div class="label">Agent Activations</div>
+    </div>
+    <div class="card tokens">
+      <div class="value" id="inputTokens">--</div>
+      <div class="label">Input Tokens</div>
+    </div>
+    <div class="card tokens">
+      <div class="value" id="outputTokens">--</div>
+      <div class="label">Output Tokens</div>
+    </div>
+  </div>
+
+  <div class="charts">
+    <div class="chart-card full-width">
+      <h2>Daily Cost &amp; Sessions</h2>
+      <div class="chart-container"><canvas id="dailyChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h2>Cost by Project</h2>
+      <div class="chart-container"><canvas id="projectChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h2>Agent Activations</h2>
+      <div class="chart-container"><canvas id="agentChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h2>Model Distribution</h2>
+      <div class="chart-container"><canvas id="modelChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h2>Top Projects by Tokens</h2>
+      <div class="chart-container"><canvas id="tokenChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <h2>Recent Sessions</h2>
+    <table id="sessionsTable">
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>Started</th>
+          <th>Duration</th>
+          <th>Turns</th>
+          <th>Cost</th>
+          <th>Model</th>
+          <th>Agents</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+<script>
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let currentDays = 14;
+let charts = {};
+let refreshTimer = null;
+
+// Chart.js global defaults
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#30363d';
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica";
+Chart.defaults.font.size = 12;
+
+const COLORS = ['#58a6ff', '#3fb950', '#d29922', '#f85149', '#bc8cff', '#39d2c0', '#f778ba', '#79c0ff', '#7ee787', '#e3b341'];
+
+// ---------------------------------------------------------------------------
+// API helpers
+// ---------------------------------------------------------------------------
+async function fetchAPI(endpoint, extraParams = {}) {
+  const params = new URLSearchParams({ days: currentDays, ...extraParams });
+  const resp = await fetch(`/api/${endpoint}?${params}`);
+  if (!resp.ok) throw new Error(`API error: ${resp.status}`);
+  return resp.json();
+}
+
+function formatCost(val) {
+  if (val === 0) return '$0.00';
+  if (val >= 0.01) return `$${val.toFixed(2)}`;
+  return `$${val.toFixed(4)}`;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function formatTokens(val) {
+  if (val >= 1e9) return `${(val / 1e9).toFixed(1)}B`;
+  if (val >= 1e6) return `${(val / 1e6).toFixed(1)}M`;
+  if (val >= 1e3) return `${(val / 1e3).toFixed(1)}K`;
+  return String(val);
+}
+
+function formatDuration(ms) {
+  if (!ms) return '--';
+  if (ms < 60000) return `${(ms / 1000).toFixed(0)}s`;
+  if (ms < 3600000) return `${(ms / 60000).toFixed(1)}m`;
+  return `${(ms / 3600000).toFixed(1)}h`;
+}
+
+function formatDate(iso) {
+  if (!iso) return '--';
+  const d = new Date(iso);
+  const now = new Date();
+  const diffH = (now - d) / 3600000;
+  if (diffH < 1) return `${Math.round(diffH * 60)}m ago`;
+  if (diffH < 24) return `${Math.round(diffH)}h ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function shortModel(model) {
+  if (!model) return '--';
+  return model
+    .replace('claude-', '')
+    .replace(/-20\d{6}$/g, '');
+}
+
+// ---------------------------------------------------------------------------
+// Chart builders
+// ---------------------------------------------------------------------------
+function destroyChart(key) {
+  if (charts[key]) { charts[key].destroy(); delete charts[key]; }
+}
+
+function buildDailyChart(data) {
+  destroyChart('daily');
+  const ctx = document.getElementById('dailyChart').getContext('2d');
+  charts.daily = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: data.map(d => d.date),
+      datasets: [
+        {
+          label: 'Cost ($)',
+          data: data.map(d => d.cost),
+          backgroundColor: 'rgba(63, 185, 80, 0.6)',
+          borderColor: '#3fb950',
+          borderWidth: 1,
+          yAxisID: 'y',
+          order: 2,
+        },
+        {
+          label: 'Sessions',
+          data: data.map(d => d.sessions),
+          type: 'line',
+          borderColor: '#58a6ff',
+          backgroundColor: 'rgba(88, 166, 255, 0.1)',
+          borderWidth: 2,
+          pointRadius: 3,
+          fill: true,
+          yAxisID: 'y1',
+          order: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { grid: { display: false } },
+        y: {
+          position: 'left',
+          title: { display: true, text: 'Cost ($)' },
+          grid: { color: 'rgba(48, 54, 61, 0.5)' },
+        },
+        y1: {
+          position: 'right',
+          title: { display: true, text: 'Sessions' },
+          grid: { display: false },
+        },
+      },
+      plugins: { legend: { display: true, position: 'top' } },
+    },
+  });
+}
+
+function buildProjectChart(data) {
+  destroyChart('project');
+  const top = data.slice(0, 10);
+  const ctx = document.getElementById('projectChart').getContext('2d');
+  charts.project = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: top.map(d => d.project),
+      datasets: [{
+        data: top.map(d => d.cost),
+        backgroundColor: COLORS.slice(0, top.length),
+        borderWidth: 0,
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      scales: {
+        x: { title: { display: true, text: 'Cost ($)' }, grid: { color: 'rgba(48, 54, 61, 0.5)' } },
+        y: { grid: { display: false } },
+      },
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+function buildAgentChart(data) {
+  destroyChart('agent');
+  const top = data.slice(0, 10);
+  const ctx = document.getElementById('agentChart').getContext('2d');
+  charts.agent = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: top.map(d => d.agent_name),
+      datasets: [{
+        data: top.map(d => d.activation_count),
+        backgroundColor: COLORS.slice(0, top.length),
+        borderWidth: 0,
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      scales: {
+        x: { title: { display: true, text: 'Activations' }, grid: { color: 'rgba(48, 54, 61, 0.5)' } },
+        y: { grid: { display: false } },
+      },
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+function buildModelChart(data) {
+  destroyChart('model');
+  const ctx = document.getElementById('modelChart').getContext('2d');
+  charts.model = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: data.map(d => shortModel(d.model)),
+      datasets: [{
+        data: data.map(d => d.cost),
+        backgroundColor: ['#58a6ff', '#3fb950', '#d29922', '#f85149', '#bc8cff', '#39d2c0'],
+        borderColor: '#161b22',
+        borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: {
+        legend: { position: 'right', labels: { padding: 16, usePointStyle: true } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const d = data[ctx.dataIndex];
+              return ` ${shortModel(d.model)}: ${formatCost(d.cost)} (${d.pct}%)`;
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+function buildTokenChart(data) {
+  destroyChart('token');
+  const top = data.slice(0, 10);
+  const ctx = document.getElementById('tokenChart').getContext('2d');
+  charts.token = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: top.map(d => d.project),
+      datasets: [{
+        data: top.map(d => d.total_tokens),
+        backgroundColor: 'rgba(57, 210, 192, 0.6)',
+        borderColor: '#39d2c0',
+        borderWidth: 1,
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      scales: {
+        x: {
+          title: { display: true, text: 'Tokens' },
+          grid: { color: 'rgba(48, 54, 61, 0.5)' },
+          ticks: { callback: v => formatTokens(v) },
+        },
+        y: { grid: { display: false } },
+      },
+      plugins: { legend: { display: false } },
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Sessions table
+// ---------------------------------------------------------------------------
+function buildSessionsTable(data) {
+  const tbody = document.querySelector('#sessionsTable tbody');
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="dim" style="text-align:center">No sessions found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(s => `
+    <tr>
+      <td><strong>${escapeHtml(s.project)}</strong></td>
+      <td class="dim">${formatDate(s.started_at)}</td>
+      <td class="mono">${formatDuration(s.duration_ms)}</td>
+      <td class="mono">${s.total_turns || '--'}</td>
+      <td class="cost">${formatCost(s.cost)}</td>
+      <td class="mono dim">${escapeHtml(shortModel(s.model))}</td>
+      <td>${s.agents.map(a => `<span class="badge">${escapeHtml(a)}</span>`).join('') || '<span class="dim">--</span>'}</td>
+    </tr>
+  `).join('');
+}
+
+// ---------------------------------------------------------------------------
+// Data loading
+// ---------------------------------------------------------------------------
+async function loadAll() {
+  try {
+    const [summary, daily, projects, agents, models, sessions] = await Promise.all([
+      fetchAPI('summary'),
+      fetchAPI('daily'),
+      fetchAPI('projects'),
+      fetchAPI('agents'),
+      fetchAPI('models'),
+      fetchAPI('sessions', { limit: 50 }),
+    ]);
+
+    // Summary cards
+    document.getElementById('totalCost').textContent = formatCost(summary.total_cost);
+    document.getElementById('projectCount').textContent = summary.project_count;
+    document.getElementById('sessionCount').textContent = summary.session_count;
+    document.getElementById('agentCount').textContent = summary.agent_count;
+    document.getElementById('inputTokens').textContent = formatTokens(summary.input_tokens);
+    document.getElementById('outputTokens').textContent = formatTokens(summary.output_tokens);
+
+    // Charts
+    buildDailyChart(daily);
+    buildProjectChart(projects);
+    buildAgentChart(agents);
+    buildModelChart(models);
+    buildTokenChart(projects);
+
+    // Table
+    buildSessionsTable(sessions);
+
+    // Refresh indicator
+    document.getElementById('lastRefresh').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+  } catch (err) {
+    console.error('Failed to load data:', err);
+    document.getElementById('lastRefresh').textContent = `Error: ${err.message}`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Day range selector
+// ---------------------------------------------------------------------------
+document.querySelectorAll('.controls button[data-days]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.controls button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentDays = parseInt(btn.dataset.days, 10);
+    loadAll();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+loadAll();
+
+// Auto-refresh every 60s
+refreshTimer = setInterval(loadAll, 60000);
+</script>
+</body>
+</html>
