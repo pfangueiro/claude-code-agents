@@ -898,8 +898,41 @@ repair_installation() {
         print_skip "CLAUDE.md already configured"
     fi
 
+    # Patch meta-agent into existing CLAUDE.md agents table
+    patch_meta_agent_in_claude_md
+
     # Repair analytics dashboard
     install_analytics || print_error "Analytics installation failed"
+}
+
+patch_meta_agent_in_claude_md() {
+    # Patch CLAUDE.md to add meta-agent row if missing from agents table
+    if [ ! -f "CLAUDE.md" ]; then
+        return 0
+    fi
+    if grep -q "meta-agent" CLAUDE.md 2>/dev/null; then
+        return 0
+    fi
+    if ! grep -q "incident-commander" CLAUDE.md 2>/dev/null; then
+        return 0
+    fi
+    # Insert meta-agent line after incident-commander (handles both table and list formats)
+    if grep -q 'incident-commander.*|' CLAUDE.md 2>/dev/null; then
+        # Table format: | "production is down!" | **incident-commander** | ... |
+        sed -i '' '/incident-commander.*|/{
+a\
+| "create an agent" | **meta-agent** | Generates new specialized agents |
+}' CLAUDE.md
+    elif grep -q 'incident-commander' CLAUDE.md 2>/dev/null; then
+        # List format: - **Emergency:** ... → `incident-commander`
+        sed -i '' '/incident-commander/{
+a\
+- **Agent Creation:** "create agent", "generate agent" → `meta-agent`
+}' CLAUDE.md
+    fi
+    if grep -q "meta-agent" CLAUDE.md 2>/dev/null; then
+        print_success "Patched CLAUDE.md: added meta-agent to agents table"
+    fi
 }
 
 clean_old_agents() {
@@ -1050,6 +1083,9 @@ update_installation() {
     else
         install_minimal_claude_md
     fi
+
+    # Patch meta-agent into existing CLAUDE.md agents table
+    patch_meta_agent_in_claude_md
 }
 
 # ============================================================================
