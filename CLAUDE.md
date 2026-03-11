@@ -49,9 +49,25 @@ Creating skills: `python3 .claude/skills/skill-creator/scripts/init_skill.py <na
 
 MCP servers provide external tools that extend Claude Code. See `.claude/lib/mcp-guide.md` for configuration and usage.
 
+## Hooks
+
+8 hook events across 3 types. Hooks live in `global-config/hooks/`, installed globally to `~/.claude/hooks/`.
+
+**Command hooks (6 scripts):**
+- `file-protection.sh` — PreToolUse: blocks edits to sensitive files (.env, *.key, *.pem)
+- `post-edit-lint.sh` — PostToolUse: auto-lints TS/JS after Write/Edit
+- `notify.sh` — Notification: desktop alerts when Claude needs attention
+- `agent-tracker.sh` — SubagentStart/SubagentStop: real-time agent lifecycle tracking to `agent-events.jsonl`
+- `session-end.sh` — Stop: logs session completion to `session-summaries.jsonl`
+- `smart-guard.sh` — PermissionRequest: auto-approves safe read operations, audits dangerous ones
+
+**Reference configs (Phase 2 opt-in):**
+- `smart-file-guard.json` — prompt hook: LLM-based file protection for edge cases
+- `pre-commit-review.json` — agent hook: automated code review before git commit
+
 ## Observability
 
-Built-in dashboard aggregating Claude Code JSONL session logs across all projects. Files in `observability/`, installed to `~/.claude/analytics/`. Run `claude-obs` to collect data and open the dashboard.
+Built-in dashboard aggregating Claude Code JSONL session logs across all projects. Files in `observability/`, installed to `~/.claude/analytics/`. Run `claude-obs` to collect data and open the dashboard. Hook-generated events (`agent-events.jsonl`, `permission-audit.jsonl`, `session-summaries.jsonl`) are also ingested.
 
 ## Security-First
 

@@ -1,0 +1,13 @@
+{
+  "_comment": "Phase 2 agent hook: automated code review before git commit",
+  "_usage": "Merge into hooks.PreToolUse in ~/.claude/settings.json to enable",
+  "_note": "Spawns a subagent to review staged changes — significant token cost per commit",
+  "matcher": "Bash",
+  "hooks": [
+    {
+      "type": "agent",
+      "prompt": "Check if the command being run is a git commit. If it is NOT a git commit command, respond with ALLOW immediately. If it IS a git commit, run 'git diff --cached --stat' and 'git diff --cached' to review the staged changes. Check for: secrets or credentials being committed, large binary files, debug/console.log statements left in, merge conflict markers, files that should be in .gitignore. If issues are found, respond with DENY and list the issues. If the changes look clean, respond with ALLOW.",
+      "timeout": 30
+    }
+  ]
+}

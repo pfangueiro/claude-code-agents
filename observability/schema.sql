@@ -33,7 +33,18 @@ CREATE TABLE IF NOT EXISTS agent_activations (
     agent_name      TEXT NOT NULL,
     description     TEXT,
     tool_use_id     TEXT UNIQUE,
+    duration_ms     INTEGER,
+    status          TEXT DEFAULT 'completed',
     timestamp       TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS hook_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type  TEXT NOT NULL,
+    session_id  TEXT,
+    tool_name   TEXT,
+    data        TEXT,
+    timestamp   TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS tool_usage (
@@ -57,3 +68,5 @@ CREATE INDEX IF NOT EXISTS idx_agent_project ON agent_activations(project, agent
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project, started_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_usage_unique ON tool_usage(session_id, tool_name);
 CREATE INDEX IF NOT EXISTS idx_api_calls_timestamp ON api_calls(timestamp);
+CREATE INDEX IF NOT EXISTS idx_hook_events_type ON hook_events(event_type, timestamp);
+CREATE INDEX IF NOT EXISTS idx_agent_status ON agent_activations(status);

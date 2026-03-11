@@ -1,7 +1,7 @@
 # Claude Agents - AI-Powered SDLC Agent System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-2.3.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
+[![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://docs.anthropic.com/en/docs/claude-code)
 [![Agents](https://img.shields.io/badge/Agents-12-orange.svg)](#-available-agents)
 [![Skills](https://img.shields.io/badge/Skills-15-green.svg)](#-skills-system)
@@ -43,7 +43,7 @@ Agents activate automatically based on your words.
 | **Slash Commands** | 6 | `/commit-pr`, `/review-pr`, `/security-scan`, `/compact`, `/new-feature`, `/create-jira` |
 | **MCP Servers** | 5 | context7, sequential-thinking, playwright, github, postgres |
 | **Rules** | 4 | Auto-enforced security, code quality, fix quality, and verification standards |
-| **Hooks** | 3 | Desktop notifications, auto-lint, pre-commit validation |
+| **Hooks** | 8 | Agent tracking, session lifecycle, permission auditing, file protection, auto-lint, notifications |
 | **Keybindings** | 6 | Ctrl+S (commit), Ctrl+T (PR), Ctrl+R (review), etc. |
 
 ---
@@ -98,7 +98,7 @@ See [`.claude/lib/agent-coordination.md`](.claude/lib/agent-coordination.md) for
 | **Minimal** | `./install.sh --minimal` | Just CLAUDE.md with agent activation |
 | **Repair** | `./install.sh --repair` | Fix missing components |
 | **Update** | `./install.sh --update` | Update to latest version |
-| **Validate** | `./validate.sh` | Verify all 100 checks pass |
+| **Validate** | `./validate.sh` | Verify all 125 checks pass |
 
 ### Deploy to an Existing Project
 
@@ -111,7 +111,7 @@ cd /path/to/your/project
 
 ```bash
 ./validate.sh
-# All validations passed! (100/100 checks)
+# All validations passed! (125/125 checks)
 ```
 
 ---
@@ -194,6 +194,25 @@ Four rule files in `.claude/rules/` are automatically loaded by Claude Code in e
 
 ---
 
+## Hooks
+
+8 lifecycle hooks across 8 events, installed globally to `~/.claude/hooks/`:
+
+| Hook | Event | What It Does |
+|------|-------|-------------|
+| **file-protection.sh** | PreToolUse | Blocks edits to sensitive files (.env, *.key, *.pem, secrets/) |
+| **post-edit-lint.sh** | PostToolUse | Auto-lints TypeScript/JavaScript after Write/Edit |
+| **notify.sh** | Notification | Desktop alert when Claude needs attention |
+| **agent-tracker.sh** | SubagentStart/Stop | Real-time agent lifecycle tracking to analytics |
+| **session-end.sh** | Stop | Logs session completion for observability |
+| **smart-guard.sh** | PermissionRequest | Auto-approves safe reads, audits dangerous operations |
+
+**Phase 2 reference configs** (opt-in, not enabled by default):
+- `smart-file-guard.json` — prompt hook: LLM-based file protection
+- `pre-commit-review.json` — agent hook: automated code review before commit
+
+---
+
 ## Architecture
 
 ```
@@ -205,7 +224,10 @@ Four rule files in `.claude/rules/` are automatically loaded by Claude Code in e
 ├── lib/             # Templates, patterns, coordination protocol
 └── history/         # Session history
 
-global-config/       # Team-shareable config (hooks, keybindings, styles, settings)
+global-config/
+├── hooks/           # 6 command hooks + 2 reference configs
+├── settings.json.template  # 8 hook events, permissions, model config
+└── ...              # keybindings, statusline, output styles
 ```
 
 See [EXTENSIBILITY.md](./EXTENSIBILITY.md) for the complete guide on Skills, MCP, Slash Commands, and Subagents.
@@ -298,6 +320,7 @@ Installed automatically with `--team-setup`. Data stays entirely local.
 
 - [ ] VS Code extension
 - [x] Observability dashboard
+- [x] Lifecycle hooks (agent tracking, permission auditing, session lifecycle)
 - [ ] Additional specialized agents
 - [ ] Multi-language support
 - [ ] Team collaboration features

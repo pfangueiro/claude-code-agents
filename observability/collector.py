@@ -175,6 +175,40 @@ def init_db(db_path):
     return conn
 
 
+def migrate_schema(conn):
+    """Add columns that may be missing from older schemas."""
+    migrations = [
+        ("agent_activations", "duration_ms", "INTEGER"),
+        ("agent_activations", "status", "TEXT DEFAULT 'completed'"),
+    ]
+    for table, col, col_type in migrations:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e):
+                raise
+
+    # Create hook_events table if missing (added in v2.4)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS hook_events ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "event_type TEXT NOT NULL, "
+        "session_id TEXT, "
+        "tool_name TEXT, "
+        "data TEXT, "
+        "timestamp TEXT NOT NULL)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_hook_events_type "
+        "ON hook_events(event_type, timestamp)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_agent_status "
+        "ON agent_activations(status)"
+    )
+    conn.commit()
+
+
 def get_watermark(conn, jsonl_path):
     """Get the last ingested byte position for a file."""
     row = conn.execute(
@@ -395,6 +429,144 @@ def process_jsonl_file(conn, jsonl_path, project, full_mode=False):
     return records_processed
 
 
+def ingest_agent_events(conn, events_file, full_mode=False):
+    """Ingest real-time agent events from hook-generated JSONL.
+
+    The agent-tracker.sh hook writes start/stop events to this file.
+    We merge them into the agent_activations table, adding duration
+    and status data that batch JSONL processing cannot provide.
+    """
+    if not os.path.exists(events_file):
+        return 0
+
+    watermark = 0 if full_mode else get_watermark(conn, events_file)
+    file_size = os.path.getsize(events_file)
+    if watermark >= file_size:
+        return 0
+
+    records = 0
+    with open(events_file, "r", encoding="utf-8", errors="replace") as f:
+        if watermark > 0:
+            f.seek(watermark)
+
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            event_type = event.get("event")
+            session_id = event.get("session_id", "")
+            agent_type = event.get("agent_type", "unknown")
+            description = event.get("description", "")
+            timestamp = event.get("timestamp", "")
+
+            if event_type == "agent_start":
+                conn.execute(
+                    "INSERT INTO hook_events (event_type, session_id, tool_name, "
+                    "data, timestamp) VALUES (?, ?, ?, ?, ?)",
+                    ("agent_start", session_id, agent_type, description, timestamp),
+                )
+
+                # Also insert into agent_activations with status='started'
+                # so the stop handler can match and update with duration
+                try:
+                    conn.execute(
+                        "INSERT INTO agent_activations (session_id, project, "
+                        "agent_name, description, status, timestamp) "
+                        "VALUES (?, ?, ?, ?, 'started', ?)",
+                        (session_id, "hook-event", agent_type, description, timestamp),
+                    )
+                except sqlite3.IntegrityError:
+                    pass  # Duplicate, skip
+
+            elif event_type == "agent_stop":
+                duration_ms = event.get("duration_ms", 0)
+                status = event.get("status", "completed")
+
+                # Log the stop event
+                conn.execute(
+                    "INSERT INTO hook_events (event_type, session_id, tool_name, "
+                    "data, timestamp) VALUES (?, ?, ?, ?, ?)",
+                    (
+                        "agent_stop",
+                        session_id,
+                        agent_type,
+                        json.dumps({"duration_ms": duration_ms, "status": status}),
+                        timestamp,
+                    ),
+                )
+
+                # Update the most recent matching activation with duration/status
+                row = conn.execute(
+                    "SELECT id FROM agent_activations "
+                    "WHERE session_id = ? AND agent_name = ? AND status = 'started' "
+                    "ORDER BY timestamp DESC LIMIT 1",
+                    (session_id, agent_type),
+                ).fetchone()
+                if row:
+                    conn.execute(
+                        "UPDATE agent_activations SET duration_ms = ?, status = ? "
+                        "WHERE id = ?",
+                        (duration_ms, status, row[0]),
+                    )
+
+            records += 1
+
+        final_pos = f.tell()
+
+    set_watermark(conn, events_file, final_pos)
+    conn.commit()
+    return records
+
+
+def ingest_hook_events(conn, jsonl_file, event_type, full_mode=False):
+    """Ingest generic hook event JSONL files (permission audit, session summaries)."""
+    if not os.path.exists(jsonl_file):
+        return 0
+
+    watermark = 0 if full_mode else get_watermark(conn, jsonl_file)
+    file_size = os.path.getsize(jsonl_file)
+    if watermark >= file_size:
+        return 0
+
+    records = 0
+    with open(jsonl_file, "r", encoding="utf-8", errors="replace") as f:
+        if watermark > 0:
+            f.seek(watermark)
+
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            conn.execute(
+                "INSERT INTO hook_events (event_type, session_id, tool_name, "
+                "data, timestamp) VALUES (?, ?, ?, ?, ?)",
+                (
+                    event.get("event", event_type),
+                    event.get("session_id", ""),
+                    event.get("tool", ""),
+                    json.dumps(event),
+                    event.get("timestamp", ""),
+                ),
+            )
+            records += 1
+
+        final_pos = f.tell()
+
+    set_watermark(conn, jsonl_file, final_pos)
+    conn.commit()
+    return records
+
+
 def find_jsonl_files(base_dir):
     """Find all JSONL files under ~/.claude/projects/, including subagent dirs."""
     pattern = os.path.join(base_dir, "**", "*.jsonl")
@@ -444,6 +616,9 @@ def main():
     # Initialize database (creates fresh if --full removed it)
     conn = init_db(db_path)
 
+    # Run schema migrations for existing databases
+    migrate_schema(conn)
+
     # Build slug → project mapping
     slug_map = build_slug_project_map(projects_dir)
     print(f"Mapped {len(slug_map)} project slug(s)")
@@ -467,6 +642,24 @@ def main():
         total_records += records
         if records > 0:
             files_with_new_data += 1
+
+    # Ingest hook-generated event files (real-time agent tracking, audits)
+    analytics_dir = os.path.expanduser("~/.claude/analytics")
+    hook_event_files = {
+        "agent-events.jsonl": "agent_event",
+        "session-summaries.jsonl": "session_end",
+        "permission-audit.jsonl": "permission_request",
+    }
+    hook_records = 0
+    for fname, etype in hook_event_files.items():
+        fpath = os.path.join(analytics_dir, fname)
+        if fname == "agent-events.jsonl":
+            hook_records += ingest_agent_events(conn, fpath, full_mode)
+        else:
+            hook_records += ingest_hook_events(conn, fpath, etype, full_mode)
+
+    if hook_records > 0:
+        print(f"\n  Hook events ingested: {hook_records}")
 
     elapsed = time.time() - start_time
 
