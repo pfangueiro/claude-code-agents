@@ -1,0 +1,13 @@
+{
+  "_comment": "Phase 2 prompt hook: LLM-based file protection for edge cases",
+  "_usage": "Merge into hooks.PreToolUse in ~/.claude/settings.json to enable",
+  "_note": "Costs tokens per invocation — use alongside regex file-protection.sh, not as replacement",
+  "matcher": "Write|Edit",
+  "hooks": [
+    {
+      "type": "prompt",
+      "prompt": "The user is about to modify a file. Based on the file path and context, determine if this edit is safe. Consider: Is this a configuration file that could break the system? Is it a generated file that shouldn't be hand-edited? Is it a lock file or dependency manifest that requires special handling? Respond with ALLOW if safe to edit, or DENY with a brief reason if the edit should be blocked.",
+      "timeout": 10
+    }
+  ]
+}

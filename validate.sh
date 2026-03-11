@@ -278,6 +278,71 @@ else
 fi
 
 # ============================================================================
+# Hooks Validation
+# ============================================================================
+
+EXPECTED_HOOKS=(
+    "file-protection.sh"
+    "post-edit-lint.sh"
+    "notify.sh"
+    "agent-tracker.sh"
+    "session-end.sh"
+    "smart-guard.sh"
+)
+
+EXPECTED_HOOK_CONFIGS=(
+    "smart-file-guard.json"
+    "pre-commit-review.json"
+)
+
+section "Checking Hooks (${#EXPECTED_HOOKS[@]} scripts + ${#EXPECTED_HOOK_CONFIGS[@]} configs)"
+
+if [ -d "global-config/hooks" ]; then
+    for hook in "${EXPECTED_HOOKS[@]}"; do
+        if [ -f "global-config/hooks/$hook" ]; then
+            pass "Hook script: $hook"
+            if head -1 "global-config/hooks/$hook" | grep -q "^#!/bin/bash" 2>/dev/null; then
+                pass "Hook $hook: has shebang"
+            else
+                fail "Hook $hook: missing #!/bin/bash shebang"
+            fi
+        else
+            fail "Missing hook script: global-config/hooks/$hook"
+        fi
+    done
+
+    for cfg in "${EXPECTED_HOOK_CONFIGS[@]}"; do
+        if [ -f "global-config/hooks/$cfg" ]; then
+            pass "Hook config: $cfg"
+            if command -v jq &>/dev/null; then
+                if jq empty "global-config/hooks/$cfg" 2>/dev/null; then
+                    pass "Hook config $cfg: valid JSON"
+                else
+                    fail "Hook config $cfg: invalid JSON"
+                fi
+            fi
+        else
+            fail "Missing hook config: global-config/hooks/$cfg"
+        fi
+    done
+else
+    warn "No global-config/hooks/ directory found"
+fi
+
+# Validate settings.json.template has expected hook events
+if [ -f "global-config/settings.json.template" ]; then
+    for event in Notification PreToolUse PostToolUse SessionStart SubagentStart SubagentStop Stop PermissionRequest; do
+        if grep -q "\"$event\"" "global-config/settings.json.template" 2>/dev/null; then
+            pass "settings.json.template: has $event hook event"
+        else
+            fail "settings.json.template: missing $event hook event"
+        fi
+    done
+else
+    fail "Missing global-config/settings.json.template"
+fi
+
+# ============================================================================
 # Analytics / Observability Validation
 # ============================================================================
 
@@ -294,7 +359,7 @@ if [ -d "observability" ]; then
 
     # Validate schema.sql has expected tables
     if [ -f "observability/schema.sql" ]; then
-        for table in sessions api_calls agent_activations tool_usage ingestion_state; do
+        for table in sessions api_calls agent_activations tool_usage ingestion_state hook_events; do
             if grep -q "CREATE TABLE.*${table}" "observability/schema.sql" 2>/dev/null; then
                 pass "schema.sql: has $table table"
             else

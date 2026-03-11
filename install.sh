@@ -18,7 +18,7 @@
 set -e
 
 # Configuration
-SCRIPT_VERSION="2.3.0"
+SCRIPT_VERSION="2.4.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
 DEBUG="${DEBUG:-false}"
@@ -591,7 +591,7 @@ install_global_config() {
     mkdir -p ~/.claude/hooks
     mkdir -p ~/.claude/output-styles
 
-    # Copy hooks (executable)
+    # Copy hooks (executable shell scripts)
     for hook in "$src_dir"/hooks/*.sh; do
         [ -f "$hook" ] || continue
         local name
@@ -599,6 +599,15 @@ install_global_config() {
         cp "$hook" ~/.claude/hooks/"$name"
         chmod +x ~/.claude/hooks/"$name"
         print_success "Installed hook $name"
+    done
+
+    # Copy hook reference configs (prompt/agent hook templates)
+    for hook_cfg in "$src_dir"/hooks/*.json; do
+        [ -f "$hook_cfg" ] || continue
+        local name
+        name=$(basename "$hook_cfg")
+        cp "$hook_cfg" ~/.claude/hooks/"$name"
+        print_success "Installed hook config $name"
     done
 
     # Copy output styles
@@ -658,6 +667,59 @@ install_global_config() {
                     print_skip "Kept existing settings.json"
                     ;;
             esac
+        fi
+    fi
+}
+
+sync_hooks() {
+    echo -e "\n${BOLD}Syncing Hooks:${NC}"
+
+    local src_dir="${SCRIPT_DIR}/global-config/hooks"
+
+    if [ ! -d "$src_dir" ]; then
+        print_info "No hooks directory found in source — skipping"
+        return 0
+    fi
+
+    mkdir -p ~/.claude/hooks
+
+    for hook in "$src_dir"/*.sh; do
+        [ -f "$hook" ] || continue
+        local name
+        name=$(basename "$hook")
+        cp "$hook" ~/.claude/hooks/"$name"
+        chmod +x ~/.claude/hooks/"$name"
+        print_success "Synced hook $name"
+    done
+
+    for hook_cfg in "$src_dir"/*.json; do
+        [ -f "$hook_cfg" ] || continue
+        local name
+        name=$(basename "$hook_cfg")
+        cp "$hook_cfg" ~/.claude/hooks/"$name"
+        print_success "Synced hook config $name"
+    done
+
+    # Merge new hook events into existing settings.json (non-destructive)
+    if [ -f ~/.claude/settings.json ] && command -v jq &>/dev/null; then
+        local template="${SCRIPT_DIR}/global-config/settings.json.template"
+        if [ -f "$template" ]; then
+            local new_events
+            new_events=$(jq -r '.hooks | keys[]' "$template" 2>/dev/null)
+            local merged=false
+            for event in $new_events; do
+                if ! jq -e ".hooks[\"$event\"]" ~/.claude/settings.json &>/dev/null; then
+                    local event_config
+                    event_config=$(jq ".hooks[\"$event\"]" "$template")
+                    jq ".hooks[\"$event\"] = $event_config" ~/.claude/settings.json > ~/.claude/settings.json.tmp \
+                        && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
+                    print_success "Added hook event $event to settings.json"
+                    merged=true
+                fi
+            done
+            if [ "$merged" = false ]; then
+                print_skip "All hook events already in settings.json"
+            fi
         fi
     fi
 }
@@ -901,6 +963,9 @@ repair_installation() {
     # Patch meta-agent into existing CLAUDE.md agents table
     patch_meta_agent_in_claude_md
 
+    # Sync hooks to global ~/.claude/hooks/
+    sync_hooks
+
     # Repair analytics dashboard
     install_analytics || print_error "Analytics installation failed"
 }
@@ -1064,6 +1129,9 @@ update_installation() {
     else
         print_skip "MCP configuration (.mcp.json) already exists"
     fi
+
+    # Sync hooks to global ~/.claude/hooks/
+    sync_hooks
 
     # Update analytics dashboard (installs if missing, updates if present)
     install_analytics || print_error "Analytics installation failed"
