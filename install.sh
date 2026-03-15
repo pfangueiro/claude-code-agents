@@ -13,6 +13,7 @@
 #   ./install.sh --repair     - Fix missing components
 #   ./install.sh --update     - Update existing installation
 #   ./install.sh --team-setup - Full team onboarding (agents + global config)
+#   ./install.sh --full /path/to/project - Install into a specific directory
 # ============================================================================
 
 set -e
@@ -33,8 +34,12 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
-# Installation mode
+# Installation mode and optional target directory
 MODE="${1:-interactive}"
+if [ -n "$2" ] && [ -d "$2" ]; then
+    cd "$2"
+    echo -e "${CYAN}Target directory: $2${NC}"
+fi
 
 # Component lists
 AGENTS=(
