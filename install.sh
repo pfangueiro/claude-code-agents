@@ -19,7 +19,7 @@
 set -e
 
 # Configuration
-SCRIPT_VERSION="2.4.0"
+SCRIPT_VERSION="2.5.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
 DEBUG="${DEBUG:-false}"
@@ -415,6 +415,15 @@ Use these for structured, multi-phase task execution:
 - **`/investigate <symptom>`** — 8-phase root cause analysis. Uses 5 Whys, competing hypotheses, evidence classification.
 - **`/deep-analysis <problem>`** — Structured multi-step reasoning via sequential-thinking MCP. For architecture decisions and trade-offs.
 
+### 🛠️ Developer Workflow Commands
+
+- **`/build-fix [path]`** — Auto-detect build system, run build, fix errors one at a time with regression guard.
+- **`/tdd <feature>`** — Enforce RED-GREEN-REFACTOR cycle: failing test → minimal implementation → refactor.
+- **`/quality-gate [path] [--fix]`** — Pre-commit validation: formatter + linter + type checker + tests.
+- **`/checkpoint <name>`** — Named save points via git branches for complex multi-step work.
+- **`/save-session [id]`** — Save structured session state with "What Did NOT Work" section.
+- **`/resume-session [id]`** — Resume from a saved session with full context briefing.
+
 ### 🔒 Security First
 
 - **security-auditor** & **incident-commander** always use Opus for maximum intelligence
@@ -467,6 +476,13 @@ append_claude_md_section() {
 - `/investigate <symptom>` — 8-phase root cause analysis
 - `/deep-analysis <problem>` — Structured multi-step reasoning
 
+**Developer Workflow Commands:**
+- `/build-fix` — Auto-detect build system, fix errors with regression guard
+- `/tdd <feature>` — RED-GREEN-REFACTOR test-driven development
+- `/quality-gate [--fix]` — Pre-commit formatter + linter + type checker
+- `/checkpoint <name>` — Named save points for complex work
+- `/save-session` / `/resume-session` — Cross-session continuity
+
 **Example:** Say "build a REST API with authentication" and watch multiple agents collaborate automatically.
 
 <!-- ============ CLAUDE AGENTS AUTO-ACTIVATION SECTION END ============ -->
@@ -488,6 +504,15 @@ Use these for structured, multi-phase task execution:
 - **`/execute <goal>`** — Orchestrated task engine. Decomposes goals into atomic tasks, plans dependencies, executes in parallel batches.
 - **`/investigate <symptom>`** — 8-phase root cause analysis. Uses 5 Whys, competing hypotheses, evidence classification.
 - **`/deep-analysis <problem>`** — Structured multi-step reasoning via sequential-thinking MCP. For architecture decisions and trade-offs.
+
+### 🛠️ Developer Workflow Commands
+
+- **`/build-fix [path]`** — Auto-detect build system, run build, fix errors one at a time with regression guard.
+- **`/tdd <feature>`** — Enforce RED-GREEN-REFACTOR cycle: failing test → minimal implementation → refactor.
+- **`/quality-gate [path] [--fix]`** — Pre-commit validation: formatter + linter + type checker + tests.
+- **`/checkpoint <name>`** — Named save points via git branches for complex multi-step work.
+- **`/save-session [id]`** — Save structured session state with "What Did NOT Work" section.
+- **`/resume-session [id]`** — Resume from a saved session with full context briefing.
 EOF
 
     print_success "Added orchestration skills section to CLAUDE.md"
@@ -968,11 +993,42 @@ repair_installation() {
     # Patch meta-agent into existing CLAUDE.md agents table
     patch_meta_agent_in_claude_md
 
+    # Patch Developer Workflow Commands section if missing
+    patch_developer_workflow_in_claude_md
+
     # Sync hooks to global ~/.claude/hooks/
     sync_hooks
 
     # Repair analytics dashboard
     install_analytics || print_error "Analytics installation failed"
+}
+
+patch_developer_workflow_in_claude_md() {
+    # Patch CLAUDE.md to add Developer Workflow Commands section if missing
+    if [ ! -f "CLAUDE.md" ]; then
+        return 0
+    fi
+    if grep -q "Developer Workflow" CLAUDE.md 2>/dev/null; then
+        return 0
+    fi
+    if ! grep -q "Orchestration Skills\|Auto-Activating" CLAUDE.md 2>/dev/null; then
+        return 0
+    fi
+
+    # Append developer workflow section after orchestration skills or at end of agents section
+    cat >> CLAUDE.md << 'EOF'
+
+### 🛠️ Developer Workflow Commands
+
+- **`/build-fix [path]`** — Auto-detect build system, run build, fix errors one at a time with regression guard.
+- **`/tdd <feature>`** — Enforce RED-GREEN-REFACTOR cycle: failing test → minimal implementation → refactor.
+- **`/quality-gate [path] [--fix]`** — Pre-commit validation: formatter + linter + type checker + tests.
+- **`/checkpoint <name>`** — Named save points via git branches for complex multi-step work.
+- **`/save-session [id]`** — Save structured session state with "What Did NOT Work" section.
+- **`/resume-session [id]`** — Resume from a saved session with full context briefing.
+EOF
+
+    print_success "Patched CLAUDE.md: added Developer Workflow Commands section"
 }
 
 patch_meta_agent_in_claude_md() {
@@ -1159,6 +1215,9 @@ update_installation() {
 
     # Patch meta-agent into existing CLAUDE.md agents table
     patch_meta_agent_in_claude_md
+
+    # Patch Developer Workflow Commands section if missing
+    patch_developer_workflow_in_claude_md
 }
 
 # ============================================================================
