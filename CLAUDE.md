@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Claude Agents** — enterprise AI agent system with 12 specialized SDLC/SSDLC agents, 15 skills, and 6 slash commands that auto-activate based on natural language. Automatically selects optimal Claude model (Haiku/Sonnet/Opus) per task complexity.
+**Claude Agents** — enterprise AI agent system with 12 specialized SDLC/SSDLC agents, 16 skills, and 12 slash commands that auto-activate based on natural language. Automatically selects optimal Claude model (Haiku/Sonnet/Opus) per task complexity.
 
 ## IMPORTANT: Auto-Activation
 
@@ -36,11 +36,20 @@ Agent collaboration patterns: see `.claude/lib/agent-coordination.md`
 - **`/investigate <symptom>`** — 8-phase root cause analysis (OBSERVE/REPRODUCE/TRACE/HYPOTHESIZE/PROVE/ROOT CAUSE/FIX/PREVENT). Never jumps to a fix.
 - **`/deep-analysis <problem>`** — Structured reasoning via sequential-thinking MCP: branching, revision, hypothesis testing.
 
+## Developer Workflow Commands
+
+- **`/build-fix [path]`** — Auto-detect build system, run build, parse errors, fix one at a time with regression guard.
+- **`/tdd <feature>`** — Enforce RED-GREEN-REFACTOR cycle: write failing test → implement minimally → refactor → verify.
+- **`/quality-gate [path] [--fix] [--strict]`** — Pre-commit validation: formatter + linter + type checker + tests.
+- **`/checkpoint <name> [--verify] [--list] [--diff]`** — Named save points via git branches for complex multi-step work.
+- **`/save-session [id]`** — Save structured session state with mandatory "What Did NOT Work" section.
+- **`/resume-session [id]`** — Resume from a saved session with full context briefing and file state verification.
+
 ## Skills System
 
 Skills provide modular knowledge packages that complement agents. See `.claude/skills/README.md` for full documentation.
 
-**Reference skills:** skill-creator, git-workflow, code-review-checklist, deployment-runbook
+**Reference skills:** skill-creator, git-workflow, code-review-checklist, deployment-runbook, security-scan
 **MCP-powered skills:** library-docs (context7), deep-analysis (sequential-thinking)
 
 Creating skills: `python3 .claude/skills/skill-creator/scripts/init_skill.py <name> --path .claude/skills`
@@ -51,15 +60,16 @@ MCP servers provide external tools that extend Claude Code. See `.claude/lib/mcp
 
 ## Hooks
 
-8 hook events across 3 types. Hooks live in `global-config/hooks/`, installed globally to `~/.claude/hooks/`.
+9 hook events across 3 types. Hooks live in `global-config/hooks/`, installed globally to `~/.claude/hooks/`.
 
-**Command hooks (6 scripts):**
+**Command hooks (7 scripts):**
 - `file-protection.sh` — PreToolUse: blocks edits to sensitive files (.env, *.key, *.pem)
-- `post-edit-lint.sh` — PostToolUse: auto-lints TS/JS after Write/Edit
+- `post-edit-lint.sh` — PostToolUse: auto-lints TS/JS after Write/Edit, warns on debug statements
 - `notify.sh` — Notification: desktop alerts when Claude needs attention
 - `agent-tracker.sh` — SubagentStart/SubagentStop: real-time agent lifecycle tracking to `agent-events.jsonl`
 - `session-end.sh` — Stop: logs session completion to `session-summaries.jsonl`
 - `smart-guard.sh` — PermissionRequest: auto-approves safe read operations, audits dangerous ones
+- `pre-compact.sh` — PreCompact: auto-saves session snapshot before context compaction
 
 **Reference configs (Phase 2 opt-in):**
 - `smart-file-guard.json` — prompt hook: LLM-based file protection for edge cases

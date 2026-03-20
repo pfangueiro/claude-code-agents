@@ -1,10 +1,10 @@
 # Claude Agents - AI-Powered SDLC Agent System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
+[![Version](https://img.shields.io/badge/version-2.5.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://docs.anthropic.com/en/docs/claude-code)
 [![Agents](https://img.shields.io/badge/Agents-12-orange.svg)](#-available-agents)
-[![Skills](https://img.shields.io/badge/Skills-15-green.svg)](#-skills-system)
+[![Skills](https://img.shields.io/badge/Skills-16-green.svg)](#-skills-system)
 [![MCP](https://img.shields.io/badge/MCP-5%20Servers-brightgreen.svg)](#-mcp-integration)
 
 **12 auto-activating AI agents for every phase of software development.** Just describe what you want to build — the right specialists engage automatically.
@@ -39,11 +39,11 @@ Agents activate automatically based on your words.
 | Component | Count | What It Does |
 |-----------|-------|--------------|
 | **Agents** | 12 | Auto-activating SDLC specialists (planning through production) |
-| **Skills** | 15 | Modular knowledge packages (git, Docker, CI/CD, API design, execute, investigate, etc.) |
-| **Slash Commands** | 6 | `/commit-pr`, `/review-pr`, `/security-scan`, `/compact`, `/new-feature`, `/create-jira` |
+| **Skills** | 16 | Modular knowledge packages (git, Docker, CI/CD, API design, security-scan, execute, investigate, etc.) |
+| **Slash Commands** | 12 | `/commit-pr`, `/review-pr`, `/security-scan`, `/compact`, `/new-feature`, `/create-jira`, `/build-fix`, `/tdd`, `/quality-gate`, `/checkpoint`, `/save-session`, `/resume-session` |
 | **MCP Servers** | 5 | context7, sequential-thinking, playwright, github, postgres |
 | **Rules** | 4 | Auto-enforced security, code quality, fix quality, and verification standards |
-| **Hooks** | 8 | Agent tracking, session lifecycle, permission auditing, file protection, auto-lint, notifications |
+| **Hooks** | 9 | Agent tracking, session lifecycle, permission auditing, file protection, auto-lint, debug detection, pre-compact snapshots, notifications |
 | **Keybindings** | 6 | Ctrl+S (commit), Ctrl+T (PR), Ctrl+R (review), etc. |
 
 ---
@@ -98,7 +98,7 @@ See [`.claude/lib/agent-coordination.md`](.claude/lib/agent-coordination.md) for
 | **Minimal** | `./install.sh --minimal` | Just CLAUDE.md with agent activation |
 | **Repair** | `./install.sh --repair` | Fix missing components |
 | **Update** | `./install.sh --update` | Update to latest version |
-| **Validate** | `./validate.sh` | Verify all 125 checks pass |
+| **Validate** | `./validate.sh` | Verify all 136 checks pass |
 
 ### Deploy to an Existing Project
 
@@ -111,12 +111,14 @@ cd /path/to/your/project
 
 ```bash
 ./validate.sh
-# All validations passed! (125/125 checks)
+# All validations passed! (136/136 checks)
 ```
 
 ---
 
 ## Slash Commands
+
+### Project Workflow
 
 | Command | Usage | What It Does |
 |---------|-------|-------------|
@@ -127,11 +129,22 @@ cd /path/to/your/project
 | `/new-feature` | `/new-feature PROJ-123 desc` | Create feature branch from latest main |
 | `/create-jira` | `/create-jira epic Title` | Create JIRA issue and assign to you |
 
+### Developer Workflow (new in v2.5.0)
+
+| Command | Usage | What It Does |
+|---------|-------|-------------|
+| `/build-fix` | `/build-fix [path]` | Auto-detect build system, fix errors one at a time with regression guard |
+| `/tdd` | `/tdd <feature>` | Enforce RED-GREEN-REFACTOR: failing test → implement → refactor |
+| `/quality-gate` | `/quality-gate [path] [--fix]` | Pre-commit validation: formatter + linter + type checker + tests |
+| `/checkpoint` | `/checkpoint <name>` | Named save points via git branches for complex multi-step work |
+| `/save-session` | `/save-session [id]` | Save structured session state with mandatory "What Did NOT Work" section |
+| `/resume-session` | `/resume-session [id]` | Resume from a saved session with context briefing and file state verification |
+
 ---
 
 ## Skills System
 
-Skills provide domain knowledge that agents apply. 15 included:
+Skills provide domain knowledge that agents apply. 16 included:
 
 | Skill | What It Provides |
 |-------|-----------------|
@@ -149,6 +162,7 @@ Skills provide domain knowledge that agents apply. 15 included:
 | **deep-analysis** | MCP-powered: structured reasoning with branching and revision (rewritten) |
 | **deep-read** | 6-phase codebase reading engine: scope, map, trace, deep read, connect, report |
 | **handoff** | Session continuity — write HANDOFF.md for cross-session context |
+| **security-scan** | Auto-activating security scanner (secrets, OWASP, dependencies, file permissions) |
 | **skill-creator** | Create your own custom skills |
 
 ### Create Your Own Skill
@@ -196,16 +210,17 @@ Four rule files in `.claude/rules/` are automatically loaded by Claude Code in e
 
 ## Hooks
 
-8 lifecycle hooks across 8 events, installed globally to `~/.claude/hooks/`:
+9 hook events across 7 command hooks, installed globally to `~/.claude/hooks/`:
 
 | Hook | Event | What It Does |
 |------|-------|-------------|
 | **file-protection.sh** | PreToolUse | Blocks edits to sensitive files (.env, *.key, *.pem, secrets/) |
-| **post-edit-lint.sh** | PostToolUse | Auto-lints TypeScript/JavaScript after Write/Edit |
+| **post-edit-lint.sh** | PostToolUse | Auto-lints TS/JS after Write/Edit, warns on debug statements |
 | **notify.sh** | Notification | Desktop alert when Claude needs attention |
 | **agent-tracker.sh** | SubagentStart/Stop | Real-time agent lifecycle tracking to analytics |
 | **session-end.sh** | Stop | Logs session completion for observability |
 | **smart-guard.sh** | PermissionRequest | Auto-approves safe reads, audits dangerous operations |
+| **pre-compact.sh** | PreCompact | Auto-saves session snapshot before context compaction |
 
 **Phase 2 reference configs** (opt-in, not enabled by default):
 - `smart-file-guard.json` — prompt hook: LLM-based file protection
@@ -218,15 +233,15 @@ Four rule files in `.claude/rules/` are automatically loaded by Claude Code in e
 ```
 .claude/
 ├── agents/          # 12 auto-activating SDLC agents
-├── commands/        # 6 slash commands
-├── skills/          # 15 modular knowledge packages
+├── commands/        # 12 slash commands
+├── skills/          # 16 modular knowledge packages
 ├── rules/           # 4 auto-enforced rule sets
 ├── lib/             # Templates, patterns, coordination protocol
 └── history/         # Session history
 
 global-config/
-├── hooks/           # 6 command hooks + 2 reference configs
-├── settings.json.template  # 8 hook events, permissions, model config
+├── hooks/           # 7 command hooks + 2 reference configs
+├── settings.json.template  # 9 hook events, permissions, model config
 └── ...              # keybindings, statusline, output styles
 ```
 

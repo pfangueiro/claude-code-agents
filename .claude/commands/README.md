@@ -99,6 +99,101 @@ Summarizes current session context into HANDOFF.md and compacts the conversation
 - Preserves context for the next session
 - Runs `/compact` to free conversation context
 
+### `/build-fix` - Build Fix Loop
+Auto-detects the build system, runs the build, parses errors, and fixes them one at a time with regression detection.
+
+**Usage:**
+```
+/build-fix
+/build-fix src/
+```
+
+**Features:**
+- Auto-detects npm/tsc/cargo/go/gradle/maven/pyproject/make
+- Fixes one error at a time, rebuilds after each fix
+- Stops if a fix introduces more errors (regression guard)
+- Stops if the same error persists after 3 attempts
+- Reports all fixes applied and remaining issues
+
+### `/tdd` - Test-Driven Development
+Enforces strict RED-GREEN-REFACTOR cycle for implementing a function or feature.
+
+**Usage:**
+```
+/tdd implement a password strength validator
+```
+
+**Features:**
+- Writes failing tests FIRST (RED phase)
+- Implements minimal code to pass tests (GREEN phase)
+- Refactors while keeping tests green (REFACTOR phase)
+- Verifies each phase before moving to the next
+- Reports coverage if available
+
+### `/quality-gate` - Pre-Commit Quality Gate
+Runs formatter, linter, type checker, and tests as a comprehensive quality check.
+
+**Usage:**
+```
+/quality-gate
+/quality-gate src/ --fix
+/quality-gate --strict
+```
+
+**Features:**
+- Auto-detects language and tooling (TS/JS, Python, Go, Rust)
+- Runs format check, lint, type check, and tests in order
+- `--fix` flag auto-fixes formatting and lint issues
+- `--strict` flag treats warnings as errors
+- Reports PASS/FAIL for each check
+
+### `/checkpoint` - Named Save Points
+Creates named checkpoints during complex work for easy comparison and rollback.
+
+**Usage:**
+```
+/checkpoint before-refactor
+/checkpoint --verify before-refactor
+/checkpoint --list
+/checkpoint --diff before-refactor
+```
+
+**Features:**
+- Creates lightweight git branches as save points
+- Verify mode compares current state against a checkpoint
+- Shows file changes, test results, and overall verdict (BETTER/WORSE/SAME)
+- Checkpoints survive across sessions (git branches)
+
+### `/save-session` - Save Session State
+Saves structured session state to a global file with mandatory "What Did NOT Work" section.
+
+**Usage:**
+```
+/save-session
+/save-session auth-implementation
+```
+
+**Features:**
+- Writes to `~/.claude/sessions/` (global, not in project root)
+- Mandatory "What Did NOT Work" section with exact error messages
+- Records goal, progress, decisions, next steps, and file states
+- Prevents next session from retrying failed approaches
+
+### `/resume-session` - Resume Session
+Loads a previously saved session and produces a structured briefing.
+
+**Usage:**
+```
+/resume-session
+/resume-session auth-implementation
+```
+
+**Features:**
+- Lists recent sessions if no ID given
+- Validates current branch and file states against saved session
+- Prominently displays "AVOID These Approaches" section
+- Checks for files modified or deleted since the session was saved
+
 ## Command Development
 
 ### Structure

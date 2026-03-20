@@ -1,5 +1,6 @@
 #!/bin/bash
-# Auto-lint TypeScript/JavaScript files after Write/Edit
+# Auto-lint TypeScript/JavaScript/Python files after Write/Edit
+# Also warns about leftover debug statements
 # Reads tool result from stdin, extracts file path
 
 input=$(cat)
@@ -9,7 +10,7 @@ if [[ -z "$file_path" ]]; then
   exit 0
 fi
 
-# Only lint TS/JS files
+# --- Lint TS/JS files ---
 case "$file_path" in
   *.ts|*.tsx|*.js|*.jsx)
     # Find nearest node_modules with eslint
@@ -21,6 +22,24 @@ case "$file_path" in
       fi
       dir=$(dirname "$dir")
     done
+    ;;
+esac
+
+# --- Debug statement detection (non-blocking warning) ---
+case "$file_path" in
+  *.ts|*.tsx|*.js|*.jsx)
+    debug_hits=$(grep -n -E '^\s*(console\.(log|debug|trace)\(|debugger\b)' "$file_path" 2>/dev/null)
+    if [[ -n "$debug_hits" ]]; then
+      echo "Warning: possible debug statements in $file_path:"
+      echo "$debug_hits" | head -5
+    fi
+    ;;
+  *.py)
+    debug_hits=$(grep -n -E '^\s*(print\(|breakpoint\(\)|import pdb|pdb\.set_trace\(\))' "$file_path" 2>/dev/null)
+    if [[ -n "$debug_hits" ]]; then
+      echo "Warning: possible debug statements in $file_path:"
+      echo "$debug_hits" | head -5
+    fi
     ;;
 esac
 
