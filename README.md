@@ -112,7 +112,7 @@ cd /path/to/your/project
 
 ```bash
 ./validate.sh
-# All validations passed! (136/147 checks)
+# All validations passed! (147/147 checks)
 ```
 
 ---
