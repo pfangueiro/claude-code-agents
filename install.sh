@@ -996,6 +996,9 @@ repair_installation() {
     # Patch meta-agent into existing CLAUDE.md agents table
     patch_meta_agent_in_claude_md
 
+    # Patch sre-specialist into existing CLAUDE.md agents table
+    patch_sre_specialist_in_claude_md
+
     # Patch Developer Workflow Commands section if missing
     patch_developer_workflow_in_claude_md
 
@@ -1032,6 +1035,36 @@ patch_developer_workflow_in_claude_md() {
 EOF
 
     print_success "Patched CLAUDE.md: added Developer Workflow Commands section"
+}
+
+patch_sre_specialist_in_claude_md() {
+    # Patch CLAUDE.md to add sre-specialist row if missing from agents table
+    if [ ! -f "CLAUDE.md" ]; then
+        return 0
+    fi
+    if grep -q "sre-specialist" CLAUDE.md 2>/dev/null; then
+        return 0
+    fi
+    if ! grep -q "incident-commander" CLAUDE.md 2>/dev/null; then
+        return 0
+    fi
+    # Insert sre-specialist line after incident-commander (handles both table and list formats)
+    if grep -q 'incident-commander.*|' CLAUDE.md 2>/dev/null; then
+        # Table format
+        sed -i '' '/incident-commander.*|/{
+a\
+| "define SLOs" | **sre-specialist** | SRE, reliability, runbooks |
+}' CLAUDE.md
+    elif grep -q 'incident-commander' CLAUDE.md 2>/dev/null; then
+        # List format
+        sed -i '' '/incident-commander/{
+a\
+- **SRE:** "SLO", "reliability", "runbook" → `sre-specialist`
+}' CLAUDE.md
+    fi
+    if grep -q "sre-specialist" CLAUDE.md 2>/dev/null; then
+        print_success "Patched CLAUDE.md: added sre-specialist to agents table"
+    fi
 }
 
 patch_meta_agent_in_claude_md() {
@@ -1218,6 +1251,9 @@ update_installation() {
 
     # Patch meta-agent into existing CLAUDE.md agents table
     patch_meta_agent_in_claude_md
+
+    # Patch sre-specialist into existing CLAUDE.md agents table
+    patch_sre_specialist_in_claude_md
 
     # Patch Developer Workflow Commands section if missing
     patch_developer_workflow_in_claude_md
