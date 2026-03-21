@@ -19,7 +19,7 @@
 set -e
 
 # Configuration
-SCRIPT_VERSION="2.6.0"
+SCRIPT_VERSION="2.7.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
 DEBUG="${DEBUG:-false}"
@@ -425,6 +425,7 @@ Use these for structured, multi-phase task execution:
 - **`/checkpoint <name>`** — Named save points via git branches for complex multi-step work.
 - **`/save-session [id]`** — Save structured session state with "What Did NOT Work" section.
 - **`/resume-session [id]`** — Resume from a saved session with full context briefing.
+- **`/optimize <metric>`** — Autonomous metric-driven improvement loop: measure → improve → keep/revert.
 
 ### 🔒 Security First
 
@@ -485,6 +486,7 @@ append_claude_md_section() {
 - `/quality-gate [--fix]` — Pre-commit formatter + linter + type checker
 - `/checkpoint <name>` — Named save points for complex work
 - `/save-session` / `/resume-session` — Cross-session continuity
+- `/optimize <metric>` — Autonomous metric-driven improvement loop
 
 **Example:** Say "build a REST API with authentication" and watch multiple agents collaborate automatically.
 
@@ -516,6 +518,7 @@ Use these for structured, multi-phase task execution:
 - **`/checkpoint <name>`** — Named save points via git branches for complex multi-step work.
 - **`/save-session [id]`** — Save structured session state with "What Did NOT Work" section.
 - **`/resume-session [id]`** — Resume from a saved session with full context briefing.
+- **`/optimize <metric>`** — Autonomous metric-driven improvement loop: measure → improve → keep/revert.
 EOF
 
     print_success "Added orchestration skills section to CLAUDE.md"
@@ -1032,6 +1035,7 @@ patch_developer_workflow_in_claude_md() {
 - **`/checkpoint <name>`** — Named save points via git branches for complex multi-step work.
 - **`/save-session [id]`** — Save structured session state with "What Did NOT Work" section.
 - **`/resume-session [id]`** — Resume from a saved session with full context briefing.
+- **`/optimize <metric>`** — Autonomous metric-driven improvement loop: measure → improve → keep/revert.
 EOF
 
     print_success "Patched CLAUDE.md: added Developer Workflow Commands section"

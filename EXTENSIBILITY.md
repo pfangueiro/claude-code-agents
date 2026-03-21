@@ -2,7 +2,7 @@
 
 **The Complete Guide to Extending Claude Code with Skills, MCP, Slash Commands, and Subagents**
 
-Version: 2.6.0
+Version: 2.7.0
 Last Updated: 2026-03-21
 
 ---
@@ -1018,6 +1018,6 @@ By understanding when and how to use each mechanism, you can create powerful, ma
 
 ---
 
-**Version**: 2.6.0 - SRE, Cloud Infrastructure & Observability Release
+**Version**: 2.7.0 - Autonomous Optimization & Experiment Loop Release
 **License**: MIT
 **Maintainer**: Claude Agents Project

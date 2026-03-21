@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Claude Agents** — enterprise AI agent system with 13 specialized SDLC/SSDLC agents, 20 skills, and 12 slash commands that auto-activate based on natural language. Automatically selects optimal Claude model (Haiku/Sonnet/Opus) per task complexity.
+**Claude Agents** — enterprise AI agent system with 13 specialized SDLC/SSDLC agents, 21 skills, and 13 slash commands that auto-activate based on natural language. Automatically selects optimal Claude model (Haiku/Sonnet/Opus) per task complexity.
 
 ## IMPORTANT: Auto-Activation
 
@@ -45,6 +45,7 @@ Agent collaboration patterns: see `.claude/lib/agent-coordination.md`
 - **`/checkpoint <name> [--verify] [--list] [--diff]`** — Named save points via git branches for complex multi-step work.
 - **`/save-session [id]`** — Save structured session state with mandatory "What Did NOT Work" section.
 - **`/resume-session [id]`** — Resume from a saved session with full context briefing and file state verification.
+- **`/optimize <metric> [--iterations N]`** — Autonomous metric-driven improvement loop: measure → improve → verify → keep/revert.
 
 ## Skills System
 
@@ -52,6 +53,7 @@ Skills provide modular knowledge packages that complement agents. See `.claude/s
 
 **Reference skills:** skill-creator, git-workflow, code-review-checklist, deployment-runbook, security-scan
 **SRE/Cloud skills:** kubernetes-ops, observability-stack, sre-runbooks, infrastructure-as-code
+**Experimentation skills:** experiment-loop (autonomous optimization patterns)
 **MCP-powered skills:** library-docs (context7), deep-analysis (sequential-thinking)
 
 Creating skills: `python3 .claude/skills/skill-creator/scripts/init_skill.py <name> --path .claude/skills`
