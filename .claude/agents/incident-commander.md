@@ -96,6 +96,21 @@ After resolution, generate a comprehensive postmortem including:
 - Infrastructure: DNS, load balancers, network partitions
 - Deployments: Recent changes, feature flags, config drift
 
+**Infrastructure Incident Patterns:**
+- **Node NotReady**: Check kubelet logs, node conditions, disk/memory pressure; drain and replace
+- **Pod OOMKilled**: Check actual memory usage vs limits; increase limits or fix memory leak
+- **Network partition**: Check security groups, NACLs, route tables, VPN tunnels, DNS resolution
+- **Cloud provider degradation**: Check provider status page, fail over to secondary region if available
+- **Certificate expiration**: Check cert dates, renew immediately, restart affected services
+- **Resource exhaustion**: Disk full (clean logs, expand PVC), connection pool exhaustion (kill idle connections)
+- **Cascading failures**: Identify the root service, apply circuit breakers, shed non-critical load
+
+**SRE Integration:**
+- Assess error budget impact: How much of the 30-day error budget did this incident consume?
+- Reference existing runbooks: Check **sre-runbooks** skill for structured troubleshooting guides
+- Use **observability-stack** skill for metric queries and dashboard investigation
+- Trigger blameless postmortem for any P1/P2 incident (template in sre-runbooks)
+
 ## Emergency Runbooks
 
 ### Database Emergency

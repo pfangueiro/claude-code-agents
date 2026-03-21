@@ -1,13 +1,13 @@
 # Claude Agents - AI-Powered SDLC Agent System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-2.5.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
+[![Version](https://img.shields.io/badge/version-2.6.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://docs.anthropic.com/en/docs/claude-code)
-[![Agents](https://img.shields.io/badge/Agents-12-orange.svg)](#-available-agents)
-[![Skills](https://img.shields.io/badge/Skills-16-green.svg)](#-skills-system)
+[![Agents](https://img.shields.io/badge/Agents-13-orange.svg)](#-available-agents)
+[![Skills](https://img.shields.io/badge/Skills-20-green.svg)](#-skills-system)
 [![MCP](https://img.shields.io/badge/MCP-5%20Servers-brightgreen.svg)](#-mcp-integration)
 
-**12 auto-activating AI agents for every phase of software development.** Just describe what you want to build — the right specialists engage automatically.
+**13 auto-activating AI agents for every phase of software development.** Just describe what you want to build — the right specialists engage automatically.
 
 > Works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (Anthropic's CLI). No plugins, no configuration, no commands to memorize.
 
@@ -38,8 +38,8 @@ Agents activate automatically based on your words.
 
 | Component | Count | What It Does |
 |-----------|-------|--------------|
-| **Agents** | 12 | Auto-activating SDLC specialists (planning through production) |
-| **Skills** | 16 | Modular knowledge packages (git, Docker, CI/CD, API design, security-scan, execute, investigate, etc.) |
+| **Agents** | 13 | Auto-activating SDLC specialists (planning through production) |
+| **Skills** | 20 | Modular knowledge packages (git, Docker, CI/CD, K8s, SRE, IaC, observability, security-scan, etc.) |
 | **Slash Commands** | 12 | `/commit-pr`, `/review-pr`, `/security-scan`, `/compact`, `/new-feature`, `/create-jira`, `/build-fix`, `/tdd`, `/quality-gate`, `/checkpoint`, `/save-session`, `/resume-session` |
 | **MCP Servers** | 5 | context7, sequential-thinking, playwright, github, postgres |
 | **Rules** | 4 | Auto-enforced security, code quality, fix quality, and verification standards |
@@ -63,6 +63,7 @@ Agents activate automatically based on your words.
 | **frontend-specialist** | "UI", "React", "frontend" | Components, responsive design | Sonnet |
 | **api-backend** | "API", "backend", "endpoint" | REST/GraphQL, business logic | Sonnet |
 | **incident-commander** | "CRITICAL", "outage", "emergency" | Rapid response, root cause | **Opus** |
+| **sre-specialist** | "SLO", "reliability", "on-call", "runbook" | SRE, SLOs, capacity, chaos eng | Sonnet |
 | **meta-agent** | "create an agent for..." | Generates new custom agents | Opus |
 
 **Cost optimization:** Haiku for docs (95% cheaper), Sonnet for dev work, Opus for security/emergencies.
@@ -98,7 +99,7 @@ See [`.claude/lib/agent-coordination.md`](.claude/lib/agent-coordination.md) for
 | **Minimal** | `./install.sh --minimal` | Just CLAUDE.md with agent activation |
 | **Repair** | `./install.sh --repair` | Fix missing components |
 | **Update** | `./install.sh --update` | Update to latest version |
-| **Validate** | `./validate.sh` | Verify all 136 checks pass |
+| **Validate** | `./validate.sh` | Verify all 147 checks pass |
 
 ### Deploy to an Existing Project
 
@@ -111,7 +112,7 @@ cd /path/to/your/project
 
 ```bash
 ./validate.sh
-# All validations passed! (136/136 checks)
+# All validations passed! (136/147 checks)
 ```
 
 ---
@@ -144,7 +145,7 @@ cd /path/to/your/project
 
 ## Skills System
 
-Skills provide domain knowledge that agents apply. 16 included:
+Skills provide domain knowledge that agents apply. 20 included:
 
 | Skill | What It Provides |
 |-------|-----------------|
@@ -163,6 +164,10 @@ Skills provide domain knowledge that agents apply. 16 included:
 | **deep-read** | 6-phase codebase reading engine: scope, map, trace, deep read, connect, report |
 | **handoff** | Session continuity — write HANDOFF.md for cross-session context |
 | **security-scan** | Auto-activating security scanner (secrets, OWASP, dependencies, file permissions) |
+| **kubernetes-ops** | K8s manifests, Helm, Karpenter, GitOps (ArgoCD/Flux), network policies, troubleshooting |
+| **observability-stack** | OpenTelemetry, Prometheus/Grafana, RED/USE metrics, SLI/SLO monitoring, alerting |
+| **sre-runbooks** | On-call handbook, postmortem templates, SLO/error budgets, chaos engineering, capacity planning |
+| **infrastructure-as-code** | Terraform/CDK/Pulumi patterns, IaC testing pyramid, CI/CD for infra, state management |
 | **skill-creator** | Create your own custom skills |
 
 ### Create Your Own Skill
@@ -232,9 +237,9 @@ Four rule files in `.claude/rules/` are automatically loaded by Claude Code in e
 
 ```
 .claude/
-├── agents/          # 12 auto-activating SDLC agents
+├── agents/          # 13 auto-activating SDLC agents
 ├── commands/        # 12 slash commands
-├── skills/          # 16 modular knowledge packages
+├── skills/          # 20 modular knowledge packages
 ├── rules/           # 4 auto-enforced rule sets
 ├── lib/             # Templates, patterns, coordination protocol
 └── history/         # Session history

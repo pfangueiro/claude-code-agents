@@ -19,7 +19,7 @@
 set -e
 
 # Configuration
-SCRIPT_VERSION="2.5.0"
+SCRIPT_VERSION="2.6.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
 DEBUG="${DEBUG:-false}"
@@ -54,6 +54,7 @@ AGENTS=(
     "frontend-specialist"
     "api-backend"
     "incident-commander"
+    "sre-specialist"
     "meta-agent"
 )
 
@@ -390,6 +391,7 @@ This project has specialized AI agents that **automatically activate** when you 
 | "create UI" | **frontend-specialist** | Builds responsive components |
 | "create API" | **api-backend** | Implements backend services |
 | "production is down!" | **incident-commander** 🚨 | Emergency response (Opus) |
+| "define SLOs" | **sre-specialist** | SRE, reliability, runbooks |
 | "create an agent" | **meta-agent** | Generates new specialized agents |
 
 ### 💡 Example
@@ -468,6 +470,7 @@ append_claude_md_section() {
 - **Frontend:** "UI", "React" → `frontend-specialist`
 - **Backend:** "API", "endpoint" → `api-backend`
 - **Emergency:** "CRITICAL", "outage" → `incident-commander` (Opus)
+- **SRE:** "SLO", "reliability", "runbook" → `sre-specialist`
 - **Agent Creation:** "create agent", "generate agent" → `meta-agent`
 
 **Orchestration Skills (Slash Commands):**

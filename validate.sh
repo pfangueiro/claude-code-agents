@@ -61,6 +61,7 @@ EXPECTED_AGENTS=(
     "frontend-specialist"
     "api-backend"
     "incident-commander"
+    "sre-specialist"
     "meta-agent"
 )
 
