@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Claude Agents** — enterprise AI agent system with 12 specialized SDLC/SSDLC agents, 16 skills, and 12 slash commands that auto-activate based on natural language. Automatically selects optimal Claude model (Haiku/Sonnet/Opus) per task complexity.
+**Claude Agents** — enterprise AI agent system with 13 specialized SDLC/SSDLC agents, 20 skills, and 12 slash commands that auto-activate based on natural language. Automatically selects optimal Claude model (Haiku/Sonnet/Opus) per task complexity.
 
 ## IMPORTANT: Auto-Activation
 
@@ -25,6 +25,7 @@ Agents activate automatically from natural language. Just describe what you want
 | **frontend-specialist** | frontend, UI, UX, React, Vue, Angular, component, CSS | Sonnet |
 | **api-backend** | backend, API, endpoint, service, REST, GraphQL, microservice | Sonnet |
 | **incident-commander** | CRITICAL, EMERGENCY, INCIDENT, OUTAGE, production down | **Opus** |
+| **sre-specialist** | SRE, reliability, SLO, SLI, error budget, on-call, postmortem, capacity, chaos, runbook | Sonnet |
 | **meta-agent** | create agent, generate agent, agent template, SDLC agent | **Opus** |
 
 Agent collaboration patterns: see `.claude/lib/agent-coordination.md`
@@ -50,6 +51,7 @@ Agent collaboration patterns: see `.claude/lib/agent-coordination.md`
 Skills provide modular knowledge packages that complement agents. See `.claude/skills/README.md` for full documentation.
 
 **Reference skills:** skill-creator, git-workflow, code-review-checklist, deployment-runbook, security-scan
+**SRE/Cloud skills:** kubernetes-ops, observability-stack, sre-runbooks, infrastructure-as-code
 **MCP-powered skills:** library-docs (context7), deep-analysis (sequential-thinking)
 
 Creating skills: `python3 .claude/skills/skill-creator/scripts/init_skill.py <name> --path .claude/skills`

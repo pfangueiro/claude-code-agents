@@ -56,6 +56,11 @@
       "primary": ["maintain", "monitor", "update", "patch", "fix", "debug", "troubleshoot"],
       "secondary": ["log", "metric", "alert", "incident", "ticket", "support", "hotfix"],
       "phrases": ["fix the bug", "monitor the system", "update dependencies", "patch security"]
+    },
+    "reliability": {
+      "primary": ["sre", "reliability", "slo", "sli", "observability", "runbook", "postmortem"],
+      "secondary": ["error-budget", "on-call", "toil", "capacity", "chaos", "uptime", "availability"],
+      "phrases": ["define SLOs", "reduce toil", "plan capacity", "create runbook", "run chaos experiment"]
     }
   },
   "technology_keywords": {
@@ -149,6 +154,14 @@
     "deployment_pipeline": {
       "keywords": ["set up deployment", "create pipeline", "configure ci/cd", "deployment workflow"],
       "agents": ["devops-automation", "test-automation", "security-auditor"]
+    },
+    "reliability_engineering": {
+      "keywords": ["define SLOs", "error budget", "on-call setup", "reliability review", "chaos engineering", "capacity planning"],
+      "agents": ["sre-specialist", "devops-automation", "incident-commander"]
+    },
+    "infrastructure_setup": {
+      "keywords": ["set up kubernetes", "create terraform", "infrastructure as code", "cluster setup", "cloud architecture"],
+      "agents": ["devops-automation", "sre-specialist", "architecture-planner"]
     }
   },
   "context_enhancers": {

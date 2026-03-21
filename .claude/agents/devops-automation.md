@@ -75,9 +75,19 @@ When invoked, you must follow these steps:
 - **AWS**: Use ECR for container registry, ECS/EKS for orchestration, CodePipeline for CI/CD
 - **Azure**: Use ACR for registry, AKS for Kubernetes, Azure DevOps for pipelines
 - **GCP**: Use Artifact Registry, GKE for Kubernetes, Cloud Build for CI/CD
-- **Kubernetes**: Configure proper resource limits, network policies, and pod security policies
+- **Kubernetes**: Configure proper resource limits, network policies, and pod security standards (PSS restricted profile)
 - **Docker**: Optimize layers, use .dockerignore, implement multi-stage builds
 - **Terraform**: Use remote state, implement proper module structure, use workspaces for environments
+
+**Kubernetes & GitOps Depth:**
+- Use **Karpenter** (AWS) for workload-aware node autoscaling — replaces Cluster Autoscaler with faster provisioning and automatic consolidation
+- Layer autoscaling tiers: HPA (pods) → VPA (resource requests) → Karpenter (nodes) → KEDA (event-driven)
+- Deploy via **GitOps** operators: ArgoCD ApplicationSets for multi-cluster, Flux for lightweight GitOps
+- Generate Helm charts with per-environment values files (values-dev.yaml, values-prod.yaml)
+- Enforce Pod Security Standards (PSS restricted profile) at namespace level
+- Always set resource requests AND limits, PodDisruptionBudgets, topology spread constraints
+- See **kubernetes-ops** skill for manifest templates and troubleshooting decision trees
+- See **infrastructure-as-code** skill for Terraform module patterns and IaC testing pyramid
 
 ## Report / Response
 
