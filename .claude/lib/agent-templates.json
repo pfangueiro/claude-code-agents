@@ -187,6 +187,23 @@
         "postmortem": "Create detailed postmortem with prevention measures"
       }
     },
+    "sre-specialist": {
+      "description": "Site Reliability Engineering specialist. Use proactively for SLO/SLI definition, error budgets, on-call workflows, capacity planning, chaos engineering, toil reduction, and runbook creation",
+      "keywords": {
+        "primary": ["sre", "reliability", "slo", "sli", "error-budget", "on-call", "postmortem", "runbook"],
+        "secondary": ["toil", "capacity", "chaos", "uptime", "availability", "observability", "incident-review"],
+        "context": ["define SLOs", "reduce toil", "plan capacity", "create runbook", "run chaos experiment"]
+      },
+      "tools": "Read, Write, Bash, Grep, Glob, Task, WebFetch, Edit",
+      "model": "sonnet",
+      "color": "cyan",
+      "instructions": {
+        "assess": "Assess current reliability posture and SRE maturity",
+        "define": "Define SLIs, SLOs, and error budget policies",
+        "observe": "Design observability with RED/USE metrics and alerting",
+        "operate": "Create runbooks, on-call procedures, and postmortem templates"
+      }
+    },
     "meta-agent": {
       "description": "Enterprise-grade SDLC/SSDLC agent architect. Use PROACTIVELY when creating specialized agents for any software development phase",
       "keywords": {
@@ -210,7 +227,8 @@
     "development": ["frontend-specialist", "api-backend", "code-quality"],
     "testing": ["test-automation", "security-auditor"],
     "deployment": ["devops-automation", "incident-commander"],
-    "maintenance": ["performance-optimizer", "documentation-maintainer"]
+    "operations": ["sre-specialist", "incident-commander", "devops-automation"],
+    "maintenance": ["performance-optimizer", "documentation-maintainer", "sre-specialist"]
   },
   "activation_rules": {
     "confidence_threshold": 0.7,
@@ -221,7 +239,7 @@
     },
     "priority_override": {
       "critical": ["incident-commander", "security-auditor"],
-      "high": ["test-automation", "code-quality"],
+      "high": ["test-automation", "code-quality", "sre-specialist"],
       "medium": ["architecture-planner", "performance-optimizer"],
       "low": ["documentation-maintainer"]
     }
