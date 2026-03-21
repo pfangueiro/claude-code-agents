@@ -194,6 +194,25 @@ Loads a previously saved session and produces a structured briefing.
 - Prominently displays "AVOID These Approaches" section
 - Checks for files modified or deleted since the session was saved
 
+### `/optimize` - Metric-Driven Improvement Loop
+Runs an autonomous optimization loop that iteratively improves a measurable code metric.
+
+**Usage:**
+```
+/optimize lint-warnings
+/optimize type-errors --iterations 5
+/optimize test-coverage --scope src/
+/optimize custom:grep -r TODO src/ | wc -l
+```
+
+**Features:**
+- Supports lint warnings, type errors, test coverage, bundle size, build time, custom metrics
+- Measures baseline, then iteratively improves one change at a time
+- Keeps improvements, reverts regressions automatically
+- Stops on plateau (3 consecutive no-improvement iterations) or max iterations
+- Reports summary with all changes applied and reverted
+- Inspired by karpathy/autoresearch autonomous experimentation pattern
+
 ## Command Development
 
 ### Structure
