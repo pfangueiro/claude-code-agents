@@ -90,6 +90,21 @@ This reference guide helps the meta-agent identify which phase of the Software D
 **Tools Focus**: Monitoring and update tools (Read, Edit, Bash)
 **Model Preference**: Opus for incidents, Sonnet for optimization, Haiku for documentation
 
+### 8. Site Reliability Engineering Phase
+**Keywords**: sre, reliability, slo, sli, error-budget, on-call, postmortem, runbook, capacity, chaos, toil, uptime, availability, observability
+**Context Phrases**:
+- "define SLOs for..."
+- "create runbooks for..."
+- "plan capacity for..."
+- "set up on-call rotation..."
+- "run a chaos experiment..."
+- "reduce operational toil..."
+
+**Recommended Agents**: sre-specialist, incident-commander (for active incidents), devops-automation (for infrastructure changes)
+**Tools Focus**: Analysis and documentation tools (Read, Write, Bash, Grep, WebFetch)
+**Model Preference**: Sonnet for SRE work, Opus for active incidents
+**Complementary Skills**: kubernetes-ops, observability-stack, sre-runbooks, infrastructure-as-code
+
 ## Multi-Phase Workflows
 
 ### Full Stack Development
@@ -107,6 +122,10 @@ Agents: incident-commander (lead) + supporting specialists
 ### Performance Optimization
 Phases: Profiling → Analysis → Optimization → Testing → Deployment
 Agents: performance-optimizer → code-quality → test-automation → devops-automation
+
+### SRE & Reliability
+Phases: SLO Definition → Observability → Runbooks → Capacity Planning → Chaos Engineering
+Agents: sre-specialist (lead) → devops-automation (infrastructure) → incident-commander (incidents)
 
 ## Agent Collaboration Patterns
 
