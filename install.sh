@@ -857,6 +857,22 @@ personalize_setup() {
     print_success "Created ~/.claude/CLAUDE.md for ${detected_name}"
 }
 
+ensure_statusline() {
+    # Install statusline if not already present (idempotent, never overwrites)
+    if [ -f "$HOME/.claude/statusline.sh" ]; then
+        print_skip "Statusline already installed"
+        return 0
+    fi
+
+    local src="${SCRIPT_DIR}/global-config/statusline.sh"
+    if [ -f "$src" ]; then
+        mkdir -p "$HOME/.claude"
+        cp "$src" "$HOME/.claude/statusline.sh"
+        chmod +x "$HOME/.claude/statusline.sh"
+        print_success "Installed statusline.sh (first-time setup)"
+    fi
+}
+
 # ============================================================================
 # Installation Modes
 # ============================================================================
@@ -928,6 +944,9 @@ install_full() {
 
     # Install analytics dashboard (global, once per machine)
     install_analytics || ((install_errors++)) || true
+
+    # Ensure statusline is installed (global, once per machine)
+    ensure_statusline
 
     if [ $install_errors -gt 0 ]; then
         print_error "$install_errors component(s) failed to install"
@@ -1010,6 +1029,9 @@ repair_installation() {
 
     # Repair analytics dashboard
     install_analytics || print_error "Analytics installation failed"
+
+    # Ensure statusline is installed
+    ensure_statusline
 }
 
 patch_developer_workflow_in_claude_md() {
@@ -1261,6 +1283,9 @@ update_installation() {
 
     # Patch Developer Workflow Commands section if missing
     patch_developer_workflow_in_claude_md
+
+    # Ensure statusline is installed
+    ensure_statusline
 }
 
 # ============================================================================
