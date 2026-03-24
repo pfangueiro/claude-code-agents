@@ -19,6 +19,7 @@
     --red: #f85149;
     --purple: #bc8cff;
     --cyan: #39d2c0;
+    --pink: #f778ba;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -40,21 +41,14 @@
     margin-bottom: 24px;
     padding-bottom: 16px;
     border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    gap: 12px;
   }
 
-  header h1 {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--text);
-  }
-
+  header h1 { font-size: 20px; font-weight: 600; }
   header h1 span { color: var(--accent); }
 
-  .controls {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
   .controls button {
     background: var(--surface);
@@ -69,17 +63,13 @@
 
   .controls button:hover { border-color: var(--accent); color: var(--text); }
   .controls button.active { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
-
-  .refresh-indicator {
-    font-size: 12px;
-    color: var(--text-dim);
-  }
+  .refresh-indicator { font-size: 12px; color: var(--text-dim); }
 
   /* Summary cards */
   .summary {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
     margin-bottom: 24px;
   }
 
@@ -87,26 +77,17 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 20px;
+    padding: 16px;
   }
 
-  .card .value {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--text);
-    line-height: 1.2;
-  }
-
-  .card .label {
-    font-size: 13px;
-    color: var(--text-dim);
-    margin-top: 4px;
-  }
-
+  .card .value { font-size: 26px; font-weight: 700; line-height: 1.2; }
+  .card .label { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
   .card.cost .value { color: var(--green); }
   .card.sessions .value { color: var(--accent); }
   .card.agents .value { color: var(--purple); }
   .card.tokens .value { color: var(--cyan); }
+  .card.cache .value { color: var(--orange); }
+  .card.hooks .value { color: var(--pink); }
 
   /* Charts grid */
   .charts {
@@ -122,12 +103,13 @@
     border-radius: 8px;
     padding: 20px;
     min-width: 0;
+    position: relative;
   }
 
   .chart-card.full-width { grid-column: 1 / -1; }
 
   .chart-card h2 {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-dim);
     margin-bottom: 16px;
@@ -135,10 +117,11 @@
     letter-spacing: 0.5px;
   }
 
-  .chart-container {
-    position: relative;
-    width: 100%;
-    height: 280px;
+  .chart-container { position: relative; width: 100%; height: 280px; }
+  .chart-empty {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-dim); font-size: 14px;
   }
 
   /* Tables */
@@ -150,20 +133,40 @@
     margin-bottom: 24px;
   }
 
-  .table-card h2 {
-    font-size: 14px;
+  .table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .table-header h2 {
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-dim);
-    margin-bottom: 16px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
+  .table-controls { display: flex; gap: 8px; align-items: center; }
+
+  .table-controls input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 6px;
     font-size: 13px;
+    width: 200px;
   }
+
+  .table-controls input::placeholder { color: var(--text-dim); }
+
+  .table-scroll { overflow-x: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
 
   th {
     text-align: left;
@@ -171,11 +174,8 @@
     font-weight: 500;
     padding: 8px 12px;
     border-bottom: 1px solid var(--border);
-    cursor: pointer;
-    user-select: none;
+    white-space: nowrap;
   }
-
-  th:hover { color: var(--accent); }
 
   td {
     padding: 8px 12px;
@@ -185,6 +185,7 @@
 
   tr:last-child td { border-bottom: none; }
   tr:hover td { background: rgba(88, 166, 255, 0.04); }
+  tr.clickable { cursor: pointer; }
 
   .badge {
     display: inline-block;
@@ -201,18 +202,76 @@
   .cost { color: var(--green); font-weight: 600; }
   .dim { color: var(--text-dim); }
 
-  .empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--text-dim);
+  .pagination {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 16px;
   }
 
-  .empty-state h2 { font-size: 18px; margin-bottom: 8px; color: var(--text); }
+  .pagination button {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .pagination button:hover { border-color: var(--accent); color: var(--text); }
+  .pagination button:disabled { opacity: 0.3; cursor: default; }
+  .pagination span { padding: 6px 0; color: var(--text-dim); font-size: 13px; }
+
+  /* Session detail modal */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.visible { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 700px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+
+  .modal h3 { font-size: 16px; margin-bottom: 16px; }
+  .modal .close-btn {
+    float: right;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 20px;
+    cursor: pointer;
+  }
+  .modal .close-btn:hover { color: var(--text); }
+  .modal .detail-section { margin-bottom: 16px; }
+  .modal .detail-section h4 { font-size: 12px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; }
 
   @media (max-width: 768px) {
     .charts { grid-template-columns: 1fr; }
-    .summary { grid-template-columns: repeat(2, 1fr); }
-    body { padding: 16px; }
+    body { padding: 12px; }
+  }
+
+  @media (max-width: 480px) {
+    .summary { grid-template-columns: 1fr 1fr; }
+    .chart-container { height: 220px; }
+    .table-controls input { width: 140px; }
+  }
+
+  @media (max-width: 375px) {
+    .summary { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -224,6 +283,7 @@
       <button data-days="7">7d</button>
       <button data-days="14" class="active">14d</button>
       <button data-days="30">30d</button>
+      <button data-days="90">90d</button>
       <button data-days="0">All</button>
     </div>
   </header>
@@ -253,56 +313,85 @@
       <div class="value" id="outputTokens">--</div>
       <div class="label">Output Tokens</div>
     </div>
+    <div class="card cache">
+      <div class="value" id="cacheEfficiency">--</div>
+      <div class="label">Cache Hit Rate</div>
+    </div>
   </div>
 
   <div class="charts">
     <div class="chart-card full-width">
       <h2>Daily Cost &amp; Sessions</h2>
-      <div class="chart-container"><canvas id="dailyChart"></canvas></div>
+      <div class="chart-container"><canvas id="dailyChart"></canvas><div class="chart-empty" id="dailyEmpty" style="display:none">No data for this period</div></div>
     </div>
     <div class="chart-card">
       <h2>Cost by Project</h2>
-      <div class="chart-container"><canvas id="projectChart"></canvas></div>
+      <div class="chart-container"><canvas id="projectChart"></canvas><div class="chart-empty" id="projectEmpty" style="display:none">No data</div></div>
     </div>
     <div class="chart-card">
       <h2>Agent Activations</h2>
-      <div class="chart-container"><canvas id="agentChart"></canvas></div>
+      <div class="chart-container"><canvas id="agentChart"></canvas><div class="chart-empty" id="agentEmpty" style="display:none">No data</div></div>
     </div>
     <div class="chart-card">
       <h2>Model Distribution</h2>
-      <div class="chart-container"><canvas id="modelChart"></canvas></div>
+      <div class="chart-container"><canvas id="modelChart"></canvas><div class="chart-empty" id="modelEmpty" style="display:none">No data</div></div>
+    </div>
+    <div class="chart-card">
+      <h2>Top Tools by Usage</h2>
+      <div class="chart-container"><canvas id="toolChart"></canvas><div class="chart-empty" id="toolEmpty" style="display:none">No data</div></div>
     </div>
     <div class="chart-card">
       <h2>Top Projects by Tokens</h2>
-      <div class="chart-container"><canvas id="tokenChart"></canvas></div>
+      <div class="chart-container"><canvas id="tokenChart"></canvas><div class="chart-empty" id="tokenEmpty" style="display:none">No data</div></div>
     </div>
   </div>
 
   <div class="table-card">
-    <h2>Recent Sessions</h2>
-    <table id="sessionsTable">
-      <thead>
-        <tr>
-          <th>Project</th>
-          <th>Started</th>
-          <th>Duration</th>
-          <th>Turns</th>
-          <th>Cost</th>
-          <th>Model</th>
-          <th>Agents</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+    <div class="table-header">
+      <h2>Recent Sessions</h2>
+      <div class="table-controls">
+        <input type="text" id="sessionSearch" placeholder="Search projects...">
+      </div>
+    </div>
+    <div class="table-scroll">
+      <table id="sessionsTable">
+        <thead>
+          <tr>
+            <th>Project</th>
+            <th>Branch</th>
+            <th>Started</th>
+            <th>Duration</th>
+            <th>Cost</th>
+            <th>Model</th>
+            <th>Agents</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="pagination">
+      <button id="prevPage" disabled>&laquo; Prev</button>
+      <span id="pageInfo">Page 1</span>
+      <button id="nextPage">Next &raquo;</button>
+    </div>
+  </div>
+
+  <!-- Session detail modal -->
+  <div class="modal-overlay" id="sessionModal">
+    <div class="modal">
+      <button class="close-btn" id="closeModal">&times;</button>
+      <h3 id="modalTitle">Session Detail</h3>
+      <div id="modalContent"></div>
+    </div>
   </div>
 
 <script>
-// ---------------------------------------------------------------------------
 // State
-// ---------------------------------------------------------------------------
 let currentDays = 14;
 let charts = {};
-let refreshTimer = null;
+let sessionPage = 0;
+const PAGE_SIZE = 25;
+let searchTimeout = null;
 
 // Chart.js global defaults
 Chart.defaults.color = '#8b949e';
@@ -312,9 +401,7 @@ Chart.defaults.font.size = 12;
 
 const COLORS = ['#58a6ff', '#3fb950', '#d29922', '#f85149', '#bc8cff', '#39d2c0', '#f778ba', '#79c0ff', '#7ee787', '#e3b341'];
 
-// ---------------------------------------------------------------------------
 // API helpers
-// ---------------------------------------------------------------------------
 async function fetchAPI(endpoint, extraParams = {}) {
   const params = new URLSearchParams({ days: currentDays, ...extraParams });
   const resp = await fetch(`/api/${endpoint}?${params}`);
@@ -323,18 +410,20 @@ async function fetchAPI(endpoint, extraParams = {}) {
 }
 
 function formatCost(val) {
-  if (val === 0) return '$0.00';
+  if (!val || val === 0) return '$0.00';
   if (val >= 0.01) return `$${val.toFixed(2)}`;
   return `$${val.toFixed(4)}`;
 }
 
 function escapeHtml(str) {
+  if (!str) return '';
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
 }
 
 function formatTokens(val) {
+  if (!val) return '0';
   if (val >= 1e9) return `${(val / 1e9).toFixed(1)}B`;
   if (val >= 1e6) return `${(val / 1e6).toFixed(1)}M`;
   if (val >= 1e3) return `${(val / 1e3).toFixed(1)}K`;
@@ -353,27 +442,30 @@ function formatDate(iso) {
   const d = new Date(iso);
   const now = new Date();
   const diffH = (now - d) / 3600000;
-  if (diffH < 1) return `${Math.round(diffH * 60)}m ago`;
+  if (diffH < 1) return `${Math.max(1, Math.round(diffH * 60))}m ago`;
   if (diffH < 24) return `${Math.round(diffH)}h ago`;
   return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function shortModel(model) {
   if (!model) return '--';
-  return model
-    .replace('claude-', '')
-    .replace(/-\d{8}$/g, '');
+  return model.replace('claude-', '').replace(/-\d{8}$/g, '');
 }
 
-// ---------------------------------------------------------------------------
-// Chart builders
-// ---------------------------------------------------------------------------
+// Chart builders with empty state
 function destroyChart(key) {
   if (charts[key]) { charts[key].destroy(); delete charts[key]; }
 }
 
+function showEmpty(id, show) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = show ? 'flex' : 'none';
+}
+
 function buildDailyChart(data) {
   destroyChart('daily');
+  showEmpty('dailyEmpty', !data.length);
+  if (!data.length) return;
   const ctx = document.getElementById('dailyChart').getContext('2d');
   charts.daily = new Chart(ctx, {
     type: 'bar',
@@ -386,6 +478,7 @@ function buildDailyChart(data) {
           backgroundColor: 'rgba(63, 185, 80, 0.6)',
           borderColor: '#3fb950',
           borderWidth: 1,
+          borderRadius: 3,
           yAxisID: 'y',
           order: 2,
         },
@@ -409,33 +502,27 @@ function buildDailyChart(data) {
       interaction: { mode: 'index', intersect: false },
       scales: {
         x: { grid: { display: false } },
-        y: {
-          position: 'left',
-          title: { display: true, text: 'Cost ($)' },
-          grid: { color: 'rgba(48, 54, 61, 0.5)' },
-        },
-        y1: {
-          position: 'right',
-          title: { display: true, text: 'Sessions' },
-          grid: { display: false },
-        },
+        y: { position: 'left', title: { display: true, text: 'Cost ($)' }, grid: { color: 'rgba(48, 54, 61, 0.5)' } },
+        y1: { position: 'right', title: { display: true, text: 'Sessions' }, grid: { display: false } },
       },
       plugins: { legend: { display: true, position: 'top' } },
     },
   });
 }
 
-function buildProjectChart(data) {
-  destroyChart('project');
+function buildBarChart(key, canvasId, emptyId, data, labelField, valueField, options = {}) {
+  destroyChart(key);
+  showEmpty(emptyId, !data.length);
+  if (!data.length) return;
   const top = data.slice(0, 10);
-  const ctx = document.getElementById('projectChart').getContext('2d');
-  charts.project = new Chart(ctx, {
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  charts[key] = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: top.map(d => d.project),
+      labels: top.map(d => d[labelField]),
       datasets: [{
-        data: top.map(d => d.cost),
-        backgroundColor: COLORS.slice(0, top.length),
+        data: top.map(d => d[valueField]),
+        backgroundColor: options.color || COLORS.slice(0, top.length),
         borderWidth: 0,
         borderRadius: 4,
       }],
@@ -445,35 +532,11 @@ function buildProjectChart(data) {
       maintainAspectRatio: false,
       indexAxis: 'y',
       scales: {
-        x: { title: { display: true, text: 'Cost ($)' }, grid: { color: 'rgba(48, 54, 61, 0.5)' } },
-        y: { grid: { display: false } },
-      },
-      plugins: { legend: { display: false } },
-    },
-  });
-}
-
-function buildAgentChart(data) {
-  destroyChart('agent');
-  const top = data.slice(0, 10);
-  const ctx = document.getElementById('agentChart').getContext('2d');
-  charts.agent = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: top.map(d => d.agent_name),
-      datasets: [{
-        data: top.map(d => d.activation_count),
-        backgroundColor: COLORS.slice(0, top.length),
-        borderWidth: 0,
-        borderRadius: 4,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      indexAxis: 'y',
-      scales: {
-        x: { title: { display: true, text: 'Activations' }, grid: { color: 'rgba(48, 54, 61, 0.5)' } },
+        x: {
+          title: { display: true, text: options.xLabel || '' },
+          grid: { color: 'rgba(48, 54, 61, 0.5)' },
+          ticks: options.xFormat ? { callback: options.xFormat } : {},
+        },
         y: { grid: { display: false } },
       },
       plugins: { legend: { display: false } },
@@ -483,6 +546,8 @@ function buildAgentChart(data) {
 
 function buildModelChart(data) {
   destroyChart('model');
+  showEmpty('modelEmpty', !data.length);
+  if (!data.length) return;
   const ctx = document.getElementById('modelChart').getContext('2d');
   charts.model = new Chart(ctx, {
     type: 'doughnut',
@@ -490,7 +555,7 @@ function buildModelChart(data) {
       labels: data.map(d => shortModel(d.model)),
       datasets: [{
         data: data.map(d => d.cost),
-        backgroundColor: ['#58a6ff', '#3fb950', '#d29922', '#f85149', '#bc8cff', '#39d2c0'],
+        backgroundColor: COLORS.slice(0, data.length),
         borderColor: '#161b22',
         borderWidth: 2,
       }],
@@ -514,73 +579,140 @@ function buildModelChart(data) {
   });
 }
 
-function buildTokenChart(data) {
-  destroyChart('token');
-  const top = data.slice(0, 10);
-  const ctx = document.getElementById('tokenChart').getContext('2d');
-  charts.token = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: top.map(d => d.project),
-      datasets: [{
-        data: top.map(d => d.total_tokens),
-        backgroundColor: 'rgba(57, 210, 192, 0.6)',
-        borderColor: '#39d2c0',
-        borderWidth: 1,
-        borderRadius: 4,
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      indexAxis: 'y',
-      scales: {
-        x: {
-          title: { display: true, text: 'Tokens' },
-          grid: { color: 'rgba(48, 54, 61, 0.5)' },
-          ticks: { callback: v => formatTokens(v) },
-        },
-        y: { grid: { display: false } },
-      },
-      plugins: { legend: { display: false } },
-    },
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Sessions table
-// ---------------------------------------------------------------------------
+// Sessions table with pagination
 function buildSessionsTable(data) {
   const tbody = document.querySelector('#sessionsTable tbody');
   if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="dim" style="text-align:center">No sessions found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="dim" style="text-align:center;padding:40px">No sessions found for this period</td></tr>';
     return;
   }
   tbody.innerHTML = data.map(s => `
-    <tr>
+    <tr class="clickable" data-sid="${escapeHtml(s.session_id)}">
       <td><strong>${escapeHtml(s.project)}</strong></td>
+      <td class="dim mono">${escapeHtml(s.git_branch || '--')}</td>
       <td class="dim">${formatDate(s.started_at)}</td>
       <td class="mono">${formatDuration(s.duration_ms)}</td>
-      <td class="mono">${s.total_turns || '--'}</td>
       <td class="cost">${formatCost(s.cost)}</td>
       <td class="mono dim">${escapeHtml(shortModel(s.model))}</td>
       <td>${s.agents.map(a => `<span class="badge">${escapeHtml(a)}</span>`).join('') || '<span class="dim">--</span>'}</td>
     </tr>
   `).join('');
+
+  // Attach click handlers for drill-down
+  tbody.querySelectorAll('tr.clickable').forEach(row => {
+    row.addEventListener('click', () => showSessionDetail(row.dataset.sid));
+  });
 }
 
-// ---------------------------------------------------------------------------
+// Session detail modal
+async function showSessionDetail(sessionId) {
+  const modal = document.getElementById('sessionModal');
+  const content = document.getElementById('modalContent');
+  const title = document.getElementById('modalTitle');
+
+  content.innerHTML = '<p class="dim">Loading...</p>';
+  modal.classList.add('visible');
+
+  try {
+    const detail = await fetchAPI('session-detail', { session_id: sessionId });
+    if (detail.error) { content.innerHTML = `<p class="dim">${escapeHtml(detail.error)}</p>`; return; }
+
+    title.textContent = `${detail.project} — ${formatDate(detail.started_at)}`;
+
+    let html = `
+      <div class="detail-section">
+        <h4>Overview</h4>
+        <table>
+          <tr><td class="dim">Branch</td><td>${escapeHtml(detail.git_branch || '--')}</td></tr>
+          <tr><td class="dim">Duration</td><td>${formatDuration(detail.duration_ms)}</td></tr>
+          <tr><td class="dim">Total Cost</td><td class="cost">${formatCost(detail.total_cost)}</td></tr>
+          <tr><td class="dim">Turns</td><td>${detail.total_turns || '--'}</td></tr>
+          <tr><td class="dim">Version</td><td class="mono">${escapeHtml(detail.claude_version || '--')}</td></tr>
+        </table>
+      </div>`;
+
+    if (detail.models && detail.models.length) {
+      html += `<div class="detail-section"><h4>Models Used</h4><table>
+        <tr><th>Model</th><th>Calls</th><th>Cost</th><th>Input</th><th>Output</th><th>Cache</th></tr>
+        ${detail.models.map(m => `<tr>
+          <td class="mono">${escapeHtml(shortModel(m.model))}</td>
+          <td>${m.calls}</td>
+          <td class="cost">${formatCost(m.cost)}</td>
+          <td class="mono">${formatTokens(m.input_tokens)}</td>
+          <td class="mono">${formatTokens(m.output_tokens)}</td>
+          <td class="mono">${formatTokens(m.cache_read_tokens)}</td>
+        </tr>`).join('')}
+      </table></div>`;
+    }
+
+    if (detail.agents && detail.agents.length) {
+      html += `<div class="detail-section"><h4>Agents</h4><table>
+        <tr><th>Agent</th><th>Status</th><th>Duration</th><th>Description</th></tr>
+        ${detail.agents.map(a => `<tr>
+          <td><span class="badge">${escapeHtml(a.agent_name)}</span></td>
+          <td style="color:${a.status === 'completed' ? 'var(--green)' : 'var(--red)'}">${escapeHtml(a.status || '--')}</td>
+          <td class="mono">${formatDuration(a.duration_ms)}</td>
+          <td class="dim">${escapeHtml(a.description || '--')}</td>
+        </tr>`).join('')}
+      </table></div>`;
+    }
+
+    if (detail.tools && detail.tools.length) {
+      html += `<div class="detail-section"><h4>Tools Used</h4><table>
+        <tr><th>Tool</th><th>Calls</th></tr>
+        ${detail.tools.map(t => `<tr><td class="mono">${escapeHtml(t.tool_name)}</td><td>${t.call_count}</td></tr>`).join('')}
+      </table></div>`;
+    }
+
+    content.innerHTML = html;
+  } catch (err) {
+    content.innerHTML = `<p class="dim">Error: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+document.getElementById('closeModal').addEventListener('click', () => {
+  document.getElementById('sessionModal').classList.remove('visible');
+});
+document.getElementById('sessionModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('visible');
+});
+
+// Pagination
+document.getElementById('prevPage').addEventListener('click', () => {
+  if (sessionPage > 0) { sessionPage--; loadSessions(); }
+});
+document.getElementById('nextPage').addEventListener('click', () => {
+  sessionPage++;
+  loadSessions();
+});
+
+// Search
+document.getElementById('sessionSearch').addEventListener('input', (e) => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => { sessionPage = 0; loadSessions(); }, 300);
+});
+
+async function loadSessions() {
+  const search = document.getElementById('sessionSearch').value.trim();
+  const params = { limit: PAGE_SIZE, offset: sessionPage * PAGE_SIZE };
+  if (search) params.search = search;
+  const sessions = await fetchAPI('sessions', params);
+  buildSessionsTable(sessions);
+  document.getElementById('prevPage').disabled = sessionPage === 0;
+  document.getElementById('nextPage').disabled = sessions.length < PAGE_SIZE;
+  document.getElementById('pageInfo').textContent = `Page ${sessionPage + 1}`;
+}
+
 // Data loading
-// ---------------------------------------------------------------------------
 async function loadAll() {
   try {
-    const [summary, daily, projects, agents, models, sessions] = await Promise.all([
+    const [summary, daily, projects, agents, models, tools] = await Promise.all([
       fetchAPI('summary'),
       fetchAPI('daily'),
       fetchAPI('projects'),
       fetchAPI('agents'),
       fetchAPI('models'),
-      fetchAPI('sessions', { limit: 50 }),
+      fetchAPI('tools'),
     ]);
 
     // Summary cards
@@ -590,16 +722,18 @@ async function loadAll() {
     document.getElementById('agentCount').textContent = summary.agent_count;
     document.getElementById('inputTokens').textContent = formatTokens(summary.input_tokens);
     document.getElementById('outputTokens').textContent = formatTokens(summary.output_tokens);
+    document.getElementById('cacheEfficiency').textContent = `${summary.cache_efficiency || 0}%`;
 
     // Charts
     buildDailyChart(daily);
-    buildProjectChart(projects);
-    buildAgentChart(agents);
+    buildBarChart('project', 'projectChart', 'projectEmpty', projects, 'project', 'cost', { xLabel: 'Cost ($)' });
+    buildBarChart('agent', 'agentChart', 'agentEmpty', agents, 'agent_name', 'activation_count', { xLabel: 'Activations' });
     buildModelChart(models);
-    buildTokenChart(projects);
+    buildBarChart('tool', 'toolChart', 'toolEmpty', tools, 'tool_name', 'total_calls', { xLabel: 'Calls', color: 'rgba(247, 120, 186, 0.6)' });
+    buildBarChart('token', 'tokenChart', 'tokenEmpty', projects, 'project', 'total_tokens', { xLabel: 'Tokens', color: 'rgba(57, 210, 192, 0.6)', xFormat: v => formatTokens(v) });
 
-    // Table
-    buildSessionsTable(sessions);
+    // Sessions table
+    await loadSessions();
 
     // Refresh indicator
     document.getElementById('lastRefresh').textContent = `Updated ${new Date().toLocaleTimeString()}`;
@@ -609,25 +743,20 @@ async function loadAll() {
   }
 }
 
-// ---------------------------------------------------------------------------
 // Day range selector
-// ---------------------------------------------------------------------------
 document.querySelectorAll('.controls button[data-days]').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.controls button').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentDays = parseInt(btn.dataset.days, 10);
+    sessionPage = 0;
     loadAll();
   });
 });
 
-// ---------------------------------------------------------------------------
 // Init
-// ---------------------------------------------------------------------------
 loadAll();
-
-// Auto-refresh every 60s
-refreshTimer = setInterval(loadAll, 60000);
+setInterval(loadAll, 60000);
 </script>
 </body>
 </html>
