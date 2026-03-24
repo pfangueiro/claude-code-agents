@@ -174,6 +174,9 @@ def init_db(db_path):
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
 
+    # Run migrations FIRST so columns exist before schema indexes reference them
+    migrate_schema(conn)
+
     with open(schema_path) as f:
         conn.executescript(f.read())
 
@@ -191,7 +194,7 @@ def migrate_schema(conn):
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
         except sqlite3.OperationalError as e:
-            if "duplicate column name" not in str(e):
+            if "duplicate column name" not in str(e) and "no such table" not in str(e):
                 raise
 
     # Create hook_events table if missing (added in v2.4)
@@ -208,10 +211,13 @@ def migrate_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_hook_events_type "
         "ON hook_events(event_type, timestamp)"
     )
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_agent_status "
-        "ON agent_activations(status)"
-    )
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_agent_status "
+            "ON agent_activations(status)"
+        )
+    except sqlite3.OperationalError:
+        pass  # Table may not exist yet on fresh DB — schema.sql will create it
     # daily_summary table (added in v2.7)
     conn.execute(
         "CREATE TABLE IF NOT EXISTS daily_summary ("
