@@ -1,7 +1,7 @@
 ---
 name: deep-analysis
 description: Structured multi-step reasoning for complex problems using the sequential-thinking MCP server. Use when facing architectural decisions, performance bottlenecks, complex debugging, design trade-offs, technology selection, or any problem requiring rigorous step-by-step analysis with hypothesis testing.
-disable-model-invocation: true
+context: fork
 argument-hint: "<problem description or question requiring deep reasoning>"
 ---
 

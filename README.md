@@ -43,7 +43,7 @@ Agents activate automatically based on your words.
 | **Slash Commands** | 13 | `/commit-pr`, `/review-pr`, `/security-scan`, `/compact`, `/new-feature`, `/create-jira`, `/build-fix`, `/tdd`, `/quality-gate`, `/checkpoint`, `/save-session`, `/resume-session`, `/optimize` |
 | **MCP Servers** | 5 | context7, sequential-thinking, playwright, github, postgres |
 | **Rules** | 4 | Auto-enforced security, code quality, fix quality, and verification standards |
-| **Hooks** | 9 | Agent tracking, session lifecycle, permission auditing, file protection, auto-lint, debug detection, pre-compact snapshots, notifications |
+| **Hooks** | 10 | Agent tracking, session lifecycle, permission auditing, file protection, auto-lint, debug detection, pre-compact snapshots, notifications |
 | **Keybindings** | 6 | Ctrl+S (commit), Ctrl+T (PR), Ctrl+R (review), etc. |
 
 ---
@@ -99,7 +99,7 @@ See [`.claude/lib/agent-coordination.md`](.claude/lib/agent-coordination.md) for
 | **Minimal** | `./install.sh --minimal` | Just CLAUDE.md with agent activation |
 | **Repair** | `./install.sh --repair` | Fix missing components |
 | **Update** | `./install.sh --update` | Update to latest version |
-| **Validate** | `./validate.sh` | Verify all 150 checks pass |
+| **Validate** | `./validate.sh` | Verify all 153 checks pass |
 
 ### Deploy to an Existing Project
 
@@ -112,7 +112,7 @@ cd /path/to/your/project
 
 ```bash
 ./validate.sh
-# All validations passed! (150/150 checks)
+# All validations passed! (150/153 checks)
 ```
 
 ---
@@ -217,7 +217,7 @@ Four rule files in `.claude/rules/` are automatically loaded by Claude Code in e
 
 ## Hooks
 
-9 hook events across 7 command hooks, installed globally to `~/.claude/hooks/`:
+10 hook events across 8 command hooks, installed globally to `~/.claude/hooks/`:
 
 | Hook | Event | What It Does |
 |------|-------|-------------|
@@ -228,6 +228,7 @@ Four rule files in `.claude/rules/` are automatically loaded by Claude Code in e
 | **session-end.sh** | Stop | Logs session completion for observability |
 | **smart-guard.sh** | PermissionRequest | Auto-approves safe reads, audits dangerous operations |
 | **pre-compact.sh** | PreCompact | Auto-saves session snapshot before context compaction |
+| **post-compact.sh** | PostCompact | Verifies session snapshot was saved after compaction |
 
 **Phase 2 reference configs** (opt-in, not enabled by default):
 - `smart-file-guard.json` — prompt hook: LLM-based file protection
@@ -247,8 +248,8 @@ Four rule files in `.claude/rules/` are automatically loaded by Claude Code in e
 └── history/         # Session history
 
 global-config/
-├── hooks/           # 7 command hooks + 2 reference configs
-├── settings.json.template  # 9 hook events, permissions, model config
+├── hooks/           # 8 command hooks + 2 reference configs
+├── settings.json.template  # 10 hook events, permissions, model config
 └── ...              # keybindings, statusline, output styles
 ```
 
