@@ -290,6 +290,7 @@ EXPECTED_HOOKS=(
     "session-end.sh"
     "smart-guard.sh"
     "pre-compact.sh"
+    "post-compact.sh"
 )
 
 EXPECTED_HOOK_CONFIGS=(
@@ -333,7 +334,7 @@ fi
 
 # Validate settings.json.template has expected hook events
 if [ -f "global-config/settings.json.template" ]; then
-    for event in Notification PreToolUse PostToolUse SessionStart SubagentStart SubagentStop Stop PermissionRequest PreCompact; do
+    for event in Notification PreToolUse PostToolUse SessionStart SubagentStart SubagentStop Stop PermissionRequest PreCompact PostCompact; do
         if grep -q "\"$event\"" "global-config/settings.json.template" 2>/dev/null; then
             pass "settings.json.template: has $event hook event"
         else

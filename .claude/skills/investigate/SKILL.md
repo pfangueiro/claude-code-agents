@@ -1,7 +1,7 @@
 ---
 name: investigate
 description: Deep root cause analysis engine. Systematically investigates bugs, crashes, unexpected behavior, and performance issues through an 8-phase diagnostic protocol. Uses structured reasoning (sequential-thinking MCP), multi-pass codebase analysis, git forensics, evidence-based hypothesis testing, and the 5 Whys method. Never jumps to a fix — always proves the root cause first.
-disable-model-invocation: true
+context: fork
 argument-hint: "<bug description, error message, or symptom>"
 ---
 
