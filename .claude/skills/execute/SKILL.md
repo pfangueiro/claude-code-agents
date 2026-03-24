@@ -1,7 +1,7 @@
 ---
 name: execute
 description: Orchestrated task execution engine. Decomposes any goal into small atomic tasks, plans dependencies, selects the right agent/tool/MCP server for each, executes in optimally parallel batches, and tracks everything. Use when given a complex, multi-step goal that benefits from structured decomposition and full tool utilization.
-disable-model-invocation: true
+context: fork
 argument-hint: "<goal description>"
 ---
 

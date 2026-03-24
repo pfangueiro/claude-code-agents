@@ -1,7 +1,7 @@
 ---
 name: deep-read
 description: Comprehensive codebase reading engine. Systematically reads actual source code line by line through a 6-phase protocol — scoping, structural mapping, execution tracing, deep reading, pattern synthesis, and structured reporting. Source code is the source of truth. Use when needing to truly understand how code works, not just what documentation claims.
-disable-model-invocation: true
+context: fork
 argument-hint: "<codebase area, module, flow, or question to understand>"
 ---
 
