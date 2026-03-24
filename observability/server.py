@@ -121,6 +121,33 @@ def api_summary(params):
             if total_input > 0:
                 cache_efficiency = round(total_cache_read / total_input * 100, 1)
 
+            # Cost per 1K tokens
+            total_all_tokens = total_input + total_output
+            cost_per_1k = round(total_cost / (total_all_tokens / 1000), 4) if total_all_tokens > 0 else 0
+
+            # Previous period comparison for trends
+            prev_cost = 0
+            prev_sessions = 0
+            prev_agents = 0
+            if days > 0:
+                prev_clause = f"AND timestamp >= datetime('now', '-{days * 2} days') AND timestamp < datetime('now', '-{days} days')"
+                prev_cost = conn.execute(
+                    f"SELECT COALESCE(SUM(estimated_cost_usd), 0) FROM api_calls WHERE 1=1 {prev_clause}"
+                ).fetchone()[0]
+                prev_s_clause = f"AND started_at >= datetime('now', '-{days * 2} days') AND started_at < datetime('now', '-{days} days')"
+                prev_sessions = conn.execute(
+                    f"SELECT COUNT(*) FROM sessions WHERE 1=1 {prev_s_clause}"
+                ).fetchone()[0]
+                prev_a_clause = f"AND timestamp >= datetime('now', '-{days * 2} days') AND timestamp < datetime('now', '-{days} days')"
+                prev_agents = conn.execute(
+                    f"SELECT COUNT(*) FROM agent_activations WHERE 1=1 {prev_a_clause}"
+                ).fetchone()[0]
+
+            def trend_pct(current, previous):
+                if previous == 0:
+                    return None
+                return round((current - previous) / previous * 100, 1)
+
             return {
                 "total_cost": round(total_cost, 2),
                 "session_count": s_row["cnt"],
@@ -130,6 +157,12 @@ def api_summary(params):
                 "output_tokens": total_output,
                 "cache_read_tokens": total_cache_read,
                 "cache_efficiency": cache_efficiency,
+                "cost_per_1k": cost_per_1k,
+                "trends": {
+                    "cost": trend_pct(total_cost, prev_cost),
+                    "sessions": trend_pct(s_row["cnt"], prev_sessions),
+                    "agents": trend_pct(agent_count, prev_agents),
+                },
             }
         finally:
             conn.close()
