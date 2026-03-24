@@ -80,8 +80,14 @@ DEFAULT_PRICE = {
 }
 
 
+_warned_models = set()
+
+
 def estimate_cost(model, usage):
     """Calculate estimated cost in USD for an API call."""
+    if model and model not in MODEL_PRICES and model not in _warned_models:
+        print(f"  WARNING: Unknown model '{model}', using Sonnet pricing", file=sys.stderr)
+        _warned_models.add(model)
     prices = MODEL_PRICES.get(model, DEFAULT_PRICE)
     input_tokens = usage.get("input_tokens", 0) or 0
     output_tokens = usage.get("output_tokens", 0) or 0
@@ -205,6 +211,21 @@ def migrate_schema(conn):
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_agent_status "
         "ON agent_activations(status)"
+    )
+    # daily_summary table (added in v2.7)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS daily_summary ("
+        "date TEXT NOT NULL, project TEXT NOT NULL, "
+        "total_cost REAL DEFAULT 0, total_sessions INTEGER DEFAULT 0, "
+        "total_input_tokens INTEGER DEFAULT 0, total_output_tokens INTEGER DEFAULT 0, "
+        "total_cache_read_tokens INTEGER DEFAULT 0, total_agent_activations INTEGER DEFAULT 0, "
+        "PRIMARY KEY (date, project))"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_started_at ON sessions(started_at)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_hook_events_timestamp ON hook_events(timestamp)"
     )
     conn.commit()
 
@@ -422,11 +443,34 @@ def process_jsonl_file(conn, jsonl_path, project, full_mode=False):
             (dur_ms, sid),
         )
 
-    # Update watermark
+    # Update watermark and commit atomically
     set_watermark(conn, jsonl_path, final_pos)
     conn.commit()
 
     return records_processed
+
+
+def populate_daily_summary(conn):
+    """Pre-aggregate daily totals for fast dashboard queries."""
+    conn.execute("DELETE FROM daily_summary")
+    conn.execute("""
+        INSERT INTO daily_summary (date, project, total_cost, total_sessions,
+            total_input_tokens, total_output_tokens, total_cache_read_tokens,
+            total_agent_activations)
+        SELECT
+            DATE(a.timestamp) as date,
+            a.project,
+            COALESCE(SUM(a.estimated_cost_usd), 0),
+            COUNT(DISTINCT a.session_id),
+            COALESCE(SUM(a.input_tokens), 0),
+            COALESCE(SUM(a.output_tokens), 0),
+            COALESCE(SUM(a.cache_read_tokens), 0),
+            (SELECT COUNT(*) FROM agent_activations ag
+             WHERE ag.project = a.project AND DATE(ag.timestamp) = DATE(a.timestamp))
+        FROM api_calls a
+        GROUP BY DATE(a.timestamp), a.project
+    """)
+    conn.commit()
 
 
 def ingest_agent_events(conn, events_file, full_mode=False):
@@ -660,6 +704,9 @@ def main():
 
     if hook_records > 0:
         print(f"\n  Hook events ingested: {hook_records}")
+
+    # Populate daily summary for fast dashboard queries
+    populate_daily_summary(conn)
 
     elapsed = time.time() - start_time
 

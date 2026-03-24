@@ -70,3 +70,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_tool_usage_unique ON tool_usage(session_id
 CREATE INDEX IF NOT EXISTS idx_api_calls_timestamp ON api_calls(timestamp);
 CREATE INDEX IF NOT EXISTS idx_hook_events_type ON hook_events(event_type, timestamp);
 CREATE INDEX IF NOT EXISTS idx_agent_status ON agent_activations(status);
+CREATE INDEX IF NOT EXISTS idx_sessions_started_at ON sessions(started_at);
+CREATE INDEX IF NOT EXISTS idx_hook_events_timestamp ON hook_events(timestamp);
+
+CREATE TABLE IF NOT EXISTS daily_summary (
+    date                    TEXT NOT NULL,
+    project                 TEXT NOT NULL,
+    total_cost              REAL DEFAULT 0,
+    total_sessions          INTEGER DEFAULT 0,
+    total_input_tokens      INTEGER DEFAULT 0,
+    total_output_tokens     INTEGER DEFAULT 0,
+    total_cache_read_tokens INTEGER DEFAULT 0,
+    total_agent_activations INTEGER DEFAULT 0,
+    PRIMARY KEY (date, project)
+);
