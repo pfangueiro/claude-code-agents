@@ -202,6 +202,16 @@
   .cost { color: var(--green); font-weight: 600; }
   .dim { color: var(--text-dim); }
 
+  .trend { font-size: 12px; font-weight: 500; margin-top: 2px; }
+  .trend.up { color: var(--red); }
+  .trend.down { color: var(--green); }
+  .trend.neutral { color: var(--text-dim); }
+  .trend-good.up { color: var(--green); }
+  .trend-good.down { color: var(--red); }
+
+  th .sort-arrow { font-size: 10px; margin-left: 4px; opacity: 0.5; }
+  th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
+
   .pagination {
     display: flex;
     justify-content: center;
@@ -292,6 +302,7 @@
     <div class="card cost">
       <div class="value" id="totalCost">--</div>
       <div class="label">Estimated Cost</div>
+      <div id="trendCost"></div>
     </div>
     <div class="card sessions">
       <div class="value" id="projectCount">--</div>
@@ -300,10 +311,12 @@
     <div class="card sessions">
       <div class="value" id="sessionCount">--</div>
       <div class="label">Sessions</div>
+      <div id="trendSessions"></div>
     </div>
     <div class="card agents">
       <div class="value" id="agentCount">--</div>
       <div class="label">Agent Activations</div>
+      <div id="trendAgents"></div>
     </div>
     <div class="card tokens">
       <div class="value" id="inputTokens">--</div>
@@ -316,6 +329,10 @@
     <div class="card cache">
       <div class="value" id="cacheEfficiency">--</div>
       <div class="label">Cache Hit Rate</div>
+    </div>
+    <div class="card cost">
+      <div class="value" id="costPer1K">--</div>
+      <div class="label">Cost / 1K Tokens</div>
     </div>
   </div>
 
@@ -357,12 +374,12 @@
       <table id="sessionsTable">
         <thead>
           <tr>
-            <th>Project</th>
-            <th>Branch</th>
-            <th>Started</th>
-            <th>Duration</th>
-            <th>Cost</th>
-            <th>Model</th>
+            <th data-sort="project">Project <span class="sort-arrow"></span></th>
+            <th data-sort="git_branch">Branch <span class="sort-arrow"></span></th>
+            <th data-sort="started_at">Started <span class="sort-arrow"></span></th>
+            <th data-sort="duration_ms">Duration <span class="sort-arrow"></span></th>
+            <th data-sort="cost">Cost <span class="sort-arrow"></span></th>
+            <th data-sort="model">Model <span class="sort-arrow"></span></th>
             <th>Agents</th>
           </tr>
         </thead>
@@ -392,6 +409,9 @@ let charts = {};
 let sessionPage = 0;
 const PAGE_SIZE = 25;
 let searchTimeout = null;
+let currentSessions = [];
+let sortField = 'started_at';
+let sortDir = 'desc';
 
 // Chart.js global defaults
 Chart.defaults.color = '#8b949e';
@@ -450,6 +470,17 @@ function formatDate(iso) {
 function shortModel(model) {
   if (!model) return '--';
   return model.replace('claude-', '').replace(/-\d{8}$/g, '');
+}
+
+function renderTrend(elementId, pct, invertColor) {
+  // invertColor: true = down is good (cost), false = up is good (sessions)
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  if (pct === null || pct === undefined) { el.innerHTML = ''; return; }
+  const arrow = pct > 0 ? '&#9650;' : pct < 0 ? '&#9660;' : '&#8212;';
+  const dir = pct > 0 ? 'up' : pct < 0 ? 'down' : 'neutral';
+  const cls = invertColor ? `trend ${dir}` : `trend trend-good ${dir}`;
+  el.innerHTML = `<div class="${cls}">${arrow} ${Math.abs(pct)}% vs prev</div>`;
 }
 
 // Chart builders with empty state
@@ -579,8 +610,49 @@ function buildModelChart(data) {
   });
 }
 
+// Table sorting
+function sortSessions(field) {
+  if (sortField === field) {
+    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortField = field;
+    sortDir = (field === 'cost' || field === 'duration_ms' || field === 'started_at') ? 'desc' : 'asc';
+  }
+  // Update header indicators
+  document.querySelectorAll('#sessionsTable th').forEach(th => {
+    th.classList.remove('sorted');
+    const arrow = th.querySelector('.sort-arrow');
+    if (arrow) arrow.textContent = '';
+  });
+  const activeTh = document.querySelector(`#sessionsTable th[data-sort="${field}"]`);
+  if (activeTh) {
+    activeTh.classList.add('sorted');
+    const arrow = activeTh.querySelector('.sort-arrow');
+    if (arrow) arrow.textContent = sortDir === 'asc' ? '\u25B2' : '\u25BC';
+  }
+  // Sort the stored data
+  currentSessions.sort((a, b) => {
+    let va = a[field] ?? '';
+    let vb = b[field] ?? '';
+    if (typeof va === 'number' && typeof vb === 'number') return sortDir === 'asc' ? va - vb : vb - va;
+    va = String(va).toLowerCase(); vb = String(vb).toLowerCase();
+    return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+  });
+  renderSessionRows(currentSessions);
+}
+
+document.querySelectorAll('#sessionsTable th[data-sort]').forEach(th => {
+  th.style.cursor = 'pointer';
+  th.addEventListener('click', () => sortSessions(th.dataset.sort));
+});
+
 // Sessions table with pagination
 function buildSessionsTable(data) {
+  currentSessions = data;
+  renderSessionRows(data);
+}
+
+function renderSessionRows(data) {
   const tbody = document.querySelector('#sessionsTable tbody');
   if (!data.length) {
     tbody.innerHTML = '<tr><td colspan="7" class="dim" style="text-align:center;padding:40px">No sessions found for this period</td></tr>';
@@ -723,6 +795,14 @@ async function loadAll() {
     document.getElementById('inputTokens').textContent = formatTokens(summary.input_tokens);
     document.getElementById('outputTokens').textContent = formatTokens(summary.output_tokens);
     document.getElementById('cacheEfficiency').textContent = `${summary.cache_efficiency || 0}%`;
+    document.getElementById('costPer1K').textContent = formatCost(summary.cost_per_1k || 0);
+
+    // Render trends
+    if (summary.trends) {
+      renderTrend('trendCost', summary.trends.cost, true);       // cost up = bad (red)
+      renderTrend('trendSessions', summary.trends.sessions, false); // sessions up = good (green)
+      renderTrend('trendAgents', summary.trends.agents, false);     // agents up = neutral
+    }
 
     // Charts
     buildDailyChart(daily);
