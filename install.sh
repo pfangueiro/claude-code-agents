@@ -662,11 +662,7 @@ install_global_config() {
         print_success "Installed statusline.sh"
     fi
 
-    # Copy keybindings
-    if [ -f "$src_dir/keybindings.json" ]; then
-        cp "$src_dir/keybindings.json" ~/.claude/keybindings.json
-        print_success "Installed keybindings.json"
-    fi
+    # Keybindings removed in v2.7 — personal preference, not framework-level
 
     # Handle settings.json
     if [ -f "$src_dir/settings.json.template" ]; then
