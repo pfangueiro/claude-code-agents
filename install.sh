@@ -1255,30 +1255,29 @@ update_installation() {
     # Update analytics dashboard (installs if missing, updates if present)
     install_analytics || print_error "Analytics installation failed"
 
-    # Handle CLAUDE.md — append agent section if missing, create if absent
+    # Handle CLAUDE.md — regenerate framework sections, preserve user content
     if [ -f "CLAUDE.md" ]; then
-        if grep -q "Auto-Activating" CLAUDE.md 2>/dev/null; then
-            # Has agent config — check if orchestration skills are present
-            if grep -q "Orchestration Skills" CLAUDE.md 2>/dev/null; then
-                print_skip "CLAUDE.md already has agent configuration"
-            else
-                append_orchestration_skills_section
-            fi
+        if grep -q "CLAUDE AGENTS AUTO-ACTIVATION SECTION START" CLAUDE.md 2>/dev/null; then
+            # Has markers — delete between markers and re-append latest
+            sed -i '' '/<!-- .* CLAUDE AGENTS AUTO-ACTIVATION SECTION START/,/<!-- .* CLAUDE AGENTS AUTO-ACTIVATION SECTION END/d' CLAUDE.md
+            append_claude_md_section
+            print_success "Regenerated agent section in CLAUDE.md (marker-based)"
+        elif grep -q "Just Use Natural Language" CLAUDE.md 2>/dev/null; then
+            # Minimal template (we own the file) — regenerate entirely
+            install_minimal_claude_md
+            print_success "Regenerated CLAUDE.md (minimal template)"
+        elif grep -q "Auto-Activating\|auto-activate" CLAUDE.md 2>/dev/null; then
+            # Patched file (no markers) — use patch functions for incremental updates
+            patch_meta_agent_in_claude_md
+            patch_sre_specialist_in_claude_md
+            patch_developer_workflow_in_claude_md
         else
+            # No agent section at all — append
             append_claude_md_section
         fi
     else
         install_minimal_claude_md
     fi
-
-    # Patch meta-agent into existing CLAUDE.md agents table
-    patch_meta_agent_in_claude_md
-
-    # Patch sre-specialist into existing CLAUDE.md agents table
-    patch_sre_specialist_in_claude_md
-
-    # Patch Developer Workflow Commands section if missing
-    patch_developer_workflow_in_claude_md
 
     # Ensure statusline is installed
     ensure_statusline
