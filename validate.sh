@@ -375,6 +375,141 @@ else
 fi
 
 # ============================================================================
+# Deployment Integrity (MD5 — sample 5 projects)
+# ============================================================================
+
+section "Checking Deployment Integrity (MD5 sample)"
+
+PROJECTS_DIR="$HOME/local-codebase"
+if [ -d "$PROJECTS_DIR" ]; then
+    sample_projects=()
+    for d in "$PROJECTS_DIR"/*/; do
+        [ "$(basename "$d")" = "claude-code-agents" ] && continue
+        [ -d "$d/.claude/agents" ] || continue
+        sample_projects+=("$d")
+    done
+
+    # Pick up to 5 projects
+    sample_count=${#sample_projects[@]}
+    check_count=$((sample_count < 5 ? sample_count : 5))
+    step=$((sample_count / (check_count > 0 ? check_count : 1)))
+    [ "$step" -eq 0 ] && step=1
+
+    checked=0
+    for ((i=0; i<sample_count && checked<check_count; i+=step)); do
+        proj="${sample_projects[$i]}"
+        pname=$(basename "$proj")
+        drift=0
+
+        # Check agents
+        for src in .claude/agents/*.md; do
+            [ -f "$src" ] || continue
+            fname=$(basename "$src")
+            dst="$proj/.claude/agents/$fname"
+            if [ -f "$dst" ]; then
+                if ! diff -q "$src" "$dst" >/dev/null 2>&1; then
+                    fail "MD5 drift: $pname/agents/$fname"
+                    ((drift++))
+                fi
+            fi
+        done
+
+        # Check skills
+        for src_dir in .claude/skills/*/; do
+            [ -d "$src_dir" ] || continue
+            sname=$(basename "$src_dir")
+            src="$src_dir/SKILL.md"
+            dst="$proj/.claude/skills/$sname/SKILL.md"
+            if [ -f "$src" ] && [ -f "$dst" ]; then
+                if ! diff -q "$src" "$dst" >/dev/null 2>&1; then
+                    fail "MD5 drift: $pname/skills/$sname"
+                    ((drift++))
+                fi
+            fi
+        done
+
+        # Check commands
+        for src in .claude/commands/*.md; do
+            [ -f "$src" ] || continue
+            fname=$(basename "$src")
+            dst="$proj/.claude/commands/$fname"
+            if [ -f "$dst" ]; then
+                if ! diff -q "$src" "$dst" >/dev/null 2>&1; then
+                    fail "MD5 drift: $pname/commands/$fname"
+                    ((drift++))
+                fi
+            fi
+        done
+
+        # Check rules
+        for src in .claude/rules/*.md; do
+            [ -f "$src" ] || continue
+            fname=$(basename "$src")
+            dst="$proj/.claude/rules/$fname"
+            if [ -f "$dst" ]; then
+                if ! diff -q "$src" "$dst" >/dev/null 2>&1; then
+                    fail "MD5 drift: $pname/rules/$fname"
+                    ((drift++))
+                fi
+            fi
+        done
+
+        [ "$drift" -eq 0 ] && pass "Deployment $pname: all files match source"
+        ((checked++))
+    done
+else
+    warn "No ~/local-codebase directory found — skipping deployment checks"
+fi
+
+# ============================================================================
+# Global Hooks Integrity
+# ============================================================================
+
+section "Checking Global Hooks Sync"
+
+if [ -d "$HOME/.claude/hooks" ]; then
+    for hook in "${EXPECTED_HOOKS[@]}"; do
+        src="global-config/hooks/$hook"
+        dst="$HOME/.claude/hooks/$hook"
+        if [ -f "$src" ] && [ -f "$dst" ]; then
+            if diff -q "$src" "$dst" >/dev/null 2>&1; then
+                pass "Hook synced: $hook"
+            else
+                fail "Hook drift: $hook (deployed differs from source)"
+            fi
+        elif [ -f "$src" ] && [ ! -f "$dst" ]; then
+            fail "Hook not deployed: $hook"
+        fi
+    done
+else
+    warn "No ~/.claude/hooks/ directory — skipping hook sync checks"
+fi
+
+# ============================================================================
+# Analytics Integrity
+# ============================================================================
+
+section "Checking Analytics Sync"
+
+if [ -d "$HOME/.claude/analytics" ]; then
+    for f in collector.py server.py dashboard.html schema.sql; do
+        src="observability/$f"
+        dst="$HOME/.claude/analytics/$f"
+        if [ -f "$src" ] && [ -f "$dst" ]; then
+            if diff -q "$src" "$dst" >/dev/null 2>&1; then
+                pass "Analytics synced: $f"
+            else
+                fail "Analytics drift: $f (deployed differs from source)"
+            fi
+        elif [ -f "$src" ] && [ ! -f "$dst" ]; then
+            fail "Analytics not deployed: $f"
+        fi
+    done
+else
+    warn "No ~/.claude/analytics/ directory — skipping analytics checks"
+fi
+
+# ============================================================================
 # Summary
 # ============================================================================
 
