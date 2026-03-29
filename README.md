@@ -44,7 +44,6 @@ Agents activate automatically based on your words.
 | **MCP Servers** | 5 | context7, sequential-thinking, playwright, github, postgres |
 | **Rules** | 4 | Auto-enforced security, code quality, fix quality, and verification standards |
 | **Hooks** | 10 | Agent tracking, session lifecycle, permission auditing, file protection, auto-lint, debug detection, pre-compact snapshots, notifications |
-| **Keybindings** | 6 | Ctrl+S (commit), Ctrl+T (PR), Ctrl+R (review), etc. |
 
 ---
 
@@ -94,7 +93,7 @@ See [`.claude/lib/agent-coordination.md`](.claude/lib/agent-coordination.md) for
 
 | Mode | Command | What It Does |
 |------|---------|-------------|
-| **Team Setup** | `./install.sh --team-setup` | Everything: agents, skills, commands, hooks, keybindings, MCP, global config |
+| **Team Setup** | `./install.sh --team-setup` | Everything: agents, skills, commands, hooks, MCP, global config |
 | **Full** | `./install.sh --full` | Agents + skills + commands for one project (no global config) |
 | **Minimal** | `./install.sh --minimal` | Just CLAUDE.md with agent activation |
 | **Repair** | `./install.sh --repair` | Fix missing components |
@@ -250,7 +249,7 @@ Four rule files in `.claude/rules/` are automatically loaded by Claude Code in e
 global-config/
 ├── hooks/           # 8 command hooks + 2 reference configs
 ├── settings.json.template  # 10 hook events, permissions, model config
-└── ...              # keybindings, statusline, output styles
+└── ...              # statusline, output styles
 ```
 
 See [EXTENSIBILITY.md](./EXTENSIBILITY.md) for the complete guide on Skills, MCP, Slash Commands, and Subagents.

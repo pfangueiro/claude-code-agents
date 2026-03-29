@@ -10,7 +10,7 @@ cd claude-code-agents
 ./install.sh --team-setup
 ```
 
-This installs everything: agents, skills, commands, hooks, statusline, keybindings, output styles, and global settings.
+This installs everything: agents, skills, commands, hooks, statusline, output styles, and global settings.
 
 ## Installation Options
 
@@ -29,7 +29,7 @@ This installs everything: agents, skills, commands, hooks, statusline, keybindin
 ```
 - Installs all 13 agents, skills, and library files (project-level)
 - Installs slash commands (`.claude/commands/`)
-- Installs hooks, statusline, keybindings, output styles (`~/.claude/`)
+- Installs hooks, statusline, output styles (`~/.claude/`)
 - Merges or installs global settings (`~/.claude/settings.json`)
 - Installs observability dashboard to `~/.claude/analytics/` with `claude-obs` alias
 - Personalizes `~/.claude/CLAUDE.md` with your name and email
@@ -96,7 +96,6 @@ CLAUDE.md                          # Agent auto-activation config
 ├── output-styles/
 │   └── concise.md                 # Code-first output style
 ├── statusline.sh                  # Rich status bar
-├── keybindings.json               # Ctrl+S commit, Ctrl+P plan
 ├── settings.json                  # Model, hooks, deny rules, attribution
 └── CLAUDE.md                      # Personal coding preferences
 ```
