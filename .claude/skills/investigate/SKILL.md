@@ -48,7 +48,13 @@ An issue you cannot reproduce is an issue you cannot prove you fixed.
 1. Identify the shortest path to trigger the symptom:
    - Run existing tests that cover the affected area
    - If no test exists, attempt manual reproduction via Bash
-   - For UI issues, check if a Playwright MCP sequence can reproduce it
+   - For UI issues, use Playwright MCP for precise reproduction:
+     1. `playwright_navigate` to the affected page
+     2. `playwright_screenshot` to capture initial state
+     3. Replay the interaction sequence (`playwright_click`, `playwright_fill`, etc.)
+     4. `playwright_screenshot` to capture the error state
+     5. `playwright_console_logs` with `type: "error"` to capture JS errors
+     6. Use `start_codegen_session` to record the reproduction as a reusable test
 2. Document the reproduction steps precisely
 3. If the issue is **intermittent**:
    - Flag it as potentially timing-dependent (race condition, async, state)
@@ -72,6 +78,8 @@ Start from the symptom and trace backward to the origin.
    - Use Grep for error messages, exception types, log strings
    - Use Explore agent for broad searches if the location is unclear
 2. **Trace the call chain** — read every file in the execution path:
+   - Use LSP `goToDefinition` and `findReferences` to navigate the call chain precisely
+   - Use LSP `incomingCalls`/`outgoingCalls` to map the full call hierarchy
    - From error site → caller → caller's caller → entry point
    - Read each file fully with Read tool — do NOT skim
    - Document the complete flow: input → transform → output
@@ -79,7 +87,8 @@ Start from the symptom and trace backward to the origin.
    - What value caused the crash? Where did it come from?
    - Trace the value backward: variable → assignment → source → input
 4. **Map dependencies** — what else touches this code path:
-   - Use Grep to find all callers of the failing function
+   - Use LSP `findReferences` to find all callers of the failing function (more precise than Grep)
+   - Fall back to Grep if LSP is unavailable for the file type
    - Check for shared state, singletons, global variables
    - Look for recent changes in dependencies with `git log --oneline -- <file>`
 5. **Check git forensics** — when was the problem introduced:

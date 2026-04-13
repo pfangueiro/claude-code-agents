@@ -20,6 +20,8 @@ When invoked, you must follow these steps:
    - Use `glob` to find relevant source files if no git history exists
 
 2. **Perform Quality Analysis**
+   - Use LSP `findReferences` and `goToDefinition` to trace dependencies before suggesting refactors
+   - Use LSP `documentSymbol` to get a structural overview of files under review
    - Check code complexity using cyclomatic complexity metrics
    - Identify duplicate code blocks and patterns
    - Analyze function/method length (flag if >20 lines)

@@ -2,6 +2,13 @@
 
 These rules are always enforced to maintain code quality standards.
 
+## Read Before Modify
+
+- ALWAYS read a file with the Read tool before editing it — never guess at file contents
+- Use Grep to search for patterns instead of assuming where code lives
+- Use LSP findReferences before renaming or refactoring to understand the blast radius
+- Maintain a high read:edit ratio — more reading means fewer mistakes
+
 ## Dead Code
 
 - No unused imports, variables, functions, or type definitions

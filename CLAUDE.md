@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Claude Agents** — enterprise AI agent system with 13 specialized SDLC/SSDLC agents, 21 skills, and 13 slash commands that auto-activate based on natural language. Automatically selects optimal Claude model (Haiku/Sonnet/Opus) per task complexity.
+**Claude Agents** — enterprise AI agent system with 13 specialized SDLC/SSDLC agents, 26 skills, and 13 slash commands that auto-activate based on natural language. Automatically selects optimal Claude model (Haiku/Sonnet/Opus) per task complexity.
 
 ## IMPORTANT: Auto-Activation
 
@@ -47,6 +47,19 @@ Agent collaboration patterns: see `.claude/lib/agent-coordination.md`
 - **`/resume-session [id]`** — Resume from a saved session with full context briefing and file state verification.
 - **`/optimize <metric> [--iterations N]`** — Autonomous metric-driven improvement loop: measure → improve → verify → keep/revert.
 
+## Built-in Tools (Always Available)
+
+Beyond agents and skills, Claude Code provides these tools you can use directly:
+
+| Tool | Use When |
+|------|----------|
+| **TaskCreate/TaskUpdate/TaskList** | Multi-step work — structured task tracking with dependencies and progress |
+| **CronCreate/CronDelete/CronList** | Recurring prompts, polling, reminders (session-scoped, 7-day max) |
+| **EnterWorktree/ExitWorktree** | Parallel development — isolated git worktree branches for experiments or features |
+| **RemoteTrigger** | Cross-session automation — create/run scheduled remote agents |
+| **LSP** | Code intelligence — go-to-definition, find-references, hover, document symbols |
+| **AskUserQuestion** | Structured user input with labeled options and previews |
+
 ## Skills System
 
 Skills provide modular knowledge packages that complement agents. See `.claude/skills/README.md` for full documentation.
@@ -54,6 +67,8 @@ Skills provide modular knowledge packages that complement agents. See `.claude/s
 **Reference skills:** skill-creator, git-workflow, code-review-checklist, deployment-runbook, security-scan
 **SRE/Cloud skills:** kubernetes-ops, observability-stack, sre-runbooks, infrastructure-as-code
 **Experimentation skills:** experiment-loop (autonomous optimization patterns)
+**Automation skills:** scheduled-tasks (CronCreate), worktree-workflow (EnterWorktree), remote-triggers (RemoteTrigger), multi-agent-orchestration (TeamCreate/SendMessage)
+**Testing skills:** browser-testing (Playwright MCP for E2E, visual regression, responsive design)
 **MCP-powered skills:** library-docs (context7), deep-analysis (sequential-thinking)
 
 Creating skills: `python3 .claude/skills/skill-creator/scripts/init_skill.py <name> --path .claude/skills`
@@ -66,11 +81,12 @@ MCP servers provide external tools that extend Claude Code. See `.claude/lib/mcp
 
 10 hook events across 3 types. Hooks live in `global-config/hooks/`, installed globally to `~/.claude/hooks/`.
 
-**Command hooks (8 scripts):**
+**Command hooks (9 scripts):**
 - `file-protection.sh` — PreToolUse: blocks edits to sensitive files (.env, *.key, *.pem)
 - `post-edit-lint.sh` — PostToolUse: auto-lints TS/JS after Write/Edit, warns on debug statements
 - `notify.sh` — Notification: desktop alerts when Claude needs attention
 - `agent-tracker.sh` — SubagentStart/SubagentStop: real-time agent lifecycle tracking to `agent-events.jsonl`
+- `stop-phrase-guard.sh` — Stop: catches ownership dodging, permission-seeking, premature stopping (blocks and forces continuation)
 - `session-end.sh` — Stop: logs session completion to `session-summaries.jsonl`
 - `smart-guard.sh` — PermissionRequest: auto-approves safe read operations, audits dangerous ones
 - `pre-compact.sh` — PreCompact: auto-saves session snapshot before context compaction

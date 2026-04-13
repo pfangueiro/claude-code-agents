@@ -19,6 +19,7 @@ When invoked, you must follow these steps:
    - Check for existing component structure and patterns
    - Review current styling approach (CSS, SASS, CSS-in-JS, Tailwind)
    - Assess build configuration and bundler setup
+   - For visual verification: use Playwright MCP (`playwright_navigate`, `playwright_screenshot`, `playwright_resize` with device presets like `iPhone 13`, `iPad Pro`) to capture responsive design across breakpoints. See `browser-testing` skill for patterns.
 
 2. **Component Development**
    - Create modular, reusable components following framework best practices
