@@ -1,10 +1,10 @@
 # Claude Agents - AI-Powered SDLC Agent System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-2.7.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
+[![Version](https://img.shields.io/badge/version-2.8.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://docs.anthropic.com/en/docs/claude-code)
 [![Agents](https://img.shields.io/badge/Agents-13-orange.svg)](#-available-agents)
-[![Skills](https://img.shields.io/badge/Skills-21-green.svg)](#-skills-system)
+[![Skills](https://img.shields.io/badge/Skills-26-green.svg)](#-skills-system)
 [![MCP](https://img.shields.io/badge/MCP-5%20Servers-brightgreen.svg)](#-mcp-integration)
 
 **13 auto-activating AI agents for every phase of software development.** Just describe what you want to build — the right specialists engage automatically.
@@ -39,7 +39,7 @@ Agents activate automatically based on your words.
 | Component | Count | What It Does |
 |-----------|-------|--------------|
 | **Agents** | 13 | Auto-activating SDLC specialists (planning through production) |
-| **Skills** | 21 | Modular knowledge packages (git, Docker, CI/CD, K8s, SRE, IaC, observability, experiment-loop, etc.) |
+| **Skills** | 26 | Modular knowledge packages (git, Docker, CI/CD, K8s, SRE, IaC, observability, experiment-loop, scheduled-tasks, worktree-workflow, remote-triggers, etc.) |
 | **Slash Commands** | 13 | `/commit-pr`, `/review-pr`, `/security-scan`, `/compact`, `/new-feature`, `/create-jira`, `/build-fix`, `/tdd`, `/quality-gate`, `/checkpoint`, `/save-session`, `/resume-session`, `/optimize` |
 | **MCP Servers** | 5 | context7, sequential-thinking, playwright, github, postgres |
 | **Rules** | 4 | Auto-enforced security, code quality, fix quality, and verification standards |
@@ -145,7 +145,7 @@ cd /path/to/your/project
 
 ## Skills System
 
-Skills provide domain knowledge that agents apply. 21 included:
+Skills provide domain knowledge that agents apply. 26 included:
 
 | Skill | What It Provides |
 |-------|-----------------|
@@ -169,6 +169,11 @@ Skills provide domain knowledge that agents apply. 21 included:
 | **sre-runbooks** | On-call handbook, postmortem templates, SLO/error budgets, chaos engineering, capacity planning |
 | **infrastructure-as-code** | Terraform/CDK/Pulumi patterns, IaC testing pyramid, CI/CD for infra, state management |
 | **experiment-loop** | Autonomous experimentation pattern: modify → measure → keep/discard (autoresearch-inspired) |
+| **scheduled-tasks** | CronCreate/CronDelete/CronList for recurring prompts, polling, reminders |
+| **worktree-workflow** | Git worktree isolation for parallel development, experiments, risky refactors |
+| **remote-triggers** | RemoteTrigger API for cross-session automation, scheduled agents |
+| **browser-testing** | E2E testing with Playwright MCP — visual regression, responsive design, codegen |
+| **multi-agent-orchestration** | Coordinator pattern, teams, background agents, worker restrictions, SendMessage |
 | **skill-creator** | Create your own custom skills |
 
 ### Create Your Own Skill
@@ -216,7 +221,7 @@ Four rule files in `.claude/rules/` are automatically loaded by Claude Code in e
 
 ## Hooks
 
-10 hook events across 8 command hooks, installed globally to `~/.claude/hooks/`:
+10 hook events across 9 command hooks, installed globally to `~/.claude/hooks/`:
 
 | Hook | Event | What It Does |
 |------|-------|-------------|
@@ -224,6 +229,7 @@ Four rule files in `.claude/rules/` are automatically loaded by Claude Code in e
 | **post-edit-lint.sh** | PostToolUse | Auto-lints TS/JS after Write/Edit, warns on debug statements |
 | **notify.sh** | Notification | Desktop alert when Claude needs attention |
 | **agent-tracker.sh** | SubagentStart/Stop | Real-time agent lifecycle tracking to analytics |
+| **stop-phrase-guard.sh** | Stop | Catches ownership dodging, permission-seeking, premature stopping — blocks and forces continuation |
 | **session-end.sh** | Stop | Logs session completion for observability |
 | **smart-guard.sh** | PermissionRequest | Auto-approves safe reads, audits dangerous operations |
 | **pre-compact.sh** | PreCompact | Auto-saves session snapshot before context compaction |
@@ -241,13 +247,13 @@ Four rule files in `.claude/rules/` are automatically loaded by Claude Code in e
 .claude/
 ├── agents/          # 13 auto-activating SDLC agents
 ├── commands/        # 13 slash commands
-├── skills/          # 21 modular knowledge packages
+├── skills/          # 26 modular knowledge packages
 ├── rules/           # 4 auto-enforced rule sets
 ├── lib/             # Templates, patterns, coordination protocol
 └── history/         # Session history
 
 global-config/
-├── hooks/           # 8 command hooks + 2 reference configs
+├── hooks/           # 9 command hooks + 2 reference configs
 ├── settings.json.template  # 10 hook events, permissions, model config
 └── ...              # statusline, output styles
 ```

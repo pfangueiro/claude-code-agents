@@ -22,6 +22,9 @@ When invoked, you must follow these steps:
 
 2. **Determine Test Strategy**
    - Identify what type of tests are needed (unit, integration, E2E)
+   - For E2E tests: use Playwright MCP tools for real browser testing (`playwright_navigate`, `playwright_click`, `playwright_fill`, `playwright_screenshot`, `playwright_assert_response`)
+   - For E2E codegen: use `start_codegen_session` to record interactions as test code, then `end_codegen_session` to generate the test file
+   - See `browser-testing` skill for comprehensive Playwright patterns
    - Calculate current test coverage if possible
    - Identify critical paths and edge cases
    - Determine mocking/stubbing requirements

@@ -1,4 +1,34 @@
-# MCP (Model Context Protocol) Integration Guide
+# Tool & MCP Integration Guide
+
+## Built-in Tools (No MCP Required)
+
+Claude Code provides these tools natively — no MCP server needed:
+
+### Task Management
+- **TaskCreate** — Create tasks with subjects, descriptions, and dependencies (`addBlockedBy`)
+- **TaskUpdate** — Update status (`pending` → `in_progress` → `completed`), add dependencies
+- **TaskList** — View all tasks with status and blockers
+- **TaskGet** — Get full task details including description and dependencies
+
+### Scheduling & Automation
+- **CronCreate** — Schedule recurring or one-shot prompts using 5-field cron expressions. Session-scoped, 7-day max for recurring jobs. Use for polling CI, periodic checks, reminders.
+- **CronDelete** — Cancel a scheduled job by ID
+- **CronList** — List all active scheduled jobs
+- **RemoteTrigger** — Create, list, run, update remote agent triggers for cross-session automation
+
+### Code Intelligence
+- **LSP** — Language Server Protocol operations: `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, `outgoingCalls`. Requires LSP server configured for the file type.
+
+### Git Isolation
+- **EnterWorktree** — Create an isolated git worktree for parallel development, experiments, or risky changes
+- **ExitWorktree** — Leave worktree (keep or remove)
+
+### User Interaction
+- **AskUserQuestion** — Present structured questions with labeled options, descriptions, and previews. Supports multi-select and up to 4 questions per call.
+
+---
+
+## MCP (Model Context Protocol)
 
 ## What is MCP?
 

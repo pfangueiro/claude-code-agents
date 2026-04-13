@@ -61,6 +61,26 @@
       "primary": ["sre", "reliability", "slo", "sli", "observability", "runbook", "postmortem"],
       "secondary": ["error-budget", "on-call", "toil", "capacity", "chaos", "uptime", "availability"],
       "phrases": ["define SLOs", "reduce toil", "plan capacity", "create runbook", "run chaos experiment"]
+    },
+    "automation": {
+      "primary": ["schedule", "cron", "recurring", "periodic", "timer", "interval", "poll"],
+      "secondary": ["remote-trigger", "background-agent", "cross-session", "durable", "persistent"],
+      "phrases": ["schedule a task", "run every hour", "check periodically", "automate this", "set up a cron"]
+    },
+    "orchestration": {
+      "primary": ["multi-agent", "orchestrate", "coordinator", "team", "parallel-agents", "swarm"],
+      "secondary": ["worker", "background-agent", "fork", "send-message", "teammate"],
+      "phrases": ["coordinate multiple agents", "run agents in parallel", "create a team", "orchestrate workers"]
+    },
+    "browser_testing": {
+      "primary": ["e2e", "playwright", "browser-test", "visual-regression", "screenshot-test"],
+      "secondary": ["cross-browser", "responsive-test", "visual-verification", "codegen", "headless"],
+      "phrases": ["run e2e tests", "test in the browser", "visual regression", "screenshot comparison", "responsive design test"]
+    },
+    "worktree": {
+      "primary": ["worktree", "isolated-branch", "parallel-feature", "experiment-branch"],
+      "secondary": ["git-worktree", "side-branch", "throwaway-branch"],
+      "phrases": ["work in isolation", "experiment safely", "parallel branches", "try in a worktree"]
     }
   },
   "technology_keywords": {
