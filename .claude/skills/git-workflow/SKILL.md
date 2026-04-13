@@ -298,6 +298,42 @@ git commit --amend -m "new message"
 git rebase -i HEAD~n  # Use 'reword'
 ```
 
+## Worktrees
+
+Git worktrees let you work on multiple branches simultaneously without stashing or switching.
+
+### When to Use Worktrees vs Branches
+
+| Scenario | Use Branch | Use Worktree |
+|----------|-----------|-------------|
+| Sequential feature work | Yes | No |
+| Parallel features (simultaneous) | No | Yes |
+| Quick hotfix while mid-feature | Stash + branch | Yes (cleaner) |
+| Risky experiment | Maybe | Yes (isolated) |
+| Code review while coding | No | Yes |
+
+### Using EnterWorktree/ExitWorktree
+
+Claude Code provides built-in worktree tools:
+
+- **EnterWorktree** — Creates an isolated worktree with a new branch from HEAD. Provide an optional `name` for the worktree.
+- **ExitWorktree** — Leave the worktree. Choose `keep` (preserve for later) or `remove` (clean up).
+
+### Common Patterns
+
+**Experiment safely:**
+1. `EnterWorktree` with name `experiment-X`
+2. Try the risky approach
+3. If it works: commit, `ExitWorktree(keep)`, merge later
+4. If it fails: `ExitWorktree(remove)` — no mess
+
+**Hotfix while mid-feature:**
+1. `EnterWorktree` with name `hotfix-Y`
+2. Fix the bug, commit, push
+3. `ExitWorktree(remove)` — back to feature work
+
+See the `worktree-workflow` skill for detailed patterns and best practices.
+
 ## Resources
 
 ### references/

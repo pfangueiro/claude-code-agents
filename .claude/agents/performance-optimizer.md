@@ -17,6 +17,8 @@ When invoked, you must follow these steps:
 1. **Initial Performance Assessment**
    - Identify the specific performance concern (speed, memory, CPU, I/O, network)
    - Determine the scope of the performance issue (function, module, system-wide)
+   - Use LSP `incomingCalls`/`outgoingCalls` to trace hot call paths and identify heavily-called functions
+   - Use LSP `findReferences` to assess the blast radius of potential optimizations
    - Establish baseline metrics using appropriate profiling tools
    - Document current performance characteristics with concrete measurements
 

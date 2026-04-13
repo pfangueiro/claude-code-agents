@@ -104,6 +104,87 @@ When multiple agents could activate, priority determines which leads:
 4. **architecture-planner** - Design decisions before implementation
 5. **All other agents** - Equal priority, coordinate as peers
 
+## Team-Based Orchestration
+
+For persistent multi-agent work, use Claude Code's team system:
+
+### Creating Teams
+```
+TeamCreate:
+  team_name: "auth-team"
+  description: "implementing authentication system"
+```
+Teams persist in `~/.claude/teams/` and provide shared task lists.
+
+### Inter-Agent Messaging
+```
+SendMessage:
+  to: "worker-name"         # or "*" for broadcast to all teammates
+  message: "implement the login endpoint per the spec above"
+  summary: "assign login endpoint"
+```
+
+### Worker Toolset Restrictions
+Workers get limited tools based on their type:
+- **Explore agents** — Read-only: Read, Grep, Glob, WebSearch (safe for research)
+- **Background agents** — Read + Write: can edit files but can't ask user questions
+- **Teammates** — Coordination: TaskCreate/Update, SendMessage, CronCreate
+- **Custom agents** — Whatever is specified in the agent definition's `tools:` field
+
+Workers NEVER get: AskUserQuestion, EnterPlanMode, ExitPlanMode, TaskStop
+
+### Background Agents with Notifications
+Launch agents with `run_in_background: true`. They run async and send a `<task-notification>` when done:
+```
+Agent:
+  prompt: "research the authentication library options"
+  run_in_background: true
+  subagent_type: "Explore"
+```
+Continue other work while the agent runs. Read its output when notified.
+
+### Fork Subagents (Cheap Context Sharing)
+Omit `subagent_type` to fork — inherits full context, shares prompt cache:
+```
+Agent:
+  description: "analyze findings"
+  prompt: "based on our conversation, summarize..."
+  run_in_background: true
+  # no subagent_type = fork (shares prompt cache, much cheaper)
+```
+
+See `multi-agent-orchestration` skill for comprehensive patterns.
+
+## Task-Based Coordination
+
+Use Claude Code's built-in task tools for formal multi-agent coordination:
+
+### TaskCreate for Work Items
+Each agent's work becomes a tracked task with status and dependencies:
+```
+TaskCreate:
+  subject: "Implement auth endpoints"
+  description: "api-backend: implement /auth/register, /auth/login, /auth/refresh"
+```
+
+### TaskUpdate with Dependencies
+Use `addBlockedBy` to enforce execution order:
+```
+TaskUpdate:
+  taskId: "3"
+  addBlockedBy: ["1", "2"]   # Can't start until tasks 1 and 2 complete
+```
+
+### TaskList for Visibility
+Any agent can check overall progress and find unblocked work:
+```
+TaskList  →  shows all tasks with status, blockers, and owners
+```
+
+**When to use Task tools vs. markdown handoffs:**
+- **Task tools**: Orchestrated multi-agent workflows (via `/execute`), complex dependency graphs
+- **Markdown handoffs**: Simple sequential handoffs between 2-3 agents
+
 ## Anti-Patterns
 
 - **No silent handoffs**: Always document what was done before passing work

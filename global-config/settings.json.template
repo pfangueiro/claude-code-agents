@@ -4,7 +4,8 @@
     "MAX_THINKING_TOKENS": "31999",
     "BASH_DEFAULT_TIMEOUT_MS": "60000",
     "BASH_MAX_TIMEOUT_MS": "600000",
-    "ENABLE_TOOL_SEARCH": "auto"
+    "ENABLE_TOOL_SEARCH": "auto",
+    "CLAUDE_CODE_EFFORT_LEVEL": "high"
   },
   "alwaysThinkingEnabled": true,
   "permissions": {
@@ -30,6 +31,23 @@
       "Write(secrets/**)"
     ],
     "allow": [
+      "Bash(git status)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git branch *)",
+      "Bash(git show *)",
+      "Bash(git blame *)",
+      "Bash(git stash list)",
+      "Bash(gh pr *)",
+      "Bash(gh issue *)",
+      "Bash(gh run *)",
+      "Bash(npm test *)",
+      "Bash(npm run lint *)",
+      "Bash(npm run build *)",
+      "Bash(npx tsc --noEmit *)",
+      "Read(*)",
+      "Glob(*)",
+      "Grep(*)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:npmjs.org)",
       "WebFetch(domain:stackoverflow.com)",
@@ -105,6 +123,11 @@
     "Stop": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/stop-phrase-guard.sh",
+            "timeout": 3
+          },
           {
             "type": "command",
             "command": "~/.claude/hooks/session-end.sh",

@@ -287,6 +287,7 @@ EXPECTED_HOOKS=(
     "post-edit-lint.sh"
     "notify.sh"
     "agent-tracker.sh"
+    "stop-phrase-guard.sh"
     "session-end.sh"
     "smart-guard.sh"
     "pre-compact.sh"

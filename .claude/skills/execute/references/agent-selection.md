@@ -14,6 +14,13 @@ Is the task a simple, directed action?
 │        Run command? → Bash
 │        Git operation? → Bash (git ...)
 │        GitHub operation? → Bash (gh ...) or GitHub MCP
+│        Code intelligence? → LSP (goToDefinition, findReferences, hover)
+│        Schedule recurring? → CronCreate (session-scoped, 7-day max)
+│        Parallel branch work? → EnterWorktree (isolated git worktree)
+│        Cross-session automation? → RemoteTrigger (create/run remote agents)
+│        Track multi-step work? → TaskCreate/TaskUpdate (dependencies, progress)
+│        E2E/browser testing? → Playwright MCP (navigate, click, screenshot)
+│        Multi-agent coordination? → Agent + SendMessage (background workers, teams)
 └── NO: Does it require multi-file exploration or research?
     ├── YES: Broad codebase search? → Explore agent (subagent_type: Explore)
     │        Web research? → WebSearch + WebFetch
@@ -95,6 +102,11 @@ Is the task a simple, directed action?
 | security-scan | Security audit of code | `/security-scan` |
 | code-review-checklist | Structured code review | Consult reference |
 | git-workflow | Git operations guidance | Consult reference |
+| scheduled-tasks | Schedule recurring checks/polls | CronCreate tool |
+| worktree-workflow | Parallel isolated development | EnterWorktree tool |
+| remote-triggers | Cross-session automation | RemoteTrigger tool |
+| browser-testing | E2E, visual regression, responsive testing | Playwright MCP |
+| multi-agent-orchestration | Teams, background agents, coordinator pattern | Agent/SendMessage tools |
 
 ## MCP Servers — Direct Tool Access
 

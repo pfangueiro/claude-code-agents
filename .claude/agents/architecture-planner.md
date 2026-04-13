@@ -16,6 +16,8 @@ When invoked, you must follow these steps:
 
 1. **Analyze Context and Requirements**
    - Review existing codebase structure using Glob and Read
+   - Use LSP `workspaceSymbol` to discover interfaces, classes, and key abstractions
+   - Use LSP `goToImplementation` and `incomingCalls`/`outgoingCalls` to understand call hierarchies and module boundaries
    - Identify domain boundaries and business requirements
    - Assess technical constraints and non-functional requirements
    - Document assumptions and dependencies

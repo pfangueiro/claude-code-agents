@@ -2,8 +2,8 @@
 
 **The Complete Guide to Extending Claude Code with Skills, MCP, Slash Commands, and Subagents**
 
-Version: 2.7.0
-Last Updated: 2026-03-21
+Version: 2.8.0
+Last Updated: 2026-04-01
 
 ---
 
@@ -981,6 +981,17 @@ claude-code-agents/
 - `deep-read`: 6-phase codebase reading engine
 - `library-docs`: MCP-powered library documentation (context7)
 - `deep-analysis`: MCP-powered deep reasoning (sequential-thinking)
+- `security-scan`: Security vulnerability scanning and OWASP checks
+- `experiment-loop`: Autonomous metric-driven optimization (modify → measure → keep/discard)
+- `scheduled-tasks`: CronCreate/CronDelete/CronList for recurring prompts and polling
+- `worktree-workflow`: Git worktree isolation for parallel development and experiments
+- `remote-triggers`: RemoteTrigger API for cross-session automation and scheduled agents
+- `browser-testing`: Playwright MCP for E2E testing, visual regression, responsive design
+- `multi-agent-orchestration`: Coordinator pattern, teams, background agents, SendMessage
+- `kubernetes-ops`: Kubernetes operations, Helm charts, Karpenter, GitOps
+- `observability-stack`: OpenTelemetry, Prometheus/Grafana, RED/USE metrics, SLI/SLO
+- `sre-runbooks`: On-call handbook, postmortems, error budgets, chaos engineering
+- `infrastructure-as-code`: Terraform/CDK/Pulumi patterns, IaC testing, state management
 
 ### Agents in This Project
 - `architecture-planner`: System design and API specifications
@@ -1018,6 +1029,6 @@ By understanding when and how to use each mechanism, you can create powerful, ma
 
 ---
 
-**Version**: 2.7.0 - Autonomous Optimization & Experiment Loop Release
+**Version**: 2.8.0 - Built-in Tools, Multi-Agent Orchestration & Browser Testing Release
 **License**: MIT
 **Maintainer**: Claude Agents Project

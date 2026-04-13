@@ -19,7 +19,7 @@
 set -e
 
 # Configuration
-SCRIPT_VERSION="2.7.0"
+SCRIPT_VERSION="2.8.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
 DEBUG="${DEBUG:-false}"
@@ -427,6 +427,19 @@ Use these for structured, multi-phase task execution:
 - **`/resume-session [id]`** — Resume from a saved session with full context briefing.
 - **`/optimize <metric>`** — Autonomous metric-driven improvement loop: measure → improve → keep/revert.
 
+### 🔧 Built-in Tools (Always Available)
+
+Beyond agents and skills, Claude Code provides these tools directly:
+
+| Tool | Use When |
+|------|----------|
+| **TaskCreate/TaskUpdate/TaskList** | Multi-step work — structured task tracking with dependencies and progress |
+| **CronCreate/CronDelete/CronList** | Recurring prompts, polling, reminders (session-scoped, 7-day max) |
+| **EnterWorktree/ExitWorktree** | Parallel development — isolated git worktree branches for experiments or features |
+| **RemoteTrigger** | Cross-session automation — create/run scheduled remote agents |
+| **LSP** | Code intelligence — go-to-definition, find-references, hover, document symbols |
+| **AskUserQuestion** | Structured user input with labeled options and previews |
+
 ### 🔒 Security First
 
 - **security-auditor** & **incident-commander** always use Opus for maximum intelligence
@@ -488,6 +501,14 @@ append_claude_md_section() {
 - `/save-session` / `/resume-session` — Cross-session continuity
 - `/optimize <metric>` — Autonomous metric-driven improvement loop
 
+**Built-in Tools (Always Available):**
+- **TaskCreate/TaskUpdate/TaskList** — Structured task tracking with dependencies and progress
+- **CronCreate/CronDelete/CronList** — Recurring prompts, polling, reminders (session-scoped, 7-day max)
+- **EnterWorktree/ExitWorktree** — Isolated git worktree branches for experiments or features
+- **RemoteTrigger** — Cross-session automation with scheduled remote agents
+- **LSP** — Code intelligence: go-to-definition, find-references, hover, document symbols
+- **AskUserQuestion** — Structured user input with labeled options and previews
+
 **Example:** Say "build a REST API with authentication" and watch multiple agents collaborate automatically.
 
 <!-- ============ CLAUDE AGENTS AUTO-ACTIVATION SECTION END ============ -->
@@ -519,6 +540,17 @@ Use these for structured, multi-phase task execution:
 - **`/save-session [id]`** — Save structured session state with "What Did NOT Work" section.
 - **`/resume-session [id]`** — Resume from a saved session with full context briefing.
 - **`/optimize <metric>`** — Autonomous metric-driven improvement loop: measure → improve → keep/revert.
+
+### 🔧 Built-in Tools (Always Available)
+
+| Tool | Use When |
+|------|----------|
+| **TaskCreate/TaskUpdate/TaskList** | Multi-step work — structured task tracking with dependencies and progress |
+| **CronCreate/CronDelete/CronList** | Recurring prompts, polling, reminders (session-scoped, 7-day max) |
+| **EnterWorktree/ExitWorktree** | Parallel development — isolated git worktree branches for experiments or features |
+| **RemoteTrigger** | Cross-session automation — create/run scheduled remote agents |
+| **LSP** | Code intelligence — go-to-definition, find-references, hover, document symbols |
+| **AskUserQuestion** | Structured user input with labeled options and previews |
 EOF
 
     print_success "Added orchestration skills section to CLAUDE.md"
@@ -1020,6 +1052,9 @@ repair_installation() {
     # Patch Developer Workflow Commands section if missing
     patch_developer_workflow_in_claude_md
 
+    # Patch Built-in Tools section if missing
+    patch_builtin_tools_in_claude_md
+
     # Sync hooks to global ~/.claude/hooks/
     sync_hooks
 
@@ -1057,6 +1092,35 @@ patch_developer_workflow_in_claude_md() {
 EOF
 
     print_success "Patched CLAUDE.md: added Developer Workflow Commands section"
+}
+
+patch_builtin_tools_in_claude_md() {
+    # Patch CLAUDE.md to add Built-in Tools section if missing
+    if [ ! -f "CLAUDE.md" ]; then
+        return 0
+    fi
+    if grep -q "Built-in Tools" CLAUDE.md 2>/dev/null; then
+        return 0
+    fi
+    if ! grep -q "Auto-Activating\|Orchestration Skills\|Developer Workflow" CLAUDE.md 2>/dev/null; then
+        return 0
+    fi
+
+    cat >> CLAUDE.md << 'EOF'
+
+### 🔧 Built-in Tools (Always Available)
+
+| Tool | Use When |
+|------|----------|
+| **TaskCreate/TaskUpdate/TaskList** | Multi-step work — structured task tracking with dependencies and progress |
+| **CronCreate/CronDelete/CronList** | Recurring prompts, polling, reminders (session-scoped, 7-day max) |
+| **EnterWorktree/ExitWorktree** | Parallel development — isolated git worktree branches for experiments or features |
+| **RemoteTrigger** | Cross-session automation — create/run scheduled remote agents |
+| **LSP** | Code intelligence — go-to-definition, find-references, hover, document symbols |
+| **AskUserQuestion** | Structured user input with labeled options and previews |
+EOF
+
+    print_success "Patched CLAUDE.md: added Built-in Tools section"
 }
 
 patch_sre_specialist_in_claude_md() {
@@ -1271,6 +1335,7 @@ update_installation() {
             patch_meta_agent_in_claude_md
             patch_sre_specialist_in_claude_md
             patch_developer_workflow_in_claude_md
+            patch_builtin_tools_in_claude_md
         else
             # No agent section at all — append
             append_claude_md_section

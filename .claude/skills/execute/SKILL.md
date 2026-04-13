@@ -51,6 +51,8 @@ ActiveForm: <present continuous — "Adding retry logic to Bedrock calls">
 - Test-writing is a separate task from code-writing
 - File creation is separate from file modification
 - Each task targets ≤ 3 files
+- For monitoring/polling tasks, use CronCreate instead of manual loops
+- For risky or experimental tasks, consider EnterWorktree for isolation
 
 **Gate:** All tasks created via TaskCreate. Minimum 3 tasks for any non-trivial goal.
 
@@ -100,6 +102,10 @@ Process batches in order. Within each batch, maximize parallelism.
 - Send a single message with multiple `Task` tool calls for parallel agent launches
 - Use `run_in_background: true` for agent tasks that can run concurrently
 - For direct edits (Write/Edit), execute sequentially if they touch the same file
+- **Fork subagents** (omit `subagent_type`) when workers need your conversation context — shares prompt cache, much cheaper
+- **Coordinator synthesis**: After research agents complete, READ and SYNTHESIZE all findings before launching implementation agents — never pass raw research output
+- Use `isolation: "worktree"` for risky/experimental implementation tasks — auto-cleaned if no changes
+- For long-running monitoring, use CronCreate instead of manual polling loops
 - Always read a file before editing it
 - After code changes, run relevant tests if a test suite exists
 
