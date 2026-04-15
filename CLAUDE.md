@@ -73,6 +73,8 @@ Skills provide modular knowledge packages that complement agents. See `.claude/s
 
 Creating skills: `python3 .claude/skills/skill-creator/scripts/init_skill.py <name> --path .claude/skills`
 
+**Tip:** Use `CLAUDE.local.md` (gitignored) for personal project-level notes. Use `@path/to/file` syntax in CLAUDE.md to import content from other files without bloating the main file.
+
 ## MCP Integration
 
 MCP servers provide external tools that extend Claude Code. See `.claude/lib/mcp-guide.md` for configuration and usage.
