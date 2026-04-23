@@ -10,7 +10,7 @@
 #   ./validate.sh --quiet   - Only show errors
 # ============================================================================
 
-set -euo pipefail
+set -uo pipefail
 
 # Colors
 RED='\033[0;31m'
@@ -19,31 +19,221 @@ YELLOW='\033[1;33m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-QUIET="${1:-}"
+# ---- Flag parsing ----
+QUIET=""
+QUICK_MODE=false
+JSON_MODE=false
+HEAL_MODE=false
+for arg in "$@"; do
+    case "$arg" in
+        --quiet) QUIET="--quiet" ;;
+        --quick) QUICK_MODE=true ;;
+        --json)  JSON_MODE=true; QUIET="--quiet" ;;
+        --heal)  HEAL_MODE=true ;;
+    esac
+done
+
 ERRORS=0
 WARNINGS=0
 CHECKS=0
+JSON_EVENTS=()
+
+_json_push() {
+    # $1 level (pass/fail/warn), $2 message
+    local safe
+    safe=$(printf '%s' "$2" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    JSON_EVENTS+=("{\"level\":\"$1\",\"msg\":\"$safe\"}")
+}
 
 pass() {
-    ((CHECKS++))
+    ((CHECKS++)) || true
+    $JSON_MODE && _json_push pass "$1"
     [ "$QUIET" = "--quiet" ] || echo -e "  ${GREEN}PASS${NC} $1"
 }
 
 fail() {
-    ((CHECKS++))
-    ((ERRORS++))
-    echo -e "  ${RED}FAIL${NC} $1"
+    ((CHECKS++)) || true
+    ((ERRORS++)) || true
+    $JSON_MODE && _json_push fail "$1"
+    $JSON_MODE || echo -e "  ${RED}FAIL${NC} $1"
 }
 
 warn() {
-    ((CHECKS++))
-    ((WARNINGS++))
-    echo -e "  ${YELLOW}WARN${NC} $1"
+    ((CHECKS++)) || true
+    ((WARNINGS++)) || true
+    $JSON_MODE && _json_push warn "$1"
+    $JSON_MODE || [ "$QUIET" = "--quiet" ] || echo -e "  ${YELLOW}WARN${NC} $1"
 }
 
 section() {
+    $JSON_MODE && return 0
     [ "$QUIET" = "--quiet" ] || echo -e "\n${BOLD}$1${NC}"
 }
+
+# ============================================================================
+# Structural Checks (always-on, regardless of mode)
+# ============================================================================
+
+run_structural_checks() {
+    section "Structural Checks"
+
+    # Regression guard: SessionStart hook in TEMPLATE must NOT be a decorative echo
+    if [ -f "global-config/settings.json.template" ] && command -v jq &>/dev/null; then
+        local sess_cmd
+        sess_cmd=$(jq -r '.hooks.SessionStart[0].hooks[0].command // ""' global-config/settings.json.template 2>/dev/null)
+        if [[ "$sess_cmd" =~ ^[[:space:]]*echo ]]; then
+            fail "Structural: SessionStart hook in TEMPLATE is decorative (echo only)"
+        else
+            pass "Structural: SessionStart hook in template is non-decorative"
+        fi
+    fi
+
+    # Hook-drift check: every event in template must match user's ~/.claude/settings.json.
+    # This catches the "sync_hooks add-if-missing" bug class: hook installed on disk but
+    # not wired into settings.json because an older entry already existed.
+    if [ -f "global-config/settings.json.template" ] && [ -f "$HOME/.claude/settings.json" ] \
+       && command -v jq &>/dev/null; then
+        local drift_count=0
+        local tmpl_events
+        tmpl_events=$(jq -r '.hooks | keys[]' global-config/settings.json.template 2>/dev/null)
+        for event in $tmpl_events; do
+            local tmpl_cfg usr_cfg
+            tmpl_cfg=$(jq -Sc ".hooks[\"$event\"]" global-config/settings.json.template 2>/dev/null)
+            usr_cfg=$(jq -Sc ".hooks[\"$event\"] // null" "$HOME/.claude/settings.json" 2>/dev/null)
+            if [ "$tmpl_cfg" != "$usr_cfg" ]; then
+                fail "Structural: hook event '$event' in ~/.claude/settings.json drifted from template"
+                drift_count=$((drift_count + 1))
+            fi
+        done
+        if [ "$drift_count" -eq 0 ]; then
+            pass "Structural: ~/.claude/settings.json hook events match template"
+        fi
+    fi
+
+    # Warn if watchdog daemon not loaded (macOS only)
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        if launchctl list 2>/dev/null | grep -q claude-framework-watchdog; then
+            pass "Structural: claude-framework-watchdog daemon loaded"
+        else
+            warn "Structural: claude-framework-watchdog daemon not loaded"
+        fi
+    fi
+
+    # Warn if no snapshot newer than 48h
+    local snap_dir="$HOME/.claude/snapshots"
+    if [ -d "$snap_dir" ]; then
+        local fresh=0
+        if command -v find >/dev/null 2>&1; then
+            if find "$snap_dir" -maxdepth 1 -type f \( -name '*.bundle' -o -name '*.tgz' \) -mtime -2 2>/dev/null | grep -q .; then
+                fresh=1
+            fi
+        fi
+        if [ "$fresh" -eq 1 ]; then
+            pass "Structural: snapshot newer than 48h exists"
+        else
+            warn "Structural: no snapshot newer than 48h in $snap_dir"
+        fi
+    else
+        warn "Structural: no $snap_dir directory"
+    fi
+}
+
+run_structural_checks
+
+# ============================================================================
+# Quick Mode: integrity of ~/.claude/ only (hooks + analytics + env keys)
+# ============================================================================
+
+emit_and_exit() {
+    if $JSON_MODE; then
+        local joined=""
+        local sep=""
+        for ev in "${JSON_EVENTS[@]}"; do
+            joined+="${sep}${ev}"
+            sep=","
+        done
+        printf '{"checks":%d,"errors":%d,"warnings":%d,"events":[%s]}\n' \
+            "$CHECKS" "$ERRORS" "$WARNINGS" "$joined"
+    else
+        echo ""
+        echo -e "${BOLD}=== Validation Summary ===${NC}"
+        echo "  Checks: $CHECKS"
+        echo -e "  Passed: ${GREEN}$((CHECKS - ERRORS - WARNINGS))${NC}"
+        echo -e "  Warnings: ${YELLOW}$WARNINGS${NC}"
+        echo -e "  Errors: ${RED}$ERRORS${NC}"
+    fi
+
+    # Heal mode: on drift, invoke install.sh --update (never exit non-zero)
+    if $HEAL_MODE && [ "$ERRORS" -gt 0 ]; then
+        if [ -x "./install.sh" ]; then
+            ./install.sh --update >/dev/null 2>&1 || \
+                $JSON_MODE || echo -e "${YELLOW}heal: install.sh --update failed (logged)${NC}"
+        fi
+        # Heal mode never exits non-zero
+        exit 0
+    fi
+
+    if [ "$ERRORS" -eq 0 ]; then
+        exit 0
+    else
+        exit 1
+    fi
+}
+
+if $QUICK_MODE; then
+    section "Quick Mode: ~/.claude integrity"
+
+    # Hooks check
+    HOOKS_SRC="global-config/hooks"
+    HOOKS_DST="$HOME/.claude/hooks"
+    if [ -d "$HOOKS_SRC" ] && [ -d "$HOOKS_DST" ]; then
+        for src in "$HOOKS_SRC"/*.sh; do
+            [ -f "$src" ] || continue
+            name=$(basename "$src")
+            dst="$HOOKS_DST/$name"
+            if [ ! -f "$dst" ]; then
+                fail "Quick: hook not deployed: $name"
+            elif diff -q "$src" "$dst" >/dev/null 2>&1; then
+                pass "Quick: hook synced: $name"
+            else
+                fail "Quick: hook drift: $name"
+            fi
+        done
+    else
+        warn "Quick: hooks directories missing"
+    fi
+
+    # Analytics check
+    for f in collector.py server.py dashboard.html schema.sql; do
+        src="observability/$f"
+        dst="$HOME/.claude/analytics/$f"
+        if [ -f "$src" ] && [ -f "$dst" ]; then
+            if diff -q "$src" "$dst" >/dev/null 2>&1; then
+                pass "Quick: analytics synced: $f"
+            else
+                fail "Quick: analytics drift: $f"
+            fi
+        elif [ -f "$src" ]; then
+            fail "Quick: analytics not deployed: $f"
+        fi
+    done
+
+    # settings.json env keys
+    SETTINGS_DST="$HOME/.claude/settings.json"
+    TEMPLATE_SRC="global-config/settings.json.template"
+    if [ -f "$SETTINGS_DST" ] && [ -f "$TEMPLATE_SRC" ] && command -v jq &>/dev/null; then
+        while IFS= read -r k; do
+            [ -z "$k" ] && continue
+            if jq -e --arg k "$k" '.env[$k]' "$SETTINGS_DST" >/dev/null 2>&1; then
+                pass "Quick: env key present: $k"
+            else
+                fail "Quick: env key missing: $k"
+            fi
+        done < <(jq -r '.env | keys[]' "$TEMPLATE_SRC" 2>/dev/null)
+    fi
+
+    emit_and_exit
+fi
 
 # ============================================================================
 # Agent Validation
@@ -514,12 +704,26 @@ fi
 # Summary
 # ============================================================================
 
+if $JSON_MODE; then
+    emit_and_exit
+fi
+
 echo ""
 echo -e "${BOLD}=== Validation Summary ===${NC}"
 echo "  Checks: $CHECKS"
 echo -e "  Passed: ${GREEN}$((CHECKS - ERRORS - WARNINGS))${NC}"
 echo -e "  Warnings: ${YELLOW}$WARNINGS${NC}"
 echo -e "  Errors: ${RED}$ERRORS${NC}"
+
+if $HEAL_MODE && [ "$ERRORS" -gt 0 ]; then
+    echo -e "\n${YELLOW}${BOLD}Heal mode: running install.sh --update...${NC}"
+    if [ -x "./install.sh" ]; then
+        ./install.sh --update >/dev/null 2>&1 || \
+            echo -e "${YELLOW}heal: install.sh --update failed (logged)${NC}"
+    fi
+    # Heal mode never exits non-zero
+    exit 0
+fi
 
 if [ $ERRORS -eq 0 ]; then
     echo -e "\n${GREEN}${BOLD}All validations passed!${NC}"
