@@ -320,18 +320,27 @@ download_or_copy() {
     dest_dir=$(dirname "$dest_file")
     mkdir -p "$dest_dir"
 
-    # Check if running from the repo (local clone)
+    # Resolve actual source path
+    local src_path=""
     if [ -f "${SCRIPT_DIR}/${source_file}" ]; then
-        cp "${SCRIPT_DIR}/${source_file}" "$dest_file"
-        echo -e "  ${GREEN}✓${NC} Copied $file_type"
+        src_path="${SCRIPT_DIR}/${source_file}"
     elif [ -f "$source_file" ]; then
-        cp "$source_file" "$dest_file"
-        echo -e "  ${GREEN}✓${NC} Copied $file_type"
+        src_path="$source_file"
     else
         print_error "File not found: $source_file"
         print_info "Run this script from the cloned repository directory."
         return 1
     fi
+
+    # Skip if source and destination resolve to the same inode
+    # (happens when install.sh --update runs inside the source repo itself)
+    if [ -f "$dest_file" ] && [ "$src_path" -ef "$dest_file" ]; then
+        echo -e "  ${YELLOW}⏭${NC}  Skipped $file_type (in-place)"
+        return 0
+    fi
+
+    cp "$src_path" "$dest_file"
+    echo -e "  ${GREEN}✓${NC} Copied $file_type"
 }
 
 install_agent() {
@@ -764,28 +773,38 @@ sync_hooks() {
         print_success "Synced hook config $name"
     done
 
-    # Merge new hook events and env vars into existing settings.json (non-destructive)
+    # Reconcile hook events and env vars in settings.json against template.
+    # Framework-managed hook events (those present in template) are the source of truth:
+    # if user's version differs (missing, drifted command, drifted timeout, missing sub-hook),
+    # REPLACE user's version with template. User env vars are preserved (only missing keys added).
     if [ -f ~/.claude/settings.json ] && command -v jq &>/dev/null; then
         local template="${SCRIPT_DIR}/global-config/settings.json.template"
         if [ -f "$template" ]; then
-            local new_events
-            new_events=$(jq -r '.hooks | keys[]' "$template" 2>/dev/null)
-            local merged=false
-            for event in $new_events; do
-                if ! jq -e ".hooks[\"$event\"]" ~/.claude/settings.json &>/dev/null; then
+            local tmpl_events
+            tmpl_events=$(jq -r '.hooks | keys[]' "$template" 2>/dev/null)
+            local reconciled=false
+            for event in $tmpl_events; do
+                local tmpl_cfg usr_cfg
+                tmpl_cfg=$(jq -Sc ".hooks[\"$event\"]" "$template")
+                usr_cfg=$(jq -Sc ".hooks[\"$event\"] // null" ~/.claude/settings.json)
+                if [ "$tmpl_cfg" != "$usr_cfg" ]; then
                     local event_config
                     event_config=$(jq ".hooks[\"$event\"]" "$template")
                     jq ".hooks[\"$event\"] = $event_config" ~/.claude/settings.json > ~/.claude/settings.json.tmp \
                         && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
-                    print_success "Added hook event $event to settings.json"
-                    merged=true
+                    if [ "$usr_cfg" = "null" ]; then
+                        print_success "Added hook event $event to settings.json"
+                    else
+                        print_success "Reconciled drifted hook event $event (was: ${usr_cfg:0:80}...)"
+                    fi
+                    reconciled=true
                 fi
             done
-            if [ "$merged" = false ]; then
-                print_skip "All hook events already in settings.json"
+            if [ "$reconciled" = false ]; then
+                print_skip "All hook events match template"
             fi
 
-            # Merge new env vars into existing settings.json (non-destructive)
+            # Merge new env vars into existing settings.json (add-only: user values preserved)
             local new_env_keys
             new_env_keys=$(jq -r '.env | keys[]' "$template" 2>/dev/null)
             for key in $new_env_keys; do
@@ -844,6 +863,63 @@ install_analytics() {
             print_success "Added claude-obs alias to $(basename "$shell_rc")"
         else
             print_skip "claude-obs alias already in $(basename "$shell_rc")"
+        fi
+    fi
+}
+
+write_framework_path_marker() {
+    # Records the repo root so the SessionStart healthcheck hook can locate it.
+    mkdir -p "$HOME/.claude"
+    echo "$SCRIPT_DIR" > "$HOME/.claude/.framework-path"
+    print_success "Wrote framework path marker ($SCRIPT_DIR)"
+}
+
+install_watchdog() {
+    # macOS-only launchd watchdog
+    if [[ "$(uname -s)" != "Darwin" ]]; then
+        print_info "Not macOS — skipping watchdog daemon"
+        return 0
+    fi
+
+    echo -e "\n${BOLD}Installing Watchdog Daemon:${NC}"
+
+    local src_daemon_dir="${SCRIPT_DIR}/global-config/daemon"
+    if [ ! -d "$src_daemon_dir" ]; then
+        print_info "No daemon/ directory in source — skipping"
+        return 0
+    fi
+
+    mkdir -p "$HOME/.claude/daemon"
+
+    # Copy watchdog script
+    if [ -f "$src_daemon_dir/claude-framework-watchdog.sh" ]; then
+        cp "$src_daemon_dir/claude-framework-watchdog.sh" "$HOME/.claude/daemon/claude-framework-watchdog.sh"
+        chmod +x "$HOME/.claude/daemon/claude-framework-watchdog.sh"
+        print_success "Installed watchdog script"
+    fi
+
+    # Copy plist to LaunchAgents
+    local plist_src="$src_daemon_dir/com.claude-code-agents.framework-watchdog.plist"
+    local plist_dst="$HOME/Library/LaunchAgents/com.claude-code-agents.framework-watchdog.plist"
+    if [ -f "$plist_src" ]; then
+        mkdir -p "$HOME/Library/LaunchAgents"
+        cp "$plist_src" "$plist_dst"
+        print_success "Installed plist to LaunchAgents"
+
+        # Try bootstrap, fall back to load
+        local uid
+        uid=$(id -u)
+        if launchctl bootstrap "gui/$uid" "$plist_dst" 2>/dev/null; then
+            print_success "Loaded daemon via launchctl bootstrap"
+        elif launchctl load "$plist_dst" 2>/dev/null; then
+            print_success "Loaded daemon via launchctl load (fallback)"
+        else
+            # Already loaded — idempotent
+            if launchctl list 2>/dev/null | grep -q claude-framework-watchdog; then
+                print_skip "Daemon already loaded (re-copy ok)"
+            else
+                print_info "Could not auto-load daemon (try manually: launchctl bootstrap gui/$uid $plist_dst)"
+            fi
         fi
     fi
 }
@@ -989,6 +1065,12 @@ install_full() {
     # Ensure statusline is installed (global, once per machine)
     ensure_statusline
 
+    # Record framework path for SessionStart healthcheck hook
+    write_framework_path_marker
+
+    # Install watchdog daemon (macOS only)
+    install_watchdog || true
+
     if [ $install_errors -gt 0 ]; then
         print_error "$install_errors component(s) failed to install"
         return 1
@@ -1076,6 +1158,12 @@ repair_installation() {
 
     # Ensure statusline is installed
     ensure_statusline
+
+    # Record framework path for SessionStart healthcheck hook
+    write_framework_path_marker
+
+    # Install watchdog daemon (macOS only)
+    install_watchdog || true
 }
 
 patch_developer_workflow_in_claude_md() {
@@ -1267,8 +1355,12 @@ update_installation() {
             local name
             name=$(basename "$file")
             [[ "$name" == ._* ]] && continue
-            cp "$file" ".claude/rules/$name"
-            print_success "Updated rule $name"
+            if [ -f ".claude/rules/$name" ] && [ "$file" -ef ".claude/rules/$name" ]; then
+                print_skip "Rule $name (in-place)"
+            else
+                cp "$file" ".claude/rules/$name"
+                print_success "Updated rule $name"
+            fi
             (( STATS_UPDATED++ )) || true
         done
     fi
@@ -1282,8 +1374,12 @@ update_installation() {
             local name
             name=$(basename "$skill_dir")
             [[ "$name" == ._* ]] && continue
-            cp -r "$skill_dir" ".claude/skills/$name"
-            print_success "Updated skill $name"
+            if [ -d ".claude/skills/$name" ] && [ "$skill_dir" -ef ".claude/skills/$name" ]; then
+                print_skip "Skill $name (in-place)"
+            else
+                cp -r "$skill_dir" ".claude/skills/$name"
+                print_success "Updated skill $name"
+            fi
             (( STATS_UPDATED++ )) || true
         done
     fi
@@ -1297,8 +1393,12 @@ update_installation() {
             local name
             name=$(basename "$file")
             [[ "$name" == ._* ]] && continue
-            cp "$file" ".claude/commands/$name"
-            print_success "Updated command $name"
+            if [ -f ".claude/commands/$name" ] && [ "$file" -ef ".claude/commands/$name" ]; then
+                print_skip "Command $name (in-place)"
+            else
+                cp "$file" ".claude/commands/$name"
+                print_success "Updated command $name"
+            fi
             (( STATS_UPDATED++ )) || true
         done
     fi
@@ -1359,6 +1459,12 @@ update_installation() {
 
     # Ensure statusline is installed
     ensure_statusline
+
+    # Record framework path for SessionStart healthcheck hook
+    write_framework_path_marker
+
+    # Install watchdog daemon (macOS only)
+    install_watchdog || true
 }
 
 # ============================================================================

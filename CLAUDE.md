@@ -106,6 +106,29 @@ Built-in dashboard aggregating Claude Code JSONL session logs across all project
 
 **CRITICAL:** security-auditor and incident-commander ALWAYS use Opus. Security considerations are embedded in every agent following OWASP guidelines and DevSecOps best practices.
 
+## Self-Healing
+
+The framework reconciles its own deployed state. Two paths, one diagnostic stream.
+
+**Fast path — SessionStart hook (`global-config/hooks/session-start-healthcheck.sh`):**
+- Runs on every Claude Code session start, budget <2s
+- Checks env keys in `~/.claude/settings.json` against template, hook script sha256 against source, analytics files present
+- On drift: logs to `~/.claude/analytics/framework-health.jsonl` and forks `install.sh --update` in background
+- Exit 0 always — never blocks session start
+
+**Slow path — launchd watchdog (`global-config/daemon/claude-framework-watchdog.sh`):**
+- Runs hourly via `com.claude-code-agents.framework-watchdog` LaunchAgent
+- Hourly: `validate.sh --quick --json`, `git fsck` on repo (corruption → `watchdog-alerts.jsonl`)
+- Daily: git bundle snapshot of repo, tarball of `~/.claude/hooks` + `settings.json`
+- Retention: prunes snapshots older than 7 days
+- Output: `~/.claude/analytics/watchdog.log`
+
+**Snapshot restore (`~/.claude/snapshots/`):**
+- Repo corruption: `git clone ~/.claude/snapshots/claude-code-agents-YYYYMMDD-HHMM.bundle recovered/`
+- User config corruption: `tar -xzf ~/.claude/snapshots/userconfig-YYYYMMDD.tgz -C /`
+
+**Diagnostic stream:** `~/.claude/analytics/framework-health.jsonl` — single source for drift events, validation output, snapshot activity. `~/.claude/analytics/watchdog-alerts.jsonl` for corruption alerts.
+
 ## Quick Start
 
 Describe what you need naturally:
