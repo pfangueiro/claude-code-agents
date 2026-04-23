@@ -764,7 +764,7 @@ sync_hooks() {
         print_success "Synced hook config $name"
     done
 
-    # Merge new hook events into existing settings.json (non-destructive)
+    # Merge new hook events and env vars into existing settings.json (non-destructive)
     if [ -f ~/.claude/settings.json ] && command -v jq &>/dev/null; then
         local template="${SCRIPT_DIR}/global-config/settings.json.template"
         if [ -f "$template" ]; then
@@ -784,6 +784,19 @@ sync_hooks() {
             if [ "$merged" = false ]; then
                 print_skip "All hook events already in settings.json"
             fi
+
+            # Merge new env vars into existing settings.json (non-destructive)
+            local new_env_keys
+            new_env_keys=$(jq -r '.env | keys[]' "$template" 2>/dev/null)
+            for key in $new_env_keys; do
+                if ! jq -e ".env[\"$key\"]" ~/.claude/settings.json &>/dev/null; then
+                    local val
+                    val=$(jq ".env[\"$key\"]" "$template")
+                    jq ".env[\"$key\"] = $val" ~/.claude/settings.json > ~/.claude/settings.json.tmp \
+                        && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
+                    print_success "Added env var $key to settings.json"
+                fi
+            done
         fi
     fi
 }
