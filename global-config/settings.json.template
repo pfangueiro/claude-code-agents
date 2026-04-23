@@ -174,8 +174,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '✨ Claude Code session started with full security and MCP integration'",
-            "timeout": 2
+            "command": "~/.claude/hooks/session-start-healthcheck.sh",
+            "timeout": 10
           }
         ]
       }
