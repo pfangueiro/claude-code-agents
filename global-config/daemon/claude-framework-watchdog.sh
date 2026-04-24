@@ -159,5 +159,34 @@ if [ -d "$SNAPSHOT_DIR" ]; then
     done
 fi
 
+# -------- Task 6: regenerate claude-obs.db when missing --------
+# Closes the "deferred_regen" loop from the SessionStart healthcheck hook.
+# If the DB file is missing (e.g. purged for schema migration) but the
+# collector is present, run it with a timeout and soft-fail.
+OBS_DB="$HOME/.claude/analytics/claude-obs.db"
+OBS_COLLECTOR="$HOME/.claude/analytics/collector.py"
+if [ ! -f "$OBS_DB" ] && [ -f "$OBS_COLLECTOR" ] && command -v python3 >/dev/null 2>&1; then
+    log "watchdog: claude-obs.db missing — invoking collector"
+    # Use `timeout` if available (macOS via coreutils); fall back to bare python3.
+    if command -v timeout >/dev/null 2>&1; then
+        regen_out=$(timeout 120 python3 "$OBS_COLLECTOR" 2>&1 || true)
+    elif command -v gtimeout >/dev/null 2>&1; then
+        regen_out=$(gtimeout 120 python3 "$OBS_COLLECTOR" 2>&1 || true)
+    else
+        regen_out=$(python3 "$OBS_COLLECTOR" 2>&1 || true)
+    fi
+    if [ -f "$OBS_DB" ]; then
+        log_jsonl "$HEALTH_LOG" "\"event\":\"deferred_regen_success\",\"db\":\"$OBS_DB\""
+        log "watchdog: claude-obs.db regenerated"
+    else
+        esc=$(printf '%s' "$regen_out" | head -c 2000 | tr '\n' ' ' | sed 's/"/\\"/g')
+        log_jsonl "$ALERT_LOG" "\"event\":\"deferred_regen_failed\",\"output\":\"$esc\""
+        log "watchdog: claude-obs.db regen FAILED"
+    fi
+elif [ ! -f "$OBS_DB" ]; then
+    log_jsonl "$HEALTH_LOG" "\"event\":\"deferred_regen_skipped\",\"reason\":\"collector_or_python_missing\""
+    log "watchdog: claude-obs.db missing but collector/python3 unavailable — skipped"
+fi
+
 log "watchdog: run complete"
 exit 0

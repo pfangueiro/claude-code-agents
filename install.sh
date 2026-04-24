@@ -19,7 +19,7 @@
 set -e
 
 # Configuration
-SCRIPT_VERSION="2.8.0"
+SCRIPT_VERSION="2.9.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
 DEBUG="${DEBUG:-false}"
@@ -874,6 +874,24 @@ write_framework_path_marker() {
     print_success "Wrote framework path marker ($SCRIPT_DIR)"
 }
 
+write_framework_version_marker() {
+    # Records the framework version and source SHA in the deployed project.
+    # Invoked from every install mode so downstream tooling can tell what's deployed.
+    mkdir -p .claude
+    local sha="unknown"
+    if command -v git >/dev/null 2>&1; then
+        sha=$(git -C "$SCRIPT_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    fi
+    local ts
+    ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    {
+        echo "version=${SCRIPT_VERSION}"
+        echo "sha=${sha}"
+        echo "installed_at=${ts}"
+    } > .claude/.framework-version
+    print_success "Wrote framework version marker (v${SCRIPT_VERSION} @ ${sha})"
+}
+
 install_watchdog() {
     # macOS-only launchd watchdog
     if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -1068,6 +1086,9 @@ install_full() {
     # Record framework path for SessionStart healthcheck hook
     write_framework_path_marker
 
+    # Record framework version/SHA in the deployed project
+    write_framework_version_marker
+
     # Install watchdog daemon (macOS only)
     install_watchdog || true
 
@@ -1161,6 +1182,9 @@ repair_installation() {
 
     # Record framework path for SessionStart healthcheck hook
     write_framework_path_marker
+
+    # Record framework version/SHA in the deployed project
+    write_framework_version_marker
 
     # Install watchdog daemon (macOS only)
     install_watchdog || true
@@ -1462,6 +1486,9 @@ update_installation() {
 
     # Record framework path for SessionStart healthcheck hook
     write_framework_path_marker
+
+    # Record framework version/SHA in the deployed project
+    write_framework_version_marker
 
     # Install watchdog daemon (macOS only)
     install_watchdog || true
