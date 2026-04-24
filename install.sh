@@ -816,6 +816,26 @@ sync_hooks() {
                     print_success "Added env var $key to settings.json"
                 fi
             done
+
+            # Reconcile .permissions (framework-owned, security-sensitive — same
+            # replace-on-drift policy as hooks). Users who want custom permissions
+            # should edit settings.local.json, which has higher precedence.
+            if jq -e '.permissions' "$template" &>/dev/null; then
+                local tmpl_perms usr_perms
+                tmpl_perms=$(jq -Sc '.permissions' "$template")
+                usr_perms=$(jq -Sc '.permissions // null' ~/.claude/settings.json)
+                if [ "$tmpl_perms" != "$usr_perms" ]; then
+                    local perms_value
+                    perms_value=$(jq '.permissions' "$template")
+                    jq ".permissions = $perms_value" ~/.claude/settings.json > ~/.claude/settings.json.tmp \
+                        && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
+                    if [ "$usr_perms" = "null" ]; then
+                        print_success "Added permissions block to settings.json"
+                    else
+                        print_success "Reconciled permissions block in settings.json"
+                    fi
+                fi
+            fi
         fi
     fi
 }
@@ -922,6 +942,10 @@ install_watchdog() {
     if [ -f "$plist_src" ]; then
         mkdir -p "$HOME/Library/LaunchAgents"
         cp "$plist_src" "$plist_dst"
+        # Substitute template path $HOME/ with caller's $HOME so the plist
+        # works for any user. sed -i '' for BSD sed (macOS); Label is left alone
+        # because renaming a loaded launchd Label breaks idempotent re-install.
+        sed -i '' "s|$HOME/|${HOME}/|g" "$plist_dst" 2>/dev/null || true
         print_success "Installed plist to LaunchAgents"
 
         # Try bootstrap, fall back to load
@@ -1339,6 +1363,20 @@ clean_old_agents() {
 }
 
 update_installation() {
+    # Concurrency guard: prevent two concurrent --update runs from racing on
+    # ~/.claude/settings.json (jq read-modify-write isn't atomic). Portable
+    # lockfile via `mkdir` (atomic on POSIX filesystems) — macOS bash lacks
+    # flock(1). Non-blocking: if another install is running, exit cleanly so
+    # the healthcheck-hook / watchdog self-heal loop doesn't log errors.
+    local lock_dir="$HOME/.claude/.install.lock.d"
+    mkdir -p "$HOME/.claude" 2>/dev/null || true
+    if ! mkdir "$lock_dir" 2>/dev/null; then
+        echo "another install is running — exiting cleanly" >&2
+        return 0
+    fi
+    # shellcheck disable=SC2064
+    trap "rmdir '$lock_dir' 2>/dev/null || true" EXIT INT TERM
+
     echo -e "\n${BOLD}Updating Installation${NC}"
     echo "This will update all components to latest version"
 

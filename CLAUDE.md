@@ -83,7 +83,7 @@ MCP servers provide external tools that extend Claude Code. See `.claude/lib/mcp
 
 10 hook events across 3 types. Hooks live in `global-config/hooks/`, installed globally to `~/.claude/hooks/`.
 
-**Command hooks (9 scripts):**
+**Command hooks (10 scripts):**
 - `file-protection.sh` — PreToolUse: blocks edits to sensitive files (.env, *.key, *.pem)
 - `post-edit-lint.sh` — PostToolUse: auto-lints TS/JS after Write/Edit, warns on debug statements
 - `notify.sh` — Notification: desktop alerts when Claude needs attention
@@ -93,6 +93,7 @@ MCP servers provide external tools that extend Claude Code. See `.claude/lib/mcp
 - `smart-guard.sh` — PermissionRequest: auto-approves safe read operations, audits dangerous ones
 - `pre-compact.sh` — PreCompact: auto-saves session snapshot before context compaction
 - `post-compact.sh` — PostCompact: verifies session snapshot was saved after compaction
+- `session-start-healthcheck.sh` — SessionStart: fast-path framework health check, forks `install.sh --update` on drift
 
 **Reference configs (Phase 2 opt-in):**
 - `smart-file-guard.json` — prompt hook: LLM-based file protection for edge cases
