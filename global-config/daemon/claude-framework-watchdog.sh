@@ -70,15 +70,31 @@ else
 fi
 
 # -------- Task 2: git fsck --------
+# Filter benign noise (reflog residue, dangling commits, refs/ chatter) and
+# only alert on real object-level corruption. Two-stage:
+#   1. grep -vE drops known-benign lines
+#   2. grep -qE on what remains matches real corruption signatures
 if [ -d "$REPO/.git" ] && command -v git >/dev/null 2>&1; then
-    fsck_out=$(git -C "$REPO" fsck --no-progress 2>&1 || true)
-    if echo "$fsck_out" | grep -qiE 'error|corrupt|missing|bad'; then
-        esc=$(printf '%s' "$fsck_out" | head -c 4000 | tr '\n' ' ' | sed 's/"/\\"/g')
+    fsck_raw=$(git -C "$REPO" fsck --no-progress 2>&1 || true)
+    fsck_filtered=$(printf '%s\n' "$fsck_raw" | grep -vE \
+        -e 'invalid reflog entry' \
+        -e '^error: refs/' \
+        -e '^dangling ' \
+        -e '^notice:' \
+        -e '^Checking ' \
+        -e '^$' \
+        || true)
+    if printf '%s\n' "$fsck_filtered" | grep -qE \
+        -e '^error: (object|tree|blob|commit):' \
+        -e 'missing (blob|tree|commit)' \
+        -e '^error:.*corrupt' \
+        -e 'bad (object|tree|blob|commit|link)' ; then
+        esc=$(printf '%s' "$fsck_filtered" | head -c 4000 | tr '\n' ' ' | sed 's/"/\\"/g')
         log_jsonl "$ALERT_LOG" "\"event\":\"git_fsck_error\",\"output\":\"$esc\""
-        log "watchdog: git fsck reported issues (alerted)"
+        log "watchdog: git fsck reported real corruption (alerted)"
     else
         log_jsonl "$HEALTH_LOG" "\"event\":\"git_fsck_pass\""
-        log "watchdog: git fsck clean"
+        log "watchdog: git fsck clean (benign reflog/dangling lines filtered out)"
     fi
 fi
 
