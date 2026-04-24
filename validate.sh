@@ -110,9 +110,12 @@ run_structural_checks() {
         fi
     fi
 
-    # Warn if watchdog daemon not loaded (macOS only)
+    # Warn if watchdog daemon not loaded (macOS only).
+    # Use `launchctl print` (direct query by domain/label) instead of `launchctl list | grep`:
+    # the grep-parse variant races against concurrent install_watchdog invocations
+    # during deploy-all (88 × launchctl bootstrap) and false-positives.
     if [[ "$(uname -s)" == "Darwin" ]]; then
-        if launchctl list 2>/dev/null | grep -q claude-framework-watchdog; then
+        if launchctl print "gui/$(id -u)/com.pfang.claude-framework-watchdog" >/dev/null 2>&1; then
             pass "Structural: claude-framework-watchdog daemon loaded"
         else
             warn "Structural: claude-framework-watchdog daemon not loaded"
