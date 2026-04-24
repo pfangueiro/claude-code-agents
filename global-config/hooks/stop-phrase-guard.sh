@@ -148,6 +148,8 @@ jq -n \
   '{event: $event, category: $cat, matched_phrase: $phrase, session_id: $sid, cwd: $cwd, timestamp: $ts}' \
   >> "$VIOLATIONS_FILE" 2>/dev/null
 
-# Block the stop — exit 2 with feedback message that gets injected back to Claude
-echo "STOP VIOLATION [$category]: Detected phrase \"$matched_phrase\". Do not deflect, ask permission, or stop prematurely. Complete the task fully — read files, implement changes, verify results. Continue working."
+# Block the stop — exit 2 with feedback message that gets injected back to Claude.
+# Write to stderr (not stdout): Claude Code's Stop-hook UI surfaces stderr as the
+# displayed message, and exit-2 feedback injection reads stderr by convention.
+echo "STOP VIOLATION [$category]: Detected phrase \"$matched_phrase\". Do not deflect, ask permission, or stop prematurely. Complete the task fully — read files, implement changes, verify results. Continue working." >&2
 exit 2
