@@ -174,11 +174,14 @@ def init_db(db_path):
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
 
-    # Run migrations FIRST so columns exist before schema indexes reference them
-    migrate_schema(conn)
-
+    # schema.sql FIRST so base tables exist before migrate_schema tries to
+    # ALTER them or CREATE INDEX on their columns. On fresh DBs (first run
+    # or watchdog regen after delete) the old order failed with
+    # "no such table: main.sessions" and aborted leaving only a partial DB.
     with open(schema_path) as f:
         conn.executescript(f.read())
+
+    migrate_schema(conn)
 
     conn.commit()
     return conn
