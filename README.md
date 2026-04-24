@@ -1,7 +1,7 @@
 # Claude Agents - AI-Powered SDLC Agent System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-2.8.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
+[![Version](https://img.shields.io/badge/version-2.9.1-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://docs.anthropic.com/en/docs/claude-code)
 [![Agents](https://img.shields.io/badge/Agents-13-orange.svg)](#-available-agents)
 [![Skills](https://img.shields.io/badge/Skills-26-green.svg)](#-skills-system)
@@ -221,10 +221,11 @@ Four rule files in `.claude/rules/` are automatically loaded by Claude Code in e
 
 ## Hooks
 
-10 hook events across 9 command hooks, installed globally to `~/.claude/hooks/`:
+10 hook events across 10 command hooks, installed globally to `~/.claude/hooks/`:
 
 | Hook | Event | What It Does |
 |------|-------|-------------|
+| **session-start-healthcheck.sh** | SessionStart | Fast-path framework drift check (<2s); forks `install.sh --update` on drift |
 | **file-protection.sh** | PreToolUse | Blocks edits to sensitive files (.env, *.key, *.pem, secrets/) |
 | **post-edit-lint.sh** | PostToolUse | Auto-lints TS/JS after Write/Edit, warns on debug statements |
 | **notify.sh** | Notification | Desktop alert when Claude needs attention |
@@ -248,12 +249,13 @@ Four rule files in `.claude/rules/` are automatically loaded by Claude Code in e
 ├── agents/          # 13 auto-activating SDLC agents
 ├── commands/        # 13 slash commands
 ├── skills/          # 26 modular knowledge packages
-├── rules/           # 4 auto-enforced rule sets
+├── rules/           # 5 auto-enforced rule sets
 ├── lib/             # Templates, patterns, coordination protocol
 └── history/         # Session history
 
 global-config/
-├── hooks/           # 9 command hooks + 2 reference configs
+├── hooks/           # 10 command hooks + 2 reference configs
+├── daemon/          # launchd watchdog (hourly validate + snapshots)
 ├── settings.json.template  # 10 hook events, permissions, model config
 └── ...              # statusline, output styles
 ```
