@@ -5,6 +5,50 @@ All notable changes to Claude Agents will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.1] - 2026-04-24
+
+### Self-Healing Framework Hardening
+
+Follow-up to 2.9.0 addressing gaps found by a pre-deploy deep-analysis pass.
+
+### Fixed
+
+- **sync_hooks `permissions` reconciliation**: template permissions now propagate to user `~/.claude/settings.json` on install, not just hook events and env vars. Previous add-if-missing skipped drifted permissions.
+- **Install concurrency lock**: `install.sh --update` now acquires a non-blocking lock at `~/.claude/.install.lock.d`. Prevents healthcheck + watchdog racing on `jq` read-modify-write of settings.json.
+- **Watchdog fsck filter**: tightened from `error|corrupt|missing|bad` to only match real object corruption. Benign reflog residue and dangling commits no longer alert.
+- **Plist path templating**: `install_watchdog()` sed-substitutes `$HOME/` → `$HOME/` in the LaunchAgent plist at install time so the daemon works for any user.
+- **Doc drift**: CLAUDE.md, MEMORY.md, README.md, EXTENSIBILITY.md — fixed stale counts (9 hooks → 10, 4 rules → 5) and version strings.
+- **Framework marker in source repo**: `write_framework_version_marker()` now skips when CWD is the source tree; added `.gitignore` entries for `.claude/.framework-version` and `.claude-backup-*/` as defense in depth.
+- **Stop-phrase-guard output**: violation message now written to stderr so Claude Code's Stop-hook UI displays the actual matched phrase instead of "No stderr output".
+
+### Added
+
+- **deploy-all.sh**: driver for batch install across `~/local-codebase/*/` with per-project pre-install tarballs, `--dry-run`, `--continue-on-error` (default), `--halt-on-error`, `--only <name>`, and JSONL failure manifest. Retention: keep last 2 runs' tarballs.
+- **.claude/.framework-version marker**: written into every deployed project (version + short SHA + UTC timestamp). Enables targeted re-deploy and staggered rollout.
+- **Watchdog claude-obs.db regeneration**: when the DB is missing, watchdog runs `python3 collector.py` with a 120s timeout. Closes the "deferred_regen" path logged by the healthcheck hook.
+
+## [2.9.0] - 2026-04-23
+
+### Self-Healing Framework
+
+Introduces an end-to-end reconciliation loop so framework state can no longer silently drift.
+
+### Added
+
+- **SessionStart healthcheck hook** (`global-config/hooks/session-start-healthcheck.sh`): runs on every session start with a <2s budget. Checks env keys, hook sha256s, analytics file presence, hook event wiring vs template. On drift: logs to `~/.claude/analytics/framework-health.jsonl` and forks `install.sh --update` in background. Exit 0 always (never blocks session start).
+- **launchd watchdog daemon** (`global-config/daemon/claude-framework-watchdog.sh` + plist): hourly `validate.sh --quick --json`, `git fsck`, daily rolling `git bundle` snapshots to `~/.claude/snapshots/`, daily userconfig tarballs, 7d retention.
+- **validate.sh modes**: `--quick` (~0.08s, checks `~/.claude/` only), `--json` (machine-readable for daemon consumption), `--heal` (invokes `install.sh --update` on detected drift).
+- **validate.sh structural checks** (always-on): SessionStart template non-decorative regression guard, user-settings hook-wiring drift vs template, watchdog daemon loaded, snapshot freshness (<48h).
+- **.claude/rules/framework-integrity.md**: no decorative hooks; auto-reconciled state; every critical directory has a snapshot with restore path.
+- **Self-Healing section in CLAUDE.md**: describes the fast/slow paths, diagnostic streams, and restore procedures.
+- **install.sh install_watchdog() + write_framework_path_marker()**: wired into `--full`, `--update`, `--team-setup`, `--repair`.
+- **install.sh inode guards**: `-ef` checks in `download_or_copy()` and three direct `cp` sites make `--update` idempotent when run inside the source repo.
+
+### Fixed
+
+- **sync_hooks reconciliation** (was add-if-missing): template hook events now REPLACE user's version on drift, not just on missing-key. Previously left SessionStart stuck on a decorative echo and `stop-phrase-guard.sh` disabled for weeks even though present on disk.
+- **sync_hooks env merge**: environment variables from `settings.json.template` now merged into user `~/.claude/settings.json`. Previously lost across installs — e.g., `CLAUDE_CODE_EFFORT_LEVEL=high` never reached users.
+
 ## [2.3.0] - 2026-02-12
 
 ### Quality, Coordination & Extensibility Release

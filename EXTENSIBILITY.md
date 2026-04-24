@@ -2,8 +2,8 @@
 
 **The Complete Guide to Extending Claude Code with Skills, MCP, Slash Commands, and Subagents**
 
-Version: 2.8.0
-Last Updated: 2026-04-01
+Version: 2.9.1
+Last Updated: 2026-04-24
 
 ---
 
@@ -1029,6 +1029,6 @@ By understanding when and how to use each mechanism, you can create powerful, ma
 
 ---
 
-**Version**: 2.8.0 - Built-in Tools, Multi-Agent Orchestration & Browser Testing Release
+**Version**: 2.9.1 - Self-Healing Framework Release (SessionStart healthcheck, launchd watchdog, deploy driver, drift reconciliation)
 **License**: MIT
 **Maintainer**: Claude Agents Project
