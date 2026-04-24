@@ -211,6 +211,44 @@ for proj in "${projects[@]}"; do
 done
 
 echo ""
+
+# ----------------------------------------------------------------------------
+# Tarball retention: keep only the 2 most-recent per-project tarballs.
+# Tarball format: project-<name>-pre-<RUN_TS>.tgz
+# Without pruning, N×89 tarballs accumulate; keeping 2 per base is bounded.
+# ----------------------------------------------------------------------------
+if [ "$DRY_RUN" -eq 0 ] && [ -d "$SNAPSHOT_DIR" ]; then
+    pruned=0
+    # Extract unique project basenames from any existing project-*.tgz files.
+    # Names with dashes (e.g. project-ai-core-gateway-pre-...) are handled by
+    # stripping the "project-" prefix and "-pre-<RUN_TS>.tgz" suffix.
+    while IFS= read -r base; do
+        [ -z "$base" ] && continue
+        # For this base, sort tarballs newest-first by mtime, keep first 2, delete rest.
+        # Use find + stat+sort (portable) rather than ls -t (not POSIX reliable here).
+        while IFS= read -r old; do
+            [ -z "$old" ] && continue
+            rm -f "$old" 2>/dev/null && pruned=$((pruned + 1))
+        done < <(
+            find "$SNAPSHOT_DIR" -maxdepth 1 -type f -name "project-${base}-pre-*.tgz" -print 2>/dev/null \
+                | while IFS= read -r f; do
+                    mt=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)
+                    printf '%s\t%s\n' "$mt" "$f"
+                  done \
+                | sort -rn \
+                | tail -n +3 \
+                | cut -f2-
+        )
+    done < <(
+        find "$SNAPSHOT_DIR" -maxdepth 1 -type f -name 'project-*-pre-*.tgz' -print 2>/dev/null \
+            | sed -E 's|^.*/project-(.*)-pre-[0-9]+-[0-9]+\.tgz$|\1|' \
+            | sort -u
+    )
+    if [ "$pruned" -gt 0 ]; then
+        log "${CYAN}retention:${NC}  pruned $pruned older project tarball(s) (keep 2 per project)"
+    fi
+fi
+
 log "${BOLD}=== Summary ===${NC}"
 log "  total:      $total"
 log "  ${GREEN}succeeded:${NC}  $succeeded"
