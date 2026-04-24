@@ -897,6 +897,16 @@ write_framework_path_marker() {
 write_framework_version_marker() {
     # Records the framework version and source SHA in the deployed project.
     # Invoked from every install mode so downstream tooling can tell what's deployed.
+    # Skip when CWD is the source repo itself — the marker is a *deployment* artifact,
+    # not part of the framework tree. Writing it there would dirty git status and
+    # propagate via the next install to the 88 projects, overwriting their own markers.
+    local cwd_real src_real
+    cwd_real=$(pwd -P)
+    src_real=$(cd "$SCRIPT_DIR" && pwd -P)
+    if [ "$cwd_real" = "$src_real" ]; then
+        print_skip "Framework version marker (source repo — marker is for deployments only)"
+        return 0
+    fi
     mkdir -p .claude
     local sha="unknown"
     if command -v git >/dev/null 2>&1; then

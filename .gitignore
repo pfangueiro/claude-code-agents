@@ -18,6 +18,13 @@ Thumbs.db
 # MCP config (contains machine-specific paths - use .mcp.json.example as template)
 .mcp.json
 
+# Deployment marker — written by install.sh into deployed projects only.
+# Never belongs in the source tree (install.sh has a guard, this is defense in depth).
+.claude/.framework-version
+
+# install.sh creates these automatically during --update as local rollback snapshots.
+.claude-backup-*/
+
 # Editor files
 .vscode/
 .idea/
