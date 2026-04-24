@@ -68,7 +68,11 @@ Skills provide modular knowledge packages that complement agents. See `.claude/s
 **SRE/Cloud skills:** kubernetes-ops, observability-stack, sre-runbooks, infrastructure-as-code
 **Experimentation skills:** experiment-loop (autonomous optimization patterns)
 **Automation skills:** scheduled-tasks (CronCreate), worktree-workflow (EnterWorktree), remote-triggers (RemoteTrigger), multi-agent-orchestration (TeamCreate/SendMessage)
-**Testing skills:** browser-testing (Playwright MCP for E2E, visual regression, responsive design)
+**Testing skills:** browser-testing (Playwright MCP for E2E, visual regression), api-contract-testing (OpenAPI / JSON Schema / contract-first)
+**API skills:** api-guidelines (Next.js/TypeScript secure endpoint patterns)
+**UI skills:** ui-guidelines (React/Next.js + Ant Design + shadcn patterns, spacing / typography / color system)
+**Infra skills:** docker-deployment (multi-stage builds, prod configs), ci-cd-templates (GitHub Actions / GitLab CI / CircleCI)
+**Session skills:** handoff (HANDOFF.md creation for session continuity before /compact)
 **MCP-powered skills:** library-docs (context7), deep-analysis (sequential-thinking)
 
 Creating skills: `python3 .claude/skills/skill-creator/scripts/init_skill.py <name> --path .claude/skills`
