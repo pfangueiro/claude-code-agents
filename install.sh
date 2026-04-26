@@ -307,6 +307,18 @@ backup_existing() {
         fi
 
         print_success "Backup created in $BACKUP_DIR"
+
+        # Rotation: keep the 3 most-recent backups, delete older. Without this
+        # every --update accumulates a new dir; observed 3,901 stale dirs across
+        # 88 projects (~780MB) before this rotation landed.
+        local stale
+        stale=$(ls -1d .claude-backup-* 2>/dev/null | sort -r | tail -n +4)
+        if [ -n "$stale" ]; then
+            local stale_count
+            stale_count=$(echo "$stale" | wc -l | tr -d ' ')
+            echo "$stale" | xargs -I{} rm -rf {}
+            print_skip "Pruned $stale_count older backup dir(s); kept latest 3"
+        fi
     fi
 }
 
@@ -1379,13 +1391,30 @@ update_installation() {
     # flock(1). Non-blocking: if another install is running, exit cleanly so
     # the healthcheck-hook / watchdog self-heal loop doesn't log errors.
     local lock_dir="$HOME/.claude/.install.lock.d"
+    local lock_pid_file="$lock_dir/pid"
     mkdir -p "$HOME/.claude" 2>/dev/null || true
+    # Stale-lock detection: a previous install killed mid-run leaves the lock
+    # directory but the PID inside is dead. Without this check the framework
+    # would deadlock indefinitely (next install always exits "another running").
+    if [ -d "$lock_dir" ]; then
+        if [ -f "$lock_pid_file" ]; then
+            local lock_pid
+            lock_pid=$(cat "$lock_pid_file" 2>/dev/null)
+            if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
+                echo "another install is running (pid $lock_pid) — exiting cleanly" >&2
+                return 0
+            fi
+        fi
+        echo "removing stale lock at $lock_dir" >&2
+        rm -rf "$lock_dir"
+    fi
     if ! mkdir "$lock_dir" 2>/dev/null; then
-        echo "another install is running — exiting cleanly" >&2
+        echo "lock acquisition failed unexpectedly — exiting" >&2
         return 0
     fi
+    echo $$ > "$lock_pid_file"
     # shellcheck disable=SC2064
-    trap "rmdir '$lock_dir' 2>/dev/null || true" EXIT INT TERM
+    trap "rm -rf '$lock_dir' 2>/dev/null || true" EXIT INT TERM
 
     echo -e "\n${BOLD}Updating Installation${NC}"
     echo "This will update all components to latest version"
