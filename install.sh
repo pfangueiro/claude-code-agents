@@ -768,6 +768,13 @@ sync_hooks() {
 
     mkdir -p ~/.claude/hooks
 
+    # Build set of source hook basenames for orphan detection below
+    local -a src_hook_names=()
+    for hook in "$src_dir"/*.sh "$src_dir"/*.json; do
+        [ -f "$hook" ] || continue
+        src_hook_names+=("$(basename "$hook")")
+    done
+
     for hook in "$src_dir"/*.sh; do
         [ -f "$hook" ] || continue
         local name
@@ -784,6 +791,27 @@ sync_hooks() {
         cp "$hook_cfg" ~/.claude/hooks/"$name"
         print_success "Synced hook config $name"
     done
+
+    # Orphan detection: prune deployed hook files that are no longer in source.
+    # sync_hooks copies forward but never reverse-prunes; before this block,
+    # files removed from source persisted in ~/.claude/hooks/ forever
+    # (e.g. stop-phrase-guard.sh after v2.9.2 removal needed manual rm).
+    local pruned=0
+    for deployed in ~/.claude/hooks/*.sh ~/.claude/hooks/*.json; do
+        [ -f "$deployed" ] || continue
+        local dname
+        dname=$(basename "$deployed")
+        local found=0
+        for src_name in "${src_hook_names[@]}"; do
+            [ "$src_name" = "$dname" ] && { found=1; break; }
+        done
+        if [ "$found" -eq 0 ]; then
+            rm -f "$deployed"
+            pruned=$((pruned + 1))
+            print_skip "Pruned orphan hook $dname (no longer in source)"
+        fi
+    done
+    [ "$pruned" -eq 0 ] && print_skip "No orphan hooks to prune"
 
     # Reconcile hook events and env vars in settings.json against template.
     # Framework-managed hook events (those present in template) are the source of truth:
