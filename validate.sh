@@ -480,8 +480,8 @@ EXPECTED_HOOKS=(
     "post-edit-lint.sh"
     "notify.sh"
     "agent-tracker.sh"
-    "stop-phrase-guard.sh"
     "session-end.sh"
+    "session-start-healthcheck.sh"
     "smart-guard.sh"
     "pre-compact.sh"
     "post-compact.sh"
@@ -498,10 +498,10 @@ if [ -d "global-config/hooks" ]; then
     for hook in "${EXPECTED_HOOKS[@]}"; do
         if [ -f "global-config/hooks/$hook" ]; then
             pass "Hook script: $hook"
-            if head -1 "global-config/hooks/$hook" | grep -q "^#!/bin/bash" 2>/dev/null; then
+            if head -1 "global-config/hooks/$hook" | grep -qE "^#!.*\b(bash|sh)$" 2>/dev/null; then
                 pass "Hook $hook: has shebang"
             else
-                fail "Hook $hook: missing #!/bin/bash shebang"
+                fail "Hook $hook: missing bash/sh shebang"
             fi
         else
             fail "Missing hook script: global-config/hooks/$hook"

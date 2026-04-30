@@ -124,7 +124,7 @@ fi
 # Catches the class where a hook script is installed on disk but the event
 # entry in user settings.json is missing or drifted from template. This is
 # what caused SessionStart to stay decorative after sync_hooks "add-if-missing"
-# skipped it, and what left stop-phrase-guard.sh disabled.
+# skipped it (fixed in v2.9.0).
 if [ -f "$SETTINGS_FILE" ] && [ -f "$REPO/global-config/settings.json.template" ] \
    && command -v jq >/dev/null 2>&1; then
     while IFS= read -r event; do
