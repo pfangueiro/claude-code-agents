@@ -125,11 +125,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/stop-phrase-guard.sh",
-            "timeout": 3
-          },
-          {
-            "type": "command",
             "command": "~/.claude/hooks/session-end.sh",
             "timeout": 5
           }

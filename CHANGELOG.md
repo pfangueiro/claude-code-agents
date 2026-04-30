@@ -5,6 +5,30 @@ All notable changes to Claude Agents will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.2] - 2026-04-26
+
+### Removed
+
+- **stop-phrase-guard hook**: removed after evidence-based evaluation. 31 violations
+  logged across 3 days; 90% were the single phrase "want me to" — the hook was
+  effectively a one-pattern filter wearing a 38-pattern costume (16 of 38
+  patterns never fired). Substring matching produced false positives on
+  legitimate destructive-action confirmations ("want me to push?") that the
+  Claude Code system prompt and project deployment policies explicitly require.
+  No measured benefit. The pattern conflicts with the system prompt's
+  "transparently communicate the action and ask for confirmation" guidance.
+- **install.sh stale-lock + backup rotation** also landed (see 2.9.1 entry below
+  for accumulated 4th-pass fixes).
+
+### Fixed (4th audit pass)
+
+- **install.sh stale-lock recovery**: `update_installation()` now writes its
+  PID into the lock dir and treats locks with dead/missing PIDs as stale.
+  Prevents the framework from deadlocking after a killed install.
+- **install.sh backup rotation**: `backup_existing()` keeps the 3 most-recent
+  `.claude-backup-*` directories per project, prunes older. Cleaned up 3,637
+  stale dirs across 88 deployed projects (~39MB freed).
+
 ## [2.9.1] - 2026-04-24
 
 ### Self-Healing Framework Hardening
