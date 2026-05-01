@@ -5,6 +5,23 @@ All notable changes to Claude Agents will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.3] - 2026-05-01
+
+### Fixed
+
+- **sync_hooks orphan detection**: `sync_hooks()` now reverse-prunes deployed
+  hooks that no longer exist in source. Previously the function copied forward
+  but never cleaned up, so files removed from source persisted in
+  `~/.claude/hooks/` indefinitely (hit twice this week — `pre-commit.sh` from
+  an earlier framework version, and `stop-phrase-guard.sh` after v2.9.2
+  removal both required manual rm). With this fix, install.sh closes the
+  third and final sync direction:
+  - **forward-sync** (always): copy source → deployed
+  - **drift-correct** (v2.9.0): replace user's hook events when template differs
+  - **reverse-prune** (v2.9.3): remove deployed files no longer in source
+  Verified: `touch ~/.claude/hooks/fake-orphan.sh; ./install.sh --update` →
+  "Pruned orphan hook fake-orphan.sh (no longer in source)" → file removed.
+
 ## [2.9.2] - 2026-04-26
 
 ### Removed

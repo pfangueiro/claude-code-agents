@@ -2,8 +2,8 @@
 
 **The Complete Guide to Extending Claude Code with Skills, MCP, Slash Commands, and Subagents**
 
-Version: 2.9.2
-Last Updated: 2026-04-26
+Version: 2.9.3
+Last Updated: 2026-05-01
 
 ---
 
@@ -1029,6 +1029,6 @@ By understanding when and how to use each mechanism, you can create powerful, ma
 
 ---
 
-**Version**: 2.9.2 - Self-Healing Framework Release (SessionStart healthcheck, launchd watchdog, deploy driver, drift reconciliation; stop-phrase-guard removed after evidence-based eval)
+**Version**: 2.9.3 - Self-Healing Framework Release (SessionStart healthcheck, launchd watchdog, deploy driver, three-direction sync_hooks: forward-sync + drift-correct + reverse-prune; stop-phrase-guard removed after evidence-based eval)
 **License**: MIT
 **Maintainer**: Claude Agents Project
