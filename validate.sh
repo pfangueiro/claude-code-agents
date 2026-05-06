@@ -115,8 +115,7 @@ run_structural_checks() {
     # the grep-parse variant races against concurrent install_watchdog invocations
     # during deploy-all (88 × launchctl bootstrap) and false-positives.
     if [[ "$(uname -s)" == "Darwin" ]]; then
-        if launchctl print "gui/$(id -u)/com.claude-code-agents.framework-watchdog" >/dev/null 2>&1 \
-           || launchctl print "gui/$(id -u)/com.claude-code-agents.framework-watchdog" >/dev/null 2>&1; then
+        if launchctl print "gui/$(id -u)/com.claude-code-agents.framework-watchdog" >/dev/null 2>&1; then
             pass "Structural: claude-framework-watchdog daemon loaded"
         else
             warn "Structural: claude-framework-watchdog daemon not loaded"
