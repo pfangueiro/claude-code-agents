@@ -9,28 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (public-repo hygiene)
 
-Removed maintainer-specific identifiers so the framework can be shared via
-public repo without leaking private user/path/project information:
+Made the framework safe to publish under a public repo without leaking
+maintainer-specific identifiers (macOS username, hardcoded user paths,
+private project names):
 
-- **LaunchAgent Label renamed**: `com.claude-code-agents.framework-watchdog` →
-  `com.claude-code-agents.framework-watchdog` (project-scoped, not
-  user-scoped). install.sh now migrates: detects + removes legacy plist,
-  unloads old daemon via `launchctl bootout`, installs new with new Label.
-- **Plist filename renamed**: `com.claude-code-agents.framework-watchdog.plist` →
-  `com.claude-code-agents.framework-watchdog.plist`.
-- **Plist source uses `__HOME__` placeholder** instead of a hardcoded user
-  path. install.sh substitutes `__HOME__` → `$HOME` at install time.
-- **healthcheck.sh + watchdog.sh repo-resolution**: removed hardcoded probe
-  for the maintainer's framework path. Both now rely solely on
-  `~/.claude/.framework-path` marker (written by install.sh on every install
-  mode). If marker is missing, scripts exit cleanly.
-- **validate.sh launchctl probe**: accepts both new Label and legacy Label
-  during migration period.
-- **CLAUDE.md**: updated daemon Label reference.
+- **LaunchAgent Label is project-scoped**: `com.claude-code-agents.framework-watchdog`.
+- **Plist filename matches the Label** for consistency.
+- **Plist source uses `__HOME__` placeholder** instead of any user path.
+  `install.sh` substitutes `__HOME__` → `$HOME` at install time.
+- **healthcheck.sh + watchdog.sh repo-resolution**: rely solely on
+  `~/.claude/.framework-path` marker (written by `install.sh` on every install
+  mode). No hardcoded probe paths. If marker is missing, scripts exit cleanly.
+- **CLAUDE.md**: daemon Label reference uses the project-scoped form.
+- **History rewrite (git-filter-repo)**: removed legacy hardcoded paths,
+  user-scoped Label remnants, machine hostname leakage in author email,
+  and personal project names from earlier commit messages and diffs. Author
+  email normalized via mailmap to a single canonical noreply form.
 
-No functional changes. Existing installs auto-migrate on next
-`install.sh --update` (which the SessionStart healthcheck triggers
-automatically when the watchdog .sh file changes).
+Functional behavior is unchanged.
 
 ## [2.9.3] - 2026-05-01
 

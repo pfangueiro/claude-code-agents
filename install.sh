@@ -986,18 +986,6 @@ install_watchdog() {
         print_success "Installed watchdog script"
     fi
 
-    # Migrate from legacy user-scoped Label `com.claude-code-agents.*` if present.
-    # Older installs used a user-specific Label that leaked the maintainer's
-    # macOS username. Unload + remove so the new project-scoped Label takes over.
-    local legacy_plist="$HOME/Library/LaunchAgents/com.claude-code-agents.framework-watchdog.plist"
-    if [ -f "$legacy_plist" ]; then
-        launchctl bootout "gui/$(id -u)/com.claude-code-agents.framework-watchdog" 2>/dev/null \
-            || launchctl unload "$legacy_plist" 2>/dev/null \
-            || true
-        rm -f "$legacy_plist"
-        print_skip "Removed legacy plist (com.claude-code-agents.* — migrated to com.claude-code-agents.*)"
-    fi
-
     # Copy plist to LaunchAgents. Source plist contains __HOME__ placeholders
     # (no maintainer-specific paths in the public repo); we substitute the
     # caller's $HOME at install time so the daemon works for any user.
