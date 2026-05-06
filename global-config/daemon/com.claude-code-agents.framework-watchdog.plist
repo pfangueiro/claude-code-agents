@@ -7,15 +7,15 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>$HOME/.claude/daemon/claude-framework-watchdog.sh</string>
+        <string>__HOME__/.claude/daemon/claude-framework-watchdog.sh</string>
     </array>
     <key>StartInterval</key>
     <integer>3600</integer>
     <key>RunAtLoad</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>$HOME/.claude/analytics/watchdog.log</string>
+    <string>__HOME__/.claude/analytics/watchdog.log</string>
     <key>StandardErrorPath</key>
-    <string>$HOME/.claude/analytics/watchdog.log</string>
+    <string>__HOME__/.claude/analytics/watchdog.log</string>
 </dict>
 </plist>
