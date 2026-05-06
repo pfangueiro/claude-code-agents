@@ -5,6 +5,33 @@ All notable changes to Claude Agents will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.4] - 2026-05-06
+
+### Changed (public-repo hygiene)
+
+Removed maintainer-specific identifiers so the framework can be shared via
+public repo without leaking private user/path/project information:
+
+- **LaunchAgent Label renamed**: `com.claude-code-agents.framework-watchdog` →
+  `com.claude-code-agents.framework-watchdog` (project-scoped, not
+  user-scoped). install.sh now migrates: detects + removes legacy plist,
+  unloads old daemon via `launchctl bootout`, installs new with new Label.
+- **Plist filename renamed**: `com.claude-code-agents.framework-watchdog.plist` →
+  `com.claude-code-agents.framework-watchdog.plist`.
+- **Plist source uses `__HOME__` placeholder** instead of a hardcoded user
+  path. install.sh substitutes `__HOME__` → `$HOME` at install time.
+- **healthcheck.sh + watchdog.sh repo-resolution**: removed hardcoded probe
+  for the maintainer's framework path. Both now rely solely on
+  `~/.claude/.framework-path` marker (written by install.sh on every install
+  mode). If marker is missing, scripts exit cleanly.
+- **validate.sh launchctl probe**: accepts both new Label and legacy Label
+  during migration period.
+- **CLAUDE.md**: updated daemon Label reference.
+
+No functional changes. Existing installs auto-migrate on next
+`install.sh --update` (which the SessionStart healthcheck triggers
+automatically when the watchdog .sh file changes).
+
 ## [2.9.3] - 2026-05-01
 
 ### Fixed
@@ -57,7 +84,7 @@ Follow-up to 2.9.0 addressing gaps found by a pre-deploy deep-analysis pass.
 - **sync_hooks `permissions` reconciliation**: template permissions now propagate to user `~/.claude/settings.json` on install, not just hook events and env vars. Previous add-if-missing skipped drifted permissions.
 - **Install concurrency lock**: `install.sh --update` now acquires a non-blocking lock at `~/.claude/.install.lock.d`. Prevents healthcheck + watchdog racing on `jq` read-modify-write of settings.json.
 - **Watchdog fsck filter**: tightened from `error|corrupt|missing|bad` to only match real object corruption. Benign reflog residue and dangling commits no longer alert.
-- **Plist path templating**: `install_watchdog()` sed-substitutes `$HOME/` → `$HOME/` in the LaunchAgent plist at install time so the daemon works for any user.
+- **Plist path templating**: `install_watchdog()` sed-substitutes a placeholder in the LaunchAgent plist with the caller's `$HOME` at install time so the daemon works for any user. (Hardened in 2.9.4 to use `__HOME__` placeholder explicitly — see 2.9.4 entry.)
 - **Doc drift**: CLAUDE.md, MEMORY.md, README.md, EXTENSIBILITY.md — fixed stale counts (9 hooks → 10, 4 rules → 5) and version strings.
 - **Framework marker in source repo**: `write_framework_version_marker()` now skips when CWD is the source tree; added `.gitignore` entries for `.claude/.framework-version` and `.claude-backup-*/` as defense in depth.
 - **Stop-phrase-guard output**: violation message now written to stderr so Claude Code's Stop-hook UI displays the actual matched phrase instead of "No stderr output".

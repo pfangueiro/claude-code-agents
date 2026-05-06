@@ -41,10 +41,10 @@ log_jsonl() {
 }
 
 # -------- Resolve repo --------
+# Read framework source path from the marker written by install.sh. No
+# hardcoded user-specific paths (this script is distributed to multiple users).
 REPO=""
-if [ -d "$HOME/local-codebase/claude-code-agents/.claude/agents" ]; then
-    REPO="$HOME/local-codebase/claude-code-agents"
-elif [ -f "$FRAMEWORK_PATH_MARKER" ]; then
+if [ -f "$FRAMEWORK_PATH_MARKER" ]; then
     candidate=$(cat "$FRAMEWORK_PATH_MARKER" 2>/dev/null | tr -d '[:space:]')
     if [ -n "$candidate" ] && [ -d "$candidate/.claude/agents" ]; then
         REPO="$candidate"

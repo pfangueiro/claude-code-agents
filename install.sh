@@ -19,7 +19,7 @@
 set -e
 
 # Configuration
-SCRIPT_VERSION="2.9.3"
+SCRIPT_VERSION="2.9.4"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
 DEBUG="${DEBUG:-false}"
@@ -986,16 +986,28 @@ install_watchdog() {
         print_success "Installed watchdog script"
     fi
 
-    # Copy plist to LaunchAgents
+    # Migrate from legacy user-scoped Label `com.claude-code-agents.*` if present.
+    # Older installs used a user-specific Label that leaked the maintainer's
+    # macOS username. Unload + remove so the new project-scoped Label takes over.
+    local legacy_plist="$HOME/Library/LaunchAgents/com.claude-code-agents.framework-watchdog.plist"
+    if [ -f "$legacy_plist" ]; then
+        launchctl bootout "gui/$(id -u)/com.claude-code-agents.framework-watchdog" 2>/dev/null \
+            || launchctl unload "$legacy_plist" 2>/dev/null \
+            || true
+        rm -f "$legacy_plist"
+        print_skip "Removed legacy plist (com.claude-code-agents.* — migrated to com.claude-code-agents.*)"
+    fi
+
+    # Copy plist to LaunchAgents. Source plist contains __HOME__ placeholders
+    # (no maintainer-specific paths in the public repo); we substitute the
+    # caller's $HOME at install time so the daemon works for any user.
     local plist_src="$src_daemon_dir/com.claude-code-agents.framework-watchdog.plist"
     local plist_dst="$HOME/Library/LaunchAgents/com.claude-code-agents.framework-watchdog.plist"
     if [ -f "$plist_src" ]; then
         mkdir -p "$HOME/Library/LaunchAgents"
         cp "$plist_src" "$plist_dst"
-        # Substitute template path $HOME/ with caller's $HOME so the plist
-        # works for any user. sed -i '' for BSD sed (macOS); Label is left alone
-        # because renaming a loaded launchd Label breaks idempotent re-install.
-        sed -i '' "s|$HOME/|${HOME}/|g" "$plist_dst" 2>/dev/null || true
+        # BSD sed (macOS) — `-i ''` for in-place edit
+        sed -i '' "s|__HOME__|${HOME}|g" "$plist_dst" 2>/dev/null || true
         print_success "Installed plist to LaunchAgents"
 
         # Try bootstrap, fall back to load
@@ -1007,7 +1019,7 @@ install_watchdog() {
             print_success "Loaded daemon via launchctl load (fallback)"
         else
             # Already loaded — idempotent
-            if launchctl list 2>/dev/null | grep -q claude-framework-watchdog; then
+            if launchctl list 2>/dev/null | grep -q claude-code-agents.framework-watchdog; then
                 print_skip "Daemon already loaded (re-copy ok)"
             else
                 print_info "Could not auto-load daemon (try manually: launchctl bootstrap gui/$uid $plist_dst)"

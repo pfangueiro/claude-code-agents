@@ -26,10 +26,12 @@ FRAMEWORK_PATH_MARKER="$HOME/.claude/.framework-path"
 mkdir -p "$ANALYTICS_DIR" 2>/dev/null || true
 
 # -------- Repo resolution --------
+# Read framework source path from the marker written by install.sh. This is
+# the only authoritative source — no hardcoded user-specific paths in this
+# script (it's distributed to multiple users). If marker is missing, exit
+# cleanly: nothing to reconcile against without a known framework root.
 REPO=""
-if [ -d "$HOME/local-codebase/claude-code-agents/.claude/agents" ]; then
-    REPO="$HOME/local-codebase/claude-code-agents"
-elif [ -f "$FRAMEWORK_PATH_MARKER" ]; then
+if [ -f "$FRAMEWORK_PATH_MARKER" ]; then
     candidate=$(cat "$FRAMEWORK_PATH_MARKER" 2>/dev/null | tr -d '[:space:]')
     if [ -n "$candidate" ] && [ -d "$candidate/.claude/agents" ]; then
         REPO="$candidate"
