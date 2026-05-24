@@ -72,7 +72,7 @@ Skills provide modular knowledge packages that complement agents. See `.claude/s
 **API skills:** api-guidelines (Next.js/TypeScript secure endpoint patterns)
 **UI skills:** ui-guidelines (React/Next.js + Ant Design + shadcn patterns, spacing / typography / color system)
 **Infra skills:** docker-deployment (multi-stage builds, prod configs), ci-cd-templates (GitHub Actions / GitLab CI / CircleCI)
-**Session skills:** handoff (HANDOFF.md creation for session continuity before /compact)
+**Session skills:** handoff (HANDOFF.md creation for session continuity before /compact), context-escalation (explicit-level policy for context management: truncate → drop-redundant-reads → fork-subagent → /compact → handoff)
 **MCP-powered skills:** library-docs (context7), deep-analysis (sequential-thinking)
 
 Creating skills: `python3 .claude/skills/skill-creator/scripts/init_skill.py <name> --path .claude/skills`
