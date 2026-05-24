@@ -5,6 +5,40 @@ All notable changes to Claude Agents will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.5] - 2026-05-26
+
+### Added
+
+- **context-escalation skill** (`.claude/skills/context-escalation/SKILL.md`):
+  Explicit-level policy for handling context pressure in long-horizon
+  sessions. Five interventions from cheapest to most aggressive:
+  L1 truncate → L2 drop-redundant-reads → L3 fork-subagent → L4 /compact →
+  L5 handoff + /save-session. Names a discipline that's otherwise applied
+  reflexively, so a session uses cheap interventions before hard-cliff
+  compaction.
+
+  Inspired by [DCI-Agent-Lite](https://github.com/DCI-Agent/DCI-Agent-Lite)'s
+  context-manager pattern (truncation → compaction → summarization in
+  escalating levels), adapted to Claude Code's existing primitives
+  (`/compact`, `handoff`, `/save-session`, Agent tool). Borrows the
+  structural pattern, not the implementation.
+
+### Considered but not adopted
+
+- **Minimalist single-system-prompt harness** (DCI-Agent-Lite's other notable
+  pattern — a 1.7KB system_prompt.txt as the entire agent driver). Not
+  applicable to a multi-agent framework where 13 specialized agents need
+  distinct system prompts. Documented here so the choice is explicit rather
+  than overlooked.
+
+### Validation context
+
+External validation of the framework's bash-native architecture: VentureBeat
+[Your AI agents need a terminal, not just a vector database](https://venturebeat.com/orchestration/your-ai-agents-need-a-terminal-not-just-a-vector-database)
+argues the case for terminal-tool-native agentic search over vector-DB RAG.
+This framework has been in that paradigm since 2.0 — no integration needed,
+but the reading reinforces the architectural choice.
+
 ## [2.9.4] - 2026-05-06
 
 ### Changed (public-repo hygiene)
