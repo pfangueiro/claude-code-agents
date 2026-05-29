@@ -20,6 +20,14 @@ Multi-step reasoning through the sequential-thinking MCP server. Decomposes comp
 
 **Do NOT use for:** Simple lookups, straightforward implementations, well-established patterns, or tasks where the answer is obvious.
 
+## Pre-Flight Gate
+
+- Unconditional: user typed `/deep-analysis` or asked for deep/structured analysis.
+- Conditional self-judge: run only for a genuinely hard problem — architectural decision, non-obvious trade-off, ambiguous design space, or complex debugging needing hypothesis testing.
+- ABORT: simple lookups, well-established patterns, straightforward implementations, obvious answers.
+
+**Gate:** Explicit invocation, or a genuinely hard reasoning problem. Otherwise answer directly.
+
 ## Protocol
 
 ### 1. Frame the Problem

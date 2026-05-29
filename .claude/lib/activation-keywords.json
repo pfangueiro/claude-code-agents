@@ -32,6 +32,11 @@
       "secondary": ["structure", "pattern", "framework", "layout", "wireframe", "mockup"],
       "phrases": ["design the system", "create architecture", "model the data", "define interfaces"]
     },
+    "divergence": {
+      "primary": ["diverge", "de-anchor", "alternatives", "anchoring", "assumptions", "steelman"],
+      "secondary": ["obvious-solution", "first-idea", "premature-convergence", "framing", "blind-spot", "option-space"],
+      "phrases": ["am I anchoring", "what am I assuming", "challenge the default", "generate alternatives", "what are our options", "is there a better approach"]
+    },
     "development": {
       "primary": ["implement", "code", "build", "develop", "create", "write", "program"],
       "secondary": ["function", "method", "class", "component", "module", "feature"],

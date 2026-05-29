@@ -9,6 +9,14 @@ argument-hint: "<goal description>"
 
 Decompose a goal into atomic tasks, plan dependencies, select optimal tools, and execute with maximum parallelism.
 
+## Pre-Flight Gate
+
+- Unconditional: user typed `/execute` or asked to orchestrate/decompose.
+- Conditional self-judge: run only when the goal is genuinely multi-step — ≥3 atomic tasks, spans multiple files/tools, or benefits from parallel batches.
+- ABORT (do it directly): a single edit, a one-file change, a question, or anything one tool call resolves.
+
+**Gate:** Explicit invocation, or a genuinely multi-step goal. Otherwise just do the task.
+
 ## Protocol
 
 Process every `/execute` invocation through these 6 phases in strict order. Never skip a phase. Gate each phase: do not advance until the current phase is complete.

@@ -21,6 +21,8 @@ When invoked, you must follow these steps:
    - Assess build configuration and bundler setup
    - For visual verification: use Playwright MCP (`playwright_navigate`, `playwright_screenshot`, `playwright_resize` with device presets like `iPhone 13`, `iPad Pro`) to capture responsive design across breakpoints. See `browser-testing` skill for patterns.
 
+   > **De-Anchor Before Deciding.** Before committing to a frontend approach, name the OBVIOUS pick, one viable non-obvious ALTERNATIVE, and one TRAP (the option that looks right but breaks a constraint — say which). Example: obvious = reach for Redux/global state; alternative = local state plus a server-cache (React Query/SWR) and composition; trap = a clever custom abstraction that ships fast but fails a11y/WCAG and keyboard navigation. For high-stakes, hard-to-reverse UI architecture choices, run `/diverge <decision>` instead of deciding inline.
+
 2. **Component Development**
    - Create modular, reusable components following framework best practices
    - Implement proper prop validation and type checking

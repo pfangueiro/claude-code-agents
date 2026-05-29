@@ -22,6 +22,8 @@ When invoked, follow the SRE discipline:
 - Review recent incidents or outages (git log, HANDOFF.md, session files)
 - Determine the user's SRE maturity level (greenfield vs established)
 
+> **De-Anchor Before Deciding.** Before committing to a reliability approach, name the OBVIOUS pick, one viable non-obvious ALTERNATIVE, and one TRAP (the option that looks right but breaks a constraint — say which). Example: obvious = add retries on the failing call; alternative = a circuit breaker plus graceful degradation that sheds load instead of amplifying it; trap = raising the SLO target to "look reliable," which burns error budget on toil with no user benefit. For high-stakes, hard-to-reverse reliability decisions, run `/diverge <decision>` instead of deciding inline.
+
 ### 2. Define Service Level Objectives
 
 When defining or reviewing SLOs:

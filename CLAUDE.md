@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Claude Agents** — enterprise AI agent system with 13 specialized SDLC/SSDLC agents, 26 skills, and 13 slash commands that auto-activate based on natural language. Automatically selects optimal Claude model (Haiku/Sonnet/Opus) per task complexity.
+**Claude Agents** — enterprise AI agent system with 13 specialized SDLC/SSDLC agents, 28 skills, and 13 slash commands that auto-activate based on natural language. Automatically selects optimal Claude model (Haiku/Sonnet/Opus) per task complexity.
 
 ## IMPORTANT: Auto-Activation
 
@@ -36,6 +36,7 @@ Agent collaboration patterns: see `.claude/lib/agent-coordination.md`
 - **`/execute <goal>`** — Orchestrated task engine: decompose → plan → select agents → execute in parallel batches → track progress.
 - **`/investigate <symptom>`** — 8-phase root cause analysis (OBSERVE/REPRODUCE/TRACE/HYPOTHESIZE/PROVE/ROOT CAUSE/FIX/PREVENT). Never jumps to a fix.
 - **`/deep-analysis <problem>`** — Structured reasoning via sequential-thinking MCP: branching, revision, hypothesis testing.
+- **`/diverge <decision>`** — Divergent ideation: isolated parallel sub-agents under cognitive frames, then a critic pass scores/flags-traps/deepens. The divergent complement to `/deep-analysis`; gated by consequence × openness.
 
 ## Developer Workflow Commands
 
@@ -74,6 +75,7 @@ Skills provide modular knowledge packages that complement agents. See `.claude/s
 **Infra skills:** docker-deployment (multi-stage builds, prod configs), ci-cd-templates (GitHub Actions / GitLab CI / CircleCI)
 **Session skills:** handoff (HANDOFF.md creation for session continuity before /compact), context-escalation (explicit-level policy for context management: truncate → drop-redundant-reads → fork-subagent → /compact → handoff)
 **MCP-powered skills:** library-docs (context7), deep-analysis (sequential-thinking)
+**Divergence skills:** diverge (isolated parallel ideation under cognitive frames + critic pass; the divergent complement to deep-analysis, gated by consequence × openness)
 
 Creating skills: `python3 .claude/skills/skill-creator/scripts/init_skill.py <name> --path .claude/skills`
 

@@ -299,6 +299,7 @@ For each critical area:
 | Quick "what does this function do?" | Read tool directly |
 | Bug, crash, error, unexpected behavior | `/investigate` |
 | Architecture decision or trade-off | `/deep-analysis` |
+| Explore open options before deciding ("what are our options?") | `/diverge` |
 | Build a new feature | `/execute` |
 | Understand code, then reason about it | `/deep-read` then `/deep-analysis` |
 | Understand code, then redesign it | `/deep-read` then `/deep-analysis` then `/execute` |

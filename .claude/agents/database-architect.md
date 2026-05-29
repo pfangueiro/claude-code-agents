@@ -26,6 +26,8 @@ When invoked, you must follow these steps:
    - Consider scalability requirements and future growth
    - Assess data integrity and consistency needs
 
+   > **De-Anchor Before Deciding.** Before committing to a data design, name the OBVIOUS pick, one viable non-obvious ALTERNATIVE, and one TRAP (the option that looks right but breaks a constraint — say which). Example: obvious = add a B-tree index on the slow column; alternative = denormalize or a covering/partial index matched to the real access pattern; trap = reaching for NoSQL "for scale," which abandons the joins and constraints this relational workload depends on. For high-stakes, hard-to-migrate choices, run `/diverge <decision>` instead of deciding inline.
+
 3. **Design or Optimize the Solution**
    - For schema design: Create normalized structures following best practices
    - For queries: Write optimized SQL with proper indexing strategies

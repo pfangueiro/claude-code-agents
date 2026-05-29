@@ -19,7 +19,7 @@
 set -e
 
 # Configuration
-SCRIPT_VERSION="2.9.5"
+SCRIPT_VERSION="2.10.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
 DEBUG="${DEBUG:-false}"
@@ -437,6 +437,7 @@ Use these for structured, multi-phase task execution:
 - **`/execute <goal>`** — Orchestrated task engine. Decomposes goals into atomic tasks, plans dependencies, executes in parallel batches.
 - **`/investigate <symptom>`** — 8-phase root cause analysis. Uses 5 Whys, competing hypotheses, evidence classification.
 - **`/deep-analysis <problem>`** — Structured multi-step reasoning via sequential-thinking MCP. For architecture decisions and trade-offs.
+- **`/diverge <decision>`** — De-anchoring engine: isolated parallel framings under cognitive frames, then a critic pass. The divergent complement to /deep-analysis.
 
 ### 🛠️ Developer Workflow Commands
 
@@ -513,6 +514,7 @@ append_claude_md_section() {
 - `/execute <goal>` — Orchestrated task execution with parallel batches
 - `/investigate <symptom>` — 8-phase root cause analysis
 - `/deep-analysis <problem>` — Structured multi-step reasoning
+- `/diverge <decision>` — De-anchoring engine: diverge under cognitive frames, then converge
 
 **Developer Workflow Commands:**
 - `/build-fix` — Auto-detect build system, fix errors with regression guard
@@ -551,6 +553,7 @@ Use these for structured, multi-phase task execution:
 - **`/execute <goal>`** — Orchestrated task engine. Decomposes goals into atomic tasks, plans dependencies, executes in parallel batches.
 - **`/investigate <symptom>`** — 8-phase root cause analysis. Uses 5 Whys, competing hypotheses, evidence classification.
 - **`/deep-analysis <problem>`** — Structured multi-step reasoning via sequential-thinking MCP. For architecture decisions and trade-offs.
+- **`/diverge <decision>`** — De-anchoring engine: isolated parallel framings under cognitive frames, then a critic pass. The divergent complement to /deep-analysis.
 
 ### 🛠️ Developer Workflow Commands
 
@@ -1245,6 +1248,9 @@ repair_installation() {
     # Patch Built-in Tools section if missing
     patch_builtin_tools_in_claude_md
 
+    # Patch /diverge into orchestration skills if missing
+    patch_diverge_in_claude_md
+
     # Sync hooks to global ~/.claude/hooks/
     sync_hooks
 
@@ -1379,6 +1385,36 @@ a\
     fi
     if grep -q "meta-agent" CLAUDE.md 2>/dev/null; then
         print_success "Patched CLAUDE.md: added meta-agent to agents table"
+    fi
+}
+
+patch_diverge_in_claude_md() {
+    # Patch CLAUDE.md to add /diverge to the orchestration skills list if missing
+    if [ ! -f "CLAUDE.md" ]; then
+        return 0
+    fi
+    if grep -q "/diverge" CLAUDE.md 2>/dev/null; then
+        return 0
+    fi
+    if ! grep -q "deep-analysis <problem>" CLAUDE.md 2>/dev/null; then
+        return 0
+    fi
+    # Insert /diverge after the /deep-analysis line (handles both bold and plain list formats)
+    if grep -q '\*\*`/deep-analysis' CLAUDE.md 2>/dev/null; then
+        # Bold format (minimal template / orchestration-skills append)
+        sed -i '' '/deep-analysis <problem>/{
+a\
+- **`/diverge <decision>`** — De-anchoring engine: isolated parallel framings under cognitive frames, then a critic pass. The divergent complement to /deep-analysis.
+}' CLAUDE.md
+    else
+        # Plain list format (append_claude_md_section)
+        sed -i '' '/deep-analysis <problem>/{
+a\
+- `/diverge <decision>` — De-anchoring engine: diverge under cognitive frames, then converge
+}' CLAUDE.md
+    fi
+    if grep -q "/diverge" CLAUDE.md 2>/dev/null; then
+        print_success "Patched CLAUDE.md: added /diverge to orchestration skills"
     fi
 }
 
@@ -1578,6 +1614,7 @@ update_installation() {
             patch_sre_specialist_in_claude_md
             patch_developer_workflow_in_claude_md
             patch_builtin_tools_in_claude_md
+            patch_diverge_in_claude_md
         else
             # No agent section at all — append
             append_claude_md_section

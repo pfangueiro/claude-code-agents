@@ -22,6 +22,8 @@ When invoked, you must follow these steps:
    - Assess technical constraints and non-functional requirements
    - Document assumptions and dependencies
 
+   > **De-Anchor Before Deciding.** Before committing to an architecture, name the OBVIOUS pick, one viable non-obvious ALTERNATIVE, and one TRAP (the pattern that looks right but breaks a constraint — say which). Example: obvious = microservices "for scale"; alternative = a modular monolith with clear seams; trap = event-driven-everywhere, which buys decoupling but destroys traceability and transactional integrity for a team without ops maturity. For high-stakes, hard-to-reverse choices, run `/diverge <decision>` instead of deciding inline.
+
 2. **Define System Architecture**
    - Create high-level system design with clear component boundaries
    - Select appropriate architectural patterns (microservices, monolith, serverless, event-driven)
