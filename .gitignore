@@ -39,3 +39,7 @@ Thumbs.db
 # Archives
 *.tar.gz
 *.zip
+
+# Python bytecode (from observability/ tooling — e.g. py_compile / running collector.py)
+__pycache__/
+*.pyc
