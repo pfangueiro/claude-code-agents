@@ -30,11 +30,13 @@ Process every `/investigate` invocation through these 8 phases in strict order. 
 Collect every observable fact before forming any theory.
 
 1. Parse `$ARGUMENTS` as the symptom description
-2. Ask the user for additional context if the description is vague — use AskUserQuestion:
-   - What's the expected behavior vs actual behavior?
-   - When did it start? What changed recently?
-   - Is it consistent or intermittent?
-   - Any error messages, logs, or stack traces?
+2. Extract the available facts from `$ARGUMENTS` and note which are unknown — capture gaps rather than prompting interactively (see the fork note under "Tool Usage by Phase"):
+   - Expected vs actual behavior
+   - When it started / what changed recently
+   - Consistent or intermittent
+   - Error messages, logs, or stack traces
+
+   If a gap blocks the investigation, exhaust the codebase, git history, and tests first; only then surface the specific questions in the final report (per the Phase 5 gate).
 3. Check memory files for known pitfalls related to this area:
    - Read MEMORY.md and any topic-specific memory files
    - Check CLAUDE.md for documented patterns
@@ -262,6 +264,8 @@ The investigation isn't complete until recurrence is prevented.
 | 6. ROOT CAUSE | Read, Grep | Explore agent for blast radius |
 | 7. FIX | Read, Edit, Write, Bash | code-quality agent for review |
 | 8. PREVENT | Write, Edit, Bash | test-automation agent for tests |
+
+> **Fork note:** `/investigate` runs forked (`context: fork`) for context isolation — the deep trace/evidence stays out of the main conversation and only the root-cause report returns. Forked subagents cannot use the `Agent` launcher or `AskUserQuestion`, so the "When to Use Agents" column (Explore / code-quality / test-automation) and any user clarification apply only when this protocol is run un-forked. When forked (the default), perform those steps inline with the Primary Tools and surface any needed user input in the final report. (Core RCA runs on Primary Tools — Read/Grep/Bash/sequential-thinking/Playwright/context7/GitHub/LSP — all available to subagents, so fork costs nothing for the core.)
 
 ## Anti-Patterns — What This Skill Prevents
 
