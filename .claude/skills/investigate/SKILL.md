@@ -11,6 +11,14 @@ Systematic deep investigation protocol. Finds the REAL cause, not the surface sy
 
 **Core principle:** Never fix what you don't understand. Every fix must trace to a proven root cause with evidence.
 
+## Pre-Flight Gate
+
+- Unconditional: user typed `/investigate` or asked to find a root cause.
+- Conditional self-judge: run only for a real bug / unexpected behavior whose root cause is UNKNOWN.
+- ABORT: a bug whose cause is already known (just fix it), a feature request, an obvious-cause config/syntax error, or anything not actually broken.
+
+**Gate:** Explicit invocation, or a genuine unknown-cause defect. Otherwise fix directly.
+
 ## Protocol
 
 Process every `/investigate` invocation through these 8 phases in strict order. Never skip a phase. Never jump to Phase 7 (FIX) without completing Phases 1-6.

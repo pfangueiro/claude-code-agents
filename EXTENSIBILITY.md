@@ -2,8 +2,8 @@
 
 **The Complete Guide to Extending Claude Code with Skills, MCP, Slash Commands, and Subagents**
 
-Version: 2.9.5
-Last Updated: 2026-05-26
+Version: 2.10.0
+Last Updated: 2026-05-29
 
 ---
 
@@ -981,6 +981,7 @@ claude-code-agents/
 - `deep-read`: 6-phase codebase reading engine
 - `library-docs`: MCP-powered library documentation (context7)
 - `deep-analysis`: MCP-powered deep reasoning (sequential-thinking)
+- `diverge`: Divergent ideation — isolated parallel frames + critic pass (the divergent complement to deep-analysis)
 - `security-scan`: Security vulnerability scanning and OWASP checks
 - `experiment-loop`: Autonomous metric-driven optimization (modify → measure → keep/discard)
 - `scheduled-tasks`: CronCreate/CronDelete/CronList for recurring prompts and polling

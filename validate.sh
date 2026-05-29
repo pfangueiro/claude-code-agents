@@ -296,6 +296,51 @@ for agent in "${EXPECTED_AGENTS[@]}"; do
 done
 
 # ============================================================================
+# De-Anchoring Invariant (divergence capability)
+# ============================================================================
+
+DEANCHOR_AGENTS=(
+    "architecture-planner"
+    "database-architect"
+    "devops-automation"
+    "frontend-specialist"
+    "performance-optimizer"
+    "sre-specialist"
+    "meta-agent"
+)
+
+section "Checking De-Anchoring Step (${#DEANCHOR_AGENTS[@]} open-ended agents)"
+
+for agent in "${DEANCHOR_AGENTS[@]}"; do
+    agent_file=".claude/agents/${agent}.md"
+    [ -f "$agent_file" ] || continue
+    if grep -q "De-Anchor Before Deciding" "$agent_file" 2>/dev/null; then
+        pass "$agent: has de-anchoring step"
+    else
+        fail "$agent: missing de-anchoring step (De-Anchor Before Deciding)"
+    fi
+done
+
+GATED_SKILLS=(
+    "diverge"
+    "execute"
+    "investigate"
+    "deep-analysis"
+)
+
+section "Checking Pre-Flight Gates (${#GATED_SKILLS[@]} expensive skills)"
+
+for gated_skill in "${GATED_SKILLS[@]}"; do
+    gated_file=".claude/skills/${gated_skill}/SKILL.md"
+    [ -f "$gated_file" ] || continue
+    if grep -q "Pre-Flight Gate" "$gated_file" 2>/dev/null; then
+        pass "$gated_skill: has pre-flight gate"
+    else
+        fail "$gated_skill: missing pre-flight gate (Pre-Flight Gate)"
+    fi
+done
+
+# ============================================================================
 # Library File Validation
 # ============================================================================
 

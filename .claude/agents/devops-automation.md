@@ -27,6 +27,8 @@ When invoked, you must follow these steps:
    - Infrastructure requirements (compute, storage, networking, security)
    - Scaling and availability requirements
 
+   > **De-Anchor Before Deciding.** Before committing to a deployment approach, name the OBVIOUS pick, one viable non-obvious ALTERNATIVE, and one TRAP (the option that looks right but breaks a constraint — say which). Example: obvious = Kubernetes for everything; alternative = a managed runtime (ECS/Cloud Run/Fargate) sized to the team; trap = a hand-rolled bespoke pipeline that feels flexible but becomes unmaintainable, unauditable toil. For high-stakes, hard-to-reverse infra choices, run `/diverge <decision>` instead of deciding inline.
+
 3. **Design or optimize the deployment solution**:
    - Select appropriate containerization strategy (Docker, Buildpacks, etc.)
    - Choose orchestration platform if needed (Kubernetes, ECS, Cloud Run, etc.)

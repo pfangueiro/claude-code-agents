@@ -1,10 +1,10 @@
 # Claude Agents - AI-Powered SDLC Agent System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-2.9.5-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
+[![Version](https://img.shields.io/badge/version-2.10.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://docs.anthropic.com/en/docs/claude-code)
 [![Agents](https://img.shields.io/badge/Agents-13-orange.svg)](#-available-agents)
-[![Skills](https://img.shields.io/badge/Skills-26-green.svg)](#-skills-system)
+[![Skills](https://img.shields.io/badge/Skills-28-green.svg)](#-skills-system)
 [![MCP](https://img.shields.io/badge/MCP-5%20Servers-brightgreen.svg)](#-mcp-integration)
 
 **13 auto-activating AI agents for every phase of software development.** Just describe what you want to build — the right specialists engage automatically.
@@ -39,10 +39,10 @@ Agents activate automatically based on your words.
 | Component | Count | What It Does |
 |-----------|-------|--------------|
 | **Agents** | 13 | Auto-activating SDLC specialists (planning through production) |
-| **Skills** | 26 | Modular knowledge packages (git, Docker, CI/CD, K8s, SRE, IaC, observability, experiment-loop, scheduled-tasks, worktree-workflow, remote-triggers, etc.) |
+| **Skills** | 28 | Modular knowledge packages (git, Docker, CI/CD, K8s, SRE, IaC, observability, experiment-loop, scheduled-tasks, worktree-workflow, remote-triggers, context-escalation, diverge, etc.) |
 | **Slash Commands** | 13 | `/commit-pr`, `/review-pr`, `/security-scan`, `/compact`, `/new-feature`, `/create-jira`, `/build-fix`, `/tdd`, `/quality-gate`, `/checkpoint`, `/save-session`, `/resume-session`, `/optimize` |
 | **MCP Servers** | 5 | context7, sequential-thinking, playwright, github, postgres |
-| **Rules** | 4 | Auto-enforced security, code quality, fix quality, and verification standards |
+| **Rules** | 6 | Auto-enforced security, code quality, fix quality, verification, framework integrity, and anti-anchoring standards |
 | **Hooks** | 10 | Agent tracking, session lifecycle, permission auditing, file protection, auto-lint, debug detection, pre-compact snapshots, notifications |
 
 ---
@@ -145,7 +145,7 @@ cd /path/to/your/project
 
 ## Skills System
 
-Skills provide domain knowledge that agents apply. 26 included:
+Skills provide domain knowledge that agents apply. 28 included:
 
 | Skill | What It Provides |
 |-------|-----------------|
@@ -161,8 +161,10 @@ Skills provide domain knowledge that agents apply. 26 included:
 | **investigate** | 8-phase root cause analysis: observe, reproduce, trace, hypothesize, prove, fix, prevent |
 | **library-docs** | MCP-powered: fetch docs for React, Next.js, Vue, etc. |
 | **deep-analysis** | MCP-powered: structured reasoning with branching and revision (rewritten) |
+| **diverge** | Divergent ideation: isolated parallel frames + critic pass; the divergent complement to deep-analysis |
 | **deep-read** | 6-phase codebase reading engine: scope, map, trace, deep read, connect, report |
 | **handoff** | Session continuity — write HANDOFF.md for cross-session context |
+| **context-escalation** | Five-level context-pressure policy: truncate → drop-reads → fork-subagent → /compact → handoff |
 | **security-scan** | Auto-activating security scanner (secrets, OWASP, dependencies, file permissions) |
 | **kubernetes-ops** | K8s manifests, Helm, Karpenter, GitOps (ArgoCD/Flux), network policies, troubleshooting |
 | **observability-stack** | OpenTelemetry, Prometheus/Grafana, RED/USE metrics, SLI/SLO monitoring, alerting |
@@ -210,12 +212,14 @@ claude mcp add postgres -- npx -y @modelcontextprotocol/server-postgres
 
 ## Auto-Enforced Rules
 
-Four rule files in `.claude/rules/` are automatically loaded by Claude Code in every session:
+Six rule files in `.claude/rules/` are automatically loaded by Claude Code in every session:
 
 - **security.md** — No secrets in commits, parameterized queries, input validation, security headers, least privilege
 - **code-quality.md** — No dead code, single responsibility, early returns, explicit error handling, descriptive naming
 - **fix-quality.md** — Root cause analysis before fixing, never suppress errors, minimal changes, test-driven fixing
 - **verification.md** — Verify after every implementation, run tests, build to catch errors, test-driven bug fixes
+- **framework-integrity.md** — Hooks must enforce invariants, state reconciles automatically, snapshots have documented restore paths
+- **anti-anchoring.md** — Name the obvious pick + a non-obvious alternative + a trap on open-ended judgment calls; escalate consequential open decisions to `/diverge`
 
 ---
 
@@ -247,8 +251,8 @@ Four rule files in `.claude/rules/` are automatically loaded by Claude Code in e
 .claude/
 ├── agents/          # 13 auto-activating SDLC agents
 ├── commands/        # 13 slash commands
-├── skills/          # 26 modular knowledge packages
-├── rules/           # 5 auto-enforced rule sets
+├── skills/          # 28 modular knowledge packages
+├── rules/           # 6 auto-enforced rule sets
 ├── lib/             # Templates, patterns, coordination protocol
 └── history/         # Session history
 

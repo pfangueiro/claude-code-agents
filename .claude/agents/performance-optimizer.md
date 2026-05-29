@@ -38,6 +38,8 @@ When invoked, you must follow these steps:
    - Look for memory leaks or excessive memory allocation
    - Examine network waterfalls for sequential requests that could be parallelized
 
+   > **De-Anchor Before Deciding.** Before committing to an optimization, name the OBVIOUS pick, one viable non-obvious ALTERNATIVE, and one TRAP (the fix that looks right but breaks a constraint — say which). Example: obvious = add a cache; alternative = fix the algorithm/query (O(n²)→O(n log n), kill the N+1) so caching is unnecessary; trap = a micro-optimization on a cold path that adds complexity while the real bottleneck is untouched. For high-stakes or system-wide optimization strategy, run `/diverge <decision>` instead of deciding inline.
+
 4. **Optimization Strategy Development**
    - Prioritize optimizations by impact (use Pareto principle - 80/20 rule)
    - Consider algorithmic improvements before micro-optimizations

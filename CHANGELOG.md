@@ -5,6 +5,38 @@ All notable changes to Claude Agents will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.10.0] - 2026-05-29
+
+### Added
+
+- **anti-anchoring rule** (`.claude/rules/anti-anchoring.md`): always-on
+  divergence habit — name the obvious pick + one non-obvious alternative + one
+  trap on every open-ended judgment call; exempts closed/factual work; escalates
+  consequential open decisions to `/diverge`.
+- **/diverge skill** (`.claude/skills/diverge/SKILL.md`): divergence engine that
+  spawns isolated parallel sub-agents under cognitive frames (no cross-anchoring),
+  then a separate critic pass scores / flags traps / clusters / deepens. Built on
+  the framework's own Task primitives (no npm dependency). The divergent
+  complement to `/deep-analysis`, gated by consequence × openness.
+- **De-anchoring step** in the 7 open-ended agents (architecture-planner,
+  database-architect, devops-automation, frontend-specialist,
+  performance-optimizer, sre-specialist, meta-agent) — each names a domain
+  obvious/alternative/trap and points to `/diverge` for high-stakes choices.
+- **Pre-flight self-gates** on `/execute`, `/investigate`, `/deep-analysis`
+  (consequence/complexity-aware "when NOT to invoke" gates).
+- **Divergence activation keywords** in `.claude/lib/activation-keywords.json`.
+- **validate.sh invariants**: hard-fail if any of the 7 open-ended agents lacks
+  the de-anchoring step, or any of the 4 expensive skills lacks a pre-flight gate.
+- **install.sh**: `patch_diverge_in_claude_md` (idempotent, dual-format) plus
+  `/diverge` in all three CLAUDE.md emitters, so fresh and existing deployments
+  both learn the skill.
+
+### Fixed
+
+- Documentation count drift reconciled to true on-disk state: skills 26 → 28
+  (backfilled `context-escalation`), rules "Four" → 6 (backfilled
+  `framework-integrity`) in README.
+
 ## [2.9.5] - 2026-05-26
 
 ### Added
