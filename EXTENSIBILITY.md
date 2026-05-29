@@ -1030,6 +1030,6 @@ By understanding when and how to use each mechanism, you can create powerful, ma
 
 ---
 
-**Version**: 2.9.4 - Public-Repo Hygiene + Self-Healing Framework (project-scoped LaunchAgent Label, marker-only repo resolution; SessionStart healthcheck, launchd watchdog, deploy driver, three-direction sync_hooks: forward-sync + drift-correct + reverse-prune)
+**Version**: 2.10.0 - Divergence & De-Anchoring (anti-anchoring rule, /diverge skill with isolated parallel frames, de-anchoring step in 7 open-ended agents, consequence×openness pre-flight self-gates, spawner-skill no-fork invariant)
 **License**: MIT
 **Maintainer**: Claude Agents Project
