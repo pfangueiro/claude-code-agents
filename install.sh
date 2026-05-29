@@ -437,7 +437,7 @@ Use these for structured, multi-phase task execution:
 - **`/execute <goal>`** — Orchestrated task engine. Decomposes goals into atomic tasks, plans dependencies, executes in parallel batches.
 - **`/investigate <symptom>`** — 8-phase root cause analysis. Uses 5 Whys, competing hypotheses, evidence classification.
 - **`/deep-analysis <problem>`** — Structured multi-step reasoning via sequential-thinking MCP. For architecture decisions and trade-offs.
-- **`/diverge <decision>`** — De-anchoring engine: isolated parallel framings under cognitive frames, then a critic pass. The divergent complement to /deep-analysis.
+- **`/diverge <decision>`** — De-anchoring engine: isolated parallel sub-agents under cognitive frames, then a critic pass. The divergent complement to /deep-analysis.
 
 ### 🛠️ Developer Workflow Commands
 
@@ -553,7 +553,7 @@ Use these for structured, multi-phase task execution:
 - **`/execute <goal>`** — Orchestrated task engine. Decomposes goals into atomic tasks, plans dependencies, executes in parallel batches.
 - **`/investigate <symptom>`** — 8-phase root cause analysis. Uses 5 Whys, competing hypotheses, evidence classification.
 - **`/deep-analysis <problem>`** — Structured multi-step reasoning via sequential-thinking MCP. For architecture decisions and trade-offs.
-- **`/diverge <decision>`** — De-anchoring engine: isolated parallel framings under cognitive frames, then a critic pass. The divergent complement to /deep-analysis.
+- **`/diverge <decision>`** — De-anchoring engine: isolated parallel sub-agents under cognitive frames, then a critic pass. The divergent complement to /deep-analysis.
 
 ### 🛠️ Developer Workflow Commands
 
@@ -1404,7 +1404,7 @@ patch_diverge_in_claude_md() {
         # Bold format (minimal template / orchestration-skills append)
         sed -i '' '/deep-analysis <problem>/{
 a\
-- **`/diverge <decision>`** — De-anchoring engine: isolated parallel framings under cognitive frames, then a critic pass. The divergent complement to /deep-analysis.
+- **`/diverge <decision>`** — De-anchoring engine: isolated parallel sub-agents under cognitive frames, then a critic pass. The divergent complement to /deep-analysis.
 }' CLAUDE.md
     else
         # Plain list format (append_claude_md_section)

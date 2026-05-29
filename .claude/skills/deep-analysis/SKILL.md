@@ -128,6 +128,7 @@ mcp__sequential-thinking__sequentialthinking({
 | Multi-step implementation goal | `/execute` (may call deep-analysis for complex sub-tasks) |
 | Architecture decision only | `/deep-analysis` directly |
 | Trade-off evaluation only | `/deep-analysis` directly |
+| Option space too narrow — widen before converging | `/diverge` (divergent complement; widen first, then converge here) |
 
 ## References
 
