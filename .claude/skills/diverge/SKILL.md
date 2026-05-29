@@ -1,7 +1,6 @@
 ---
 name: diverge
 description: Structured divergence engine. Generates a wide, deliberately non-anchored set of approaches to a consequential, open-ended problem by spawning isolated parallel sub-agents under different cognitive frames, then a separate critic pass scores, declusters, and deepens the best. The divergent complement to /deep-analysis. Use for high-stakes architecture, strategy, design-space, and "what are our options" decisions. Auto-activates on diverge, brainstorm options, explore alternatives, what are our options, de-anchor, divergent thinking, option space, consider alternatives, multiple approaches.
-context: fork
 argument-hint: "<consequential, open-ended decision or problem to explore>"
 ---
 
