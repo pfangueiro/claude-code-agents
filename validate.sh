@@ -341,6 +341,27 @@ for gated_skill in "${GATED_SKILLS[@]}"; do
 done
 
 # ============================================================================
+# Spawner Skills Must Not Be Forked (forked subagents cannot use the Agent tool)
+# ============================================================================
+
+SPAWNER_SKILLS=(
+    "diverge"
+    "execute"
+)
+
+section "Checking Spawner Skills Are Not Forked (${#SPAWNER_SKILLS[@]})"
+
+for spawner in "${SPAWNER_SKILLS[@]}"; do
+    spawner_file=".claude/skills/${spawner}/SKILL.md"
+    [ -f "$spawner_file" ] || continue
+    if grep -q "^context: fork" "$spawner_file" 2>/dev/null; then
+        fail "$spawner: must NOT declare 'context: fork' — forked subagents cannot spawn the parallel sub-agents this skill needs"
+    else
+        pass "$spawner: not forked (can spawn parallel sub-agents)"
+    fi
+done
+
+# ============================================================================
 # Library File Validation
 # ============================================================================
 

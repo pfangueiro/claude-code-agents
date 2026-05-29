@@ -36,6 +36,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation count drift reconciled to true on-disk state: skills 26 → 28
   (backfilled `context-escalation`), rules "Four" → 6 (backfilled
   `framework-integrity`) in README.
+- **Skill execution model**: removed `context: fork` from `diverge` and `execute`
+  so they run inline and can spawn the parallel sub-agents their protocols require
+  (forked subagents are denied the Agent/Task launcher per Claude Code docs, so both
+  silently degraded — diverge to sequential-single-context, execute to no delegation).
+  `investigate` keeps fork (its core RCA uses only subagent-available tools), with
+  Phase 1 realigned to evidence-first + return-questions. validate.sh now guards that
+  spawner skills (diverge, execute) stay un-forked.
+- Added `__pycache__/` and `*.pyc` to `.gitignore` (observability tooling bytecode).
 
 ## [2.9.5] - 2026-05-26
 
