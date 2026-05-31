@@ -981,7 +981,7 @@ claude-code-agents/
 - `deep-read`: 6-phase codebase reading engine
 - `library-docs`: MCP-powered library documentation (context7)
 - `deep-analysis`: MCP-powered deep reasoning (sequential-thinking)
-- `diverge`: Divergent ideation — isolated parallel frames + critic pass (the divergent complement to deep-analysis)
+- `diverge`: Divergent ideation — isolated parallel sub-agents + critic pass (the divergent complement to deep-analysis)
 - `security-scan`: Security vulnerability scanning and OWASP checks
 - `experiment-loop`: Autonomous metric-driven optimization (modify → measure → keep/discard)
 - `scheduled-tasks`: CronCreate/CronDelete/CronList for recurring prompts and polling
@@ -1030,6 +1030,6 @@ By understanding when and how to use each mechanism, you can create powerful, ma
 
 ---
 
-**Version**: 2.10.0 - Divergence & De-Anchoring (anti-anchoring rule, /diverge skill with isolated parallel frames, de-anchoring step in 7 open-ended agents, consequence×openness pre-flight self-gates, spawner-skill no-fork invariant)
+**Version**: 2.10.0 - Divergence & De-Anchoring (anti-anchoring rule, /diverge skill with isolated parallel sub-agents, de-anchoring step in 7 open-ended agents, consequence×openness pre-flight self-gates, spawner-skill no-fork invariant)
 **License**: MIT
 **Maintainer**: Claude Agents Project
