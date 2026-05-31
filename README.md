@@ -161,7 +161,7 @@ Skills provide domain knowledge that agents apply. 28 included:
 | **investigate** | 8-phase root cause analysis: observe, reproduce, trace, hypothesize, prove, fix, prevent |
 | **library-docs** | MCP-powered: fetch docs for React, Next.js, Vue, etc. |
 | **deep-analysis** | MCP-powered: structured reasoning with branching and revision (rewritten) |
-| **diverge** | Divergent ideation: isolated parallel frames + critic pass; the divergent complement to deep-analysis |
+| **diverge** | Divergent ideation: isolated parallel sub-agents + critic pass; the divergent complement to deep-analysis |
 | **deep-read** | 6-phase codebase reading engine: scope, map, trace, deep read, connect, report |
 | **handoff** | Session continuity — write HANDOFF.md for cross-session context |
 | **context-escalation** | Five-level context-pressure policy: truncate → drop-reads → fork-subagent → /compact → handoff |

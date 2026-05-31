@@ -33,6 +33,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Comprehensive md5 deploy-integrity check** (`validate.sh`, `68e3530`):
+  replaced the sampled diff-based check (5 projects, content-only) with an md5
+  manifest verifying the full deployable set (agents, lib, rules,
+  `skills/<name>/**`, commands) is present and identical across ALL deployed
+  projects (5 sampled in `--quick` for watchdog speed). Detects both content
+  drift AND missing files — the old per-file check was guarded by
+  `[ -f "$dst" ]` with no else, so a project missing an entire skill/rule
+  passed clean.
+- **/diverge wording + cross-reference** (`bf0d76f`): install.sh CLAUDE.md
+  emitters now say "isolated parallel sub-agents" (not the clumsy coinage
+  "framings"); added the reverse `/diverge` row to `/deep-analysis`'s
+  Integration table so the divergent↔convergent cross-reference is bidirectional.
+
 - Documentation count drift reconciled to true on-disk state: skills 26 → 28
   (backfilled `context-escalation`), rules "Four" → 6 (backfilled
   `framework-integrity`) in README.

@@ -9,7 +9,7 @@ improved by a team, so the contribution flow is intentionally light.
 git clone https://github.com/pfangueiro/claude-code-agents.git
 cd claude-code-agents
 ./install.sh --full /path/to/a/test/project   # deploy into a sandbox first
-./validate.sh                                  # 188+ checks should pass clean
+./validate.sh                                  # all checks should pass clean (count auto-discovered, scales with deployed projects)
 ```
 
 ## Branching + PRs
