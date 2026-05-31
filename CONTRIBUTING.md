@@ -32,7 +32,7 @@ Include `Co-Authored-By:` trailers for collaborative work.
 
 ## What to test before opening a PR
 
-1. **`./validate.sh`** — must report `188+ Passed`, `0 Errors`, `0 Warnings`.
+1. **`./validate.sh`** — must report `0 Errors`, `0 Warnings` (all checks Passed; count auto-discovered).
 2. **`bash -n` syntax check** — every shell file you touched:
    ```bash
    bash -n install.sh validate.sh deploy-all.sh global-config/hooks/*.sh global-config/daemon/*.sh

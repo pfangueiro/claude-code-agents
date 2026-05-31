@@ -98,7 +98,7 @@ See [`.claude/lib/agent-coordination.md`](.claude/lib/agent-coordination.md) for
 | **Minimal** | `./install.sh --minimal` | Just CLAUDE.md with agent activation |
 | **Repair** | `./install.sh --repair` | Fix missing components |
 | **Update** | `./install.sh --update` | Update to latest version |
-| **Validate** | `./validate.sh` | Verify all 170 checks pass |
+| **Validate** | `./validate.sh` | Run all checks (count auto-discovered, scales with deployed projects) |
 
 ### Deploy to an Existing Project
 
@@ -111,7 +111,7 @@ cd /path/to/your/project
 
 ```bash
 ./validate.sh
-# All validations passed! (150/170 checks)
+# All validations passed! (~300 checks full / 22 --quick; count auto-discovered)
 ```
 
 ---
