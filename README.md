@@ -111,7 +111,7 @@ cd /path/to/your/project
 
 ```bash
 ./validate.sh
-# All validations passed! (~300 checks full / 22 --quick; count auto-discovered)
+# All validations passed! (full + --quick modes; check count auto-discovered, scales with deployed projects)
 ```
 
 ---
