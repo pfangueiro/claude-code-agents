@@ -33,6 +33,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Project-memory backup** (`claude-framework-watchdog.sh`, `5b17dba` + freshness
+  wiring fix): the watchdog backed up `~/.claude/hooks` + `settings.json` but NOT
+  persistent memory (`~/.claude/projects/*/memory/*.md`) — critical state with no
+  snapshot or restore path (framework-integrity.md violation). Added watchdog
+  Task 4b (separate `memory-YYYYMMDD.tgz`, relative paths restored with
+  `-C ~/.claude`, shallow `projects/*/memory` glob excluding the ~100s-MB JSONL,
+  atomic verify-before-promote, `memory-latest.tgz` symlink) + Task 4c retention
+  (keep-floor newest 3 regardless of age). Restore steps documented in CLAUDE.md.
+  Follow-up fix: the runtime-freshness detector ran only in full `validate.sh`,
+  but the watchdog's automated path calls `--quick` — so the one check meant to
+  catch a stalled backup never ran automatically. Extracted to a shared
+  `check_memory_freshness` invoked from both quick and full mode.
 - **Comprehensive md5 deploy-integrity check** (`validate.sh`, `68e3530`):
   replaced the sampled diff-based check (5 projects, content-only) with an md5
   manifest verifying the full deployable set (agents, lib, rules,

@@ -183,6 +183,35 @@ emit_and_exit() {
     fi
 }
 
+# Runtime memory-snapshot freshness. Shared by quick AND full mode so the
+# watchdog's automated `--quick --json` run actually reconciles this critical
+# state (framework-integrity.md: not by manual validate.sh runs). Only meaningful
+# where memory dirs exist; absent snapshot on a fresh install is a warn, not a
+# fail — the daily job has simply not run yet.
+check_memory_freshness() {
+    local prefix="$1"   # "" for full, "Quick: " for quick
+    local mem_dir_count=0 d
+    if [ -d "$HOME/.claude/projects" ]; then
+        for d in "$HOME"/.claude/projects/*/memory; do
+            [ -d "$d" ] && mem_dir_count=$((mem_dir_count + 1))
+        done
+    fi
+    [ "$mem_dir_count" -gt 0 ] || return 0
+    local latest_mem_snap
+    latest_mem_snap=$(ls -1t "$HOME"/.claude/snapshots/memory-*.tgz 2>/dev/null | grep -v 'memory-latest\.tgz$' | head -1 || true)
+    if [ -n "$latest_mem_snap" ] && [ -f "$latest_mem_snap" ]; then
+        local snap_age_days
+        snap_age_days=$(( ( $(date +%s) - $(stat -f %m "$latest_mem_snap" 2>/dev/null || stat -c %Y "$latest_mem_snap" 2>/dev/null || echo 0) ) / 86400 ))
+        if [ "$snap_age_days" -le 8 ]; then
+            pass "${prefix}Memory snapshot present and fresh (${snap_age_days}d old, $mem_dir_count memory dirs)"
+        else
+            warn "${prefix}Memory snapshot stale (${snap_age_days}d old) — watchdog may not be running"
+        fi
+    else
+        warn "${prefix}No memory snapshot yet ($mem_dir_count memory dirs present) — watchdog daily job pending"
+    fi
+}
+
 if $QUICK_MODE; then
     section "Quick Mode: ~/.claude integrity"
 
@@ -234,6 +263,10 @@ if $QUICK_MODE; then
             fi
         done < <(jq -r '.env | keys[]' "$TEMPLATE_SRC" 2>/dev/null)
     fi
+
+    # Memory backup freshness — the watchdog's automated path runs ONLY --quick,
+    # so this runtime detector must live here to reconcile automatically.
+    check_memory_freshness "Quick: "
 
     emit_and_exit
 fi
@@ -793,28 +826,8 @@ else
     warn "Watchdog source not found — skipping memory backup source check"
 fi
 
-# Runtime freshness: only meaningful where memory dirs actually exist (e.g. this
-# machine). Absent snapshot on a fresh install is a warn, not a fail — the daily
-# job has simply not run yet.
-mem_dir_count=0
-if [ -d "$HOME/.claude/projects" ]; then
-    for d in "$HOME"/.claude/projects/*/memory; do
-        [ -d "$d" ] && mem_dir_count=$((mem_dir_count + 1))
-    done
-fi
-if [ "$mem_dir_count" -gt 0 ]; then
-    latest_mem_snap=$(ls -1t "$HOME"/.claude/snapshots/memory-*.tgz 2>/dev/null | grep -v 'memory-latest\.tgz$' | head -1 || true)
-    if [ -n "$latest_mem_snap" ] && [ -f "$latest_mem_snap" ]; then
-        snap_age_days=$(( ( $(date +%s) - $(stat -f %m "$latest_mem_snap" 2>/dev/null || stat -c %Y "$latest_mem_snap" 2>/dev/null || echo 0) ) / 86400 ))
-        if [ "$snap_age_days" -le 8 ]; then
-            pass "Memory snapshot present and fresh (${snap_age_days}d old, $mem_dir_count memory dirs)"
-        else
-            warn "Memory snapshot stale (${snap_age_days}d old) — watchdog may not be running"
-        fi
-    else
-        warn "No memory snapshot yet ($mem_dir_count memory dirs present) — watchdog daily job pending"
-    fi
-fi
+# Runtime freshness (shared with quick mode via check_memory_freshness).
+check_memory_freshness ""
 
 # ============================================================================
 # Summary
