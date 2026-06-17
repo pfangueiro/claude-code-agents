@@ -7,6 +7,8 @@
 #   2. Repo .git integrity (git fsck) → watchdog-alerts.jsonl on corruption
 #   3. Rolling git bundle snapshots (~/.claude/snapshots/) — daily cadence
 #   4. User config tarball snapshots (~/.claude/hooks, settings.json) — daily
+#   4b. Project-memory tarball (~/.claude/projects/*/memory) — daily, separate
+#       archive, relative paths, verified-before-promote, keep-floor retention
 #   5. Retention: prune snapshots older than 7 days
 #
 # All stdout/stderr captured to ~/.claude/analytics/watchdog.log by launchd.
@@ -165,6 +167,75 @@ if [ "$needs_tgz" -eq 1 ]; then
     fi
 else
     log "watchdog: userconfig tarball still fresh (<23h), skipping"
+fi
+
+# -------- Task 4b: project-memory tarball (daily) --------
+# Persistent memory lives in ~/.claude/projects/<slug>/memory/*.md and is NOT in
+# the userconfig tarball. Back it up as a SEPARATE archive with RELATIVE paths
+# (rooted at ~/.claude) so a restore writes only under projects/*/memory and can
+# never clobber live settings.json/hooks. The projects/ parent holds ~100s of MB
+# of JSONL session logs — the shallow glob projects/*/memory excludes it.
+latest_mem=""
+if [ -d "$SNAPSHOT_DIR" ]; then
+    latest_mem=$(ls -1t "$SNAPSHOT_DIR"/memory-*.tgz 2>/dev/null | grep -v '/memory-latest\.tgz$' | head -1 || true)
+fi
+
+needs_mem=1
+if [ -n "$latest_mem" ] && [ -f "$latest_mem" ]; then
+    if command -v stat >/dev/null 2>&1; then
+        mtime=$(stat -f %m "$latest_mem" 2>/dev/null || stat -c %Y "$latest_mem" 2>/dev/null || echo 0)
+        now=$(date +%s)
+        age=$((now - mtime))
+        [ "$age" -lt 82800 ] && needs_mem=0
+    fi
+fi
+
+if [ "$needs_mem" -eq 1 ] && [ -d "$HOME/.claude/projects" ]; then
+    # Collect only real memory dirs as ~/.claude-relative paths; skip symlinks.
+    # No nullglob (bash 3.2): an unmatched glob stays literal and fails [ -d ].
+    mem_paths=()
+    for d in "$HOME"/.claude/projects/*/memory; do
+        [ -d "$d" ] || continue
+        [ -L "$d" ] && continue
+        mem_paths+=("${d#$HOME/.claude/}")
+    done
+
+    if [ "${#mem_paths[@]}" -gt 0 ]; then
+        mem_path="$SNAPSHOT_DIR/memory-$(_day_stamp).tgz"
+        mem_tmp="$mem_path.tmp.$$"
+        mrc=0
+        tar -czf "$mem_tmp" -C "$HOME/.claude" "${mem_paths[@]}" >/dev/null 2>&1 || mrc=$?
+        # Promote only a verified, non-empty archive (atomic mv); else keep prior.
+        if [ "$mrc" -ne 2 ] && [ -s "$mem_tmp" ] && tar -tzf "$mem_tmp" 2>/dev/null | grep -q '\.md$'; then
+            if mv -f "$mem_tmp" "$mem_path" 2>/dev/null; then
+                ln -sf "$(basename "$mem_path")" "$SNAPSHOT_DIR/memory-latest.tgz" 2>/dev/null || true
+                mcount=$(tar -tzf "$mem_path" 2>/dev/null | grep -c '\.md$')
+                log "watchdog: created memory snapshot $mem_path ($mcount md files)"
+                log_jsonl "$HEALTH_LOG" "\"event\":\"memory_snapshot\",\"path\":\"$mem_path\",\"md_files\":$mcount"
+            fi
+        else
+            rm -f "$mem_tmp"
+            log_jsonl "$ALERT_LOG" "\"event\":\"memory_snapshot_failed\",\"path\":\"$mem_path\""
+            log "watchdog: memory snapshot FAILED (kept prior good copy)"
+        fi
+    fi
+elif [ "$needs_mem" -eq 0 ]; then
+    log "watchdog: memory tarball still fresh (<23h), skipping"
+fi
+
+# -------- Task 4c: memory snapshot retention (7 days, keep-floor 3) --------
+# Pure age-prune would delete the last copy after a >7d backup outage. Always
+# keep the newest 3 memory snapshots regardless of age; age-prune only beyond.
+if [ -d "$SNAPSHOT_DIR" ]; then
+    mem_keep_min=3
+    mem_idx=0
+    for f in $(ls -1t "$SNAPSHOT_DIR"/memory-*.tgz 2>/dev/null | grep -v '/memory-latest\.tgz$'); do
+        mem_idx=$((mem_idx + 1))
+        [ "$mem_idx" -le "$mem_keep_min" ] && continue
+        if find "$f" -mtime +7 -print 2>/dev/null | grep -q .; then
+            rm -f "$f" 2>/dev/null && log "watchdog: purged old memory snapshot $f"
+        fi
+    done
 fi
 
 # -------- Task 5: retention (7 days) --------
