@@ -125,13 +125,18 @@ The framework reconciles its own deployed state. Two paths, one diagnostic strea
 **Slow path — launchd watchdog (`global-config/daemon/claude-framework-watchdog.sh`):**
 - Runs hourly via `com.claude-code-agents.framework-watchdog` LaunchAgent
 - Hourly: `validate.sh --quick --json`, `git fsck` on repo (corruption → `watchdog-alerts.jsonl`)
-- Daily: git bundle snapshot of repo, tarball of `~/.claude/hooks` + `settings.json`
-- Retention: prunes snapshots older than 7 days
+- Daily: git bundle snapshot of repo, tarball of `~/.claude/hooks` + `settings.json`, separate tarball of project memory (`~/.claude/projects/*/memory`)
+- Retention: prunes snapshots older than 7 days (memory snapshots keep a floor of the newest 3 regardless of age)
 - Output: `~/.claude/analytics/watchdog.log`
 
 **Snapshot restore (`~/.claude/snapshots/`):**
 - Repo corruption: `git clone ~/.claude/snapshots/claude-code-agents-YYYYMMDD-HHMM.bundle recovered/`
 - User config corruption: `tar -xzf ~/.claude/snapshots/userconfig-YYYYMMDD.tgz -C /`
+- Project memory (`~/.claude/projects/<slug>/memory/*.md`): archives use paths relative to `~/.claude` and restore with `-C ~/.claude` (never `-C /`), so they can only write under `projects/*/memory`. **List before restoring.**
+  - List a snapshot: `tar -tzvf ~/.claude/snapshots/memory-latest.tgz`
+  - One project (common case): `tar -xzf ~/.claude/snapshots/memory-latest.tgz -C ~/.claude projects/<slug>/memory`
+  - Compare backup vs current before clobbering: `tar -xzOf ~/.claude/snapshots/memory-latest.tgz projects/<slug>/memory/MEMORY.md | diff - ~/.claude/projects/<slug>/memory/MEMORY.md`
+  - All memory (fresh machine / mass loss): `tar -xzf ~/.claude/snapshots/memory-latest.tgz -C ~/.claude`
 
 **Diagnostic stream:** `~/.claude/analytics/framework-health.jsonl` — single source for drift events, validation output, snapshot activity. `~/.claude/analytics/watchdog-alerts.jsonl` for corruption alerts.
 
