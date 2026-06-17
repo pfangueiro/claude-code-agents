@@ -3,7 +3,7 @@
 # Claude Framework Watchdog — hourly slow-path reconciliation & snapshots
 # ============================================================================
 # Runs under launchd (StartInterval 3600). Responsibilities:
-#   1. Full validation (./validate.sh --quick --json) → framework-health.jsonl
+#   1. Quick validation (./validate.sh --quick --json) → framework-health.jsonl
 #   2. Repo .git integrity (git fsck) → watchdog-alerts.jsonl on corruption
 #   3. Rolling git bundle snapshots (~/.claude/snapshots/) — daily cadence
 #   4. User config tarball snapshots (~/.claude/hooks, settings.json) — daily
