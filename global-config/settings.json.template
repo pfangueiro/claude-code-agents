@@ -5,7 +5,7 @@
     "BASH_DEFAULT_TIMEOUT_MS": "60000",
     "BASH_MAX_TIMEOUT_MS": "600000",
     "ENABLE_TOOL_SEARCH": "auto",
-    "CLAUDE_CODE_EFFORT_LEVEL": "high"
+    "CLAUDE_CODE_EFFORT_LEVEL": "xhigh"
   },
   "alwaysThinkingEnabled": true,
   "permissions": {

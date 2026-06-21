@@ -140,6 +140,14 @@ The framework reconciles its own deployed state. Two paths, one diagnostic strea
 
 **Diagnostic stream:** `~/.claude/analytics/framework-health.jsonl` — single source for drift events, validation output, snapshot activity. `~/.claude/analytics/watchdog-alerts.jsonl` for corruption alerts.
 
+## Reasoning Effort
+
+- **Persistent default: `xhigh`** — set via `CLAUDE_CODE_EFFORT_LEVEL` in `~/.claude/settings.json` `env` (the framework template ships `xhigh`). Valid persistent tiers: `low | medium | high | xhigh`. validate.sh + the SessionStart healthcheck reject any other value (drift → heal).
+- **Session-only (NOT persistable — by Anthropic design):**
+  - `max` — deeper single-context reasoning: run `/effort max` in a session. Invalid as an env value (silently ineffective if set there).
+  - `ultracode` — `xhigh` + standing multi-agent **workflow** orchestration: run `/effort ultracode`, or include the keyword `ultracode` in a prompt. Resets when the session ends.
+  - **Workflows have no persistent "on" switch** — they are gated behind explicit per-request opt-in (`ultracode`, the keyword, or asking for a workflow). Only `disableWorkflows: true` / `CLAUDE_CODE_DISABLE_WORKFLOWS=1` persist (to turn them OFF). So "ultracode + workflows by default" = `xhigh` persistent baseline + `/effort ultracode` per session when you want the fleet.
+
 ## Quick Start
 
 Describe what you need naturally:
