@@ -84,6 +84,17 @@ if [ -f "$SETTINGS_FILE" ] && [ -f "$REPO/global-config/settings.json.template" 
             _log "\"event\":\"drift_detected\",\"check\":\"env_key\",\"expected\":\"$key\",\"actual\":\"missing\",\"action\":\"trigger_heal\""
         fi
     done < <(jq -r '.env | keys[]' "$REPO/global-config/settings.json.template" 2>/dev/null)
+
+    # Value check: CLAUDE_CODE_EFFORT_LEVEL must be a valid persistent tier.
+    # max/ultracode are session-only and silently ineffective as an env value.
+    eff=$(jq -r '.env.CLAUDE_CODE_EFFORT_LEVEL // empty' "$SETTINGS_FILE" 2>/dev/null)
+    case "$eff" in
+        ""|low|medium|high|xhigh) : ;;
+        *)
+            DRIFT_FOUND=1
+            _log "\"event\":\"drift_detected\",\"check\":\"effort_value\",\"expected\":\"low|medium|high|xhigh\",\"actual\":\"$eff\",\"action\":\"trigger_heal\""
+            ;;
+    esac
 fi
 
 # -------- Check 2: hook script sha256 match --------

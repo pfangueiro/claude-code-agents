@@ -262,6 +262,17 @@ if $QUICK_MODE; then
                 fail "Quick: env key missing: $k"
             fi
         done < <(jq -r '.env | keys[]' "$TEMPLATE_SRC" 2>/dev/null)
+
+        # Value check: CLAUDE_CODE_EFFORT_LEVEL must be a valid PERSISTENT tier.
+        # max/ultracode are session-only (/effort ...) and invalid as env values —
+        # silently ineffective if set here, so catch them rather than just presence.
+        eff=$(jq -r '.env.CLAUDE_CODE_EFFORT_LEVEL // empty' "$SETTINGS_DST" 2>/dev/null)
+        if [ -n "$eff" ]; then
+            case "$eff" in
+                low|medium|high|xhigh) pass "Quick: CLAUDE_CODE_EFFORT_LEVEL valid ($eff)" ;;
+                *) fail "Quick: CLAUDE_CODE_EFFORT_LEVEL invalid ('$eff') — persistent tiers are low|medium|high|xhigh (max/ultracode are session-only)" ;;
+            esac
+        fi
     fi
 
     # Memory backup freshness — the watchdog's automated path runs ONLY --quick,
