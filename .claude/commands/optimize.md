@@ -59,7 +59,8 @@ For each iteration (up to `--iterations`):
 3. **Re-measure** — run the same measurement command
 
 4. **Evaluate**:
-   - If metric **improved** (or stayed same for coverage which rounds): **KEEP**
+   - For noisy metrics (`build-time`, `bundle-size` with hashing, any wall-clock timing): a small delta may be measurement noise, not a real change. Re-measure once and treat a delta within run-to-run variance as **unchanged**, not a win — do not KEEP a change whose only effect is within the noise floor. Deterministic metrics (`lint-warnings`, `type-errors`) need no margin.
+   - If metric **improved** beyond noise (or stayed same for coverage which rounds): **KEEP**
      - Log: `Iteration N: <metric> <before> → <after> (KEEP) — <what changed>`
      - Update `current_value = new_value`
    - If metric **worsened**: **REVERT**
