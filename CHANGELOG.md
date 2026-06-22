@@ -33,6 +33,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Reasoning effort default → `xhigh`** (`settings.json.template`, `8d1cb5f`):
+  raised `CLAUDE_CODE_EFFORT_LEVEL` from `high` to `xhigh` (the highest persistent
+  tier; `max`/`ultracode` are session-only and invalid as env values). Added an
+  effort-VALUE check to `validate.sh --quick` and the SessionStart healthcheck —
+  both now reject anything outside `low|medium|high|xhigh` and heal it, catching a
+  latent live bug where the value had drifted to an ineffective `max`. Added a
+  "Reasoning Effort" section to CLAUDE.md (persistent vs. session-only; workflows
+  have no persistent on-switch).
+- **Measurement-honesty discipline** (`verification.md` + `optimize.md`, `cb91d7a`):
+  new "Honest Measurement" rule (distinguish real change from noise, never report
+  an unmeasured number, state the basis of quantitative claims) + a noise guard on
+  `optimize`'s keep/revert step so within-variance deltas on noisy metrics
+  (build-time, bundle-size) are not kept as wins. Lesson extracted from evaluating
+  Headroom (the tool itself was rejected as wrong-layer).
+- **Removed hardcoded validate check-count from README** (`33f3b4e`): the
+  verify-installation example hardcoded a `--quick` count that went stale on every
+  change; replaced with "count auto-discovered, scales with deployed projects" so
+  it cannot drift again.
+- **Memory-freshness detector now runs in `--quick`** (`d62a2ac`): the runtime
+  freshness check lived below the quick-mode `emit_and_exit`, so the watchdog's
+  automated `--quick --json` run never executed it. Extracted to a shared
+  `check_memory_freshness` called from both quick and full mode; fixed the
+  watchdog header comment ("Full" → "Quick" validation).
 - **Project-memory backup** (`claude-framework-watchdog.sh`, `5b17dba` + freshness
   wiring fix): the watchdog backed up `~/.claude/hooks` + `settings.json` but NOT
   persistent memory (`~/.claude/projects/*/memory/*.md`) — critical state with no
@@ -41,10 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `-C ~/.claude`, shallow `projects/*/memory` glob excluding the ~100s-MB JSONL,
   atomic verify-before-promote, `memory-latest.tgz` symlink) + Task 4c retention
   (keep-floor newest 3 regardless of age). Restore steps documented in CLAUDE.md.
-  Follow-up fix: the runtime-freshness detector ran only in full `validate.sh`,
-  but the watchdog's automated path calls `--quick` — so the one check meant to
-  catch a stalled backup never ran automatically. Extracted to a shared
-  `check_memory_freshness` invoked from both quick and full mode.
+  (The `--quick` wiring of the freshness detector was a follow-up — see `d62a2ac`
+  above.)
 - **Comprehensive md5 deploy-integrity check** (`validate.sh`, `68e3530`):
   replaced the sampled diff-based check (5 projects, content-only) with an md5
   manifest verifying the full deployable set (agents, lib, rules,
