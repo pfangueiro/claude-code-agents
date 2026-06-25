@@ -897,6 +897,27 @@ sync_hooks() {
                     fi
                 fi
             fi
+
+            # Reconcile .statusLine (framework-owned — points to ~/.claude/statusline.sh).
+            # Same replace-on-drift policy as hooks/permissions. Without this, a CLI
+            # settings-sync wholesale-replace that drops .statusLine leaves the status
+            # bar gone and install --update would NOT restore it (the bar vanished this
+            # way once — hooks self-healed, statusLine did not, because it wasn't here).
+            if jq -e '.statusLine' "$template" &>/dev/null; then
+                local tmpl_sl usr_sl
+                tmpl_sl=$(jq -Sc '.statusLine' "$template")
+                usr_sl=$(jq -Sc '.statusLine // null' ~/.claude/settings.json)
+                if [ "$tmpl_sl" != "$usr_sl" ]; then
+                    local sl_value
+                    sl_value=$(jq '.statusLine' "$template")
+                    _atomic_settings_jq ".statusLine = $sl_value" || true
+                    if [ "$usr_sl" = "null" ]; then
+                        print_success "Added statusLine block to settings.json"
+                    else
+                        print_success "Reconciled statusLine block in settings.json"
+                    fi
+                fi
+            fi
         fi
     fi
 }

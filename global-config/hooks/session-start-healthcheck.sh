@@ -151,6 +151,19 @@ if [ -f "$SETTINGS_FILE" ] && [ -f "$REPO/global-config/settings.json.template" 
     done < <(jq -r '.hooks | keys[]' "$REPO/global-config/settings.json.template" 2>/dev/null)
 fi
 
+# -------- Check 6: statusLine wiring in settings.json --------
+# Same wipe class as hooks: a CLI settings-sync wholesale-replace can drop
+# .statusLine, killing the status bar. Detect drift so the heal restores it.
+if [ -f "$SETTINGS_FILE" ] && [ -f "$REPO/global-config/settings.json.template" ] \
+   && command -v jq >/dev/null 2>&1; then
+    tmpl_sl=$(jq -Sc '.statusLine' "$REPO/global-config/settings.json.template" 2>/dev/null)
+    usr_sl=$(jq -Sc '.statusLine // null' "$SETTINGS_FILE" 2>/dev/null)
+    if [ "$tmpl_sl" != "null" ] && [ "$tmpl_sl" != "$usr_sl" ]; then
+        DRIFT_FOUND=1
+        _log "\"event\":\"drift_detected\",\"check\":\"statusline_wiring\",\"actual\":\"drifted_or_missing\",\"action\":\"trigger_heal\""
+    fi
+fi
+
 # -------- Heal if needed --------
 if [ "$DRIFT_FOUND" -eq 1 ]; then
     _trigger_heal
