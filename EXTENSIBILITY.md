@@ -897,24 +897,37 @@ If you have existing documentation or workflows:
 ```
 claude-code-agents/
 ├── .claude/
-│   ├── skills/                    # Skills (Blue) — 15 total
+│   ├── skills/                    # Skills (Blue) — 28 total
 │   │   ├── skill-creator/
 │   │   ├── git-workflow/
 │   │   ├── code-review-checklist/
 │   │   ├── deployment-runbook/
+│   │   ├── security-scan/
 │   │   ├── api-guidelines/
 │   │   ├── api-contract-testing/
 │   │   ├── ui-guidelines/
 │   │   ├── ci-cd-templates/
 │   │   ├── docker-deployment/
 │   │   ├── handoff/
+│   │   ├── context-escalation/
+│   │   ├── kubernetes-ops/         # SRE/Cloud
+│   │   ├── observability-stack/    # SRE/Cloud
+│   │   ├── sre-runbooks/           # SRE/Cloud
+│   │   ├── infrastructure-as-code/ # SRE/Cloud
+│   │   ├── experiment-loop/        # Experimentation
+│   │   ├── scheduled-tasks/        # Automation (CronCreate)
+│   │   ├── worktree-workflow/      # Automation (EnterWorktree)
+│   │   ├── remote-triggers/        # Automation (RemoteTrigger)
+│   │   ├── multi-agent-orchestration/ # Automation (teams)
+│   │   ├── browser-testing/        # Testing (Playwright MCP)
 │   │   ├── execute/               # Orchestration
 │   │   ├── investigate/           # Orchestration
 │   │   ├── deep-read/             # Orchestration
+│   │   ├── diverge/               # Divergence (parallel ideation)
 │   │   ├── library-docs/          # MCP-powered
 │   │   └── deep-analysis/         # MCP-powered + Orchestration
 │   │
-│   ├── agents/                    # Agents (Orange)
+│   ├── agents/                    # Agents (Orange) — 13 total
 │   │   ├── architecture-planner.md
 │   │   ├── security-auditor.md
 │   │   ├── test-automation.md
@@ -925,22 +938,32 @@ claude-code-agents/
 │   │   ├── frontend-specialist.md
 │   │   ├── api-backend.md
 │   │   ├── incident-commander.md
+│   │   ├── sre-specialist.md
 │   │   ├── code-quality.md
 │   │   └── meta-agent.md
 │   │
-│   ├── commands/                  # Slash Commands (Red) — 6 total
+│   ├── commands/                  # Slash Commands (Red) — 13 total
 │   │   ├── commit-pr.md
 │   │   ├── compact.md
 │   │   ├── create-jira.md
 │   │   ├── new-feature.md
 │   │   ├── review-pr.md
-│   │   └── security-scan.md
+│   │   ├── security-scan.md
+│   │   ├── build-fix.md
+│   │   ├── tdd.md
+│   │   ├── quality-gate.md
+│   │   ├── checkpoint.md
+│   │   ├── save-session.md
+│   │   ├── resume-session.md
+│   │   └── optimize.md
 │   │
-│   ├── rules/                     # Auto-enforced rules — 4 total
+│   ├── rules/                     # Auto-enforced rules — 6 total
 │   │   ├── security.md
 │   │   ├── code-quality.md
 │   │   ├── fix-quality.md
-│   │   └── verification.md
+│   │   ├── verification.md
+│   │   ├── framework-integrity.md
+│   │   └── anti-anchoring.md
 │   │
 │   └── lib/                       # Shared infrastructure
 │       ├── agent-templates.json
