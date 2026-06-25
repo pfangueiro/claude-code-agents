@@ -108,6 +108,17 @@ run_structural_checks() {
         if [ "$drift_count" -eq 0 ]; then
             pass "Structural: ~/.claude/settings.json hook events match template"
         fi
+
+        # statusLine drift: a CLI settings-sync wipe can drop .statusLine (kills the
+        # status bar) without touching hooks. Framework-owned → must match template.
+        local tmpl_sl usr_sl
+        tmpl_sl=$(jq -Sc '.statusLine' global-config/settings.json.template 2>/dev/null)
+        usr_sl=$(jq -Sc '.statusLine // null' "$HOME/.claude/settings.json" 2>/dev/null)
+        if [ "$tmpl_sl" != "null" ] && [ "$tmpl_sl" != "$usr_sl" ]; then
+            fail "Structural: ~/.claude/settings.json .statusLine drifted/missing from template (status bar gone)"
+        else
+            pass "Structural: ~/.claude/settings.json .statusLine matches template"
+        fi
     fi
 
     # Warn if watchdog daemon not loaded (macOS only).
