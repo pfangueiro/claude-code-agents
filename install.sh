@@ -759,6 +759,27 @@ install_global_config() {
     fi
 }
 
+# Atomic, defensive mutation of ~/.claude/settings.json.
+# - mktemp gives a UNIQUE temp file (not a shared name) so two concurrent
+#   installs can never interleave on the same tmp and mv a partial file.
+# - Refuses to install empty or malformed output: if jq fails, emits nothing,
+#   or emits invalid JSON, settings.json is left untouched. This guarantees the
+#   framework's own reconcile can never contribute to a hooks-wipe, even if the
+#   input was already corrupted by an external writer (e.g. CLI settings-sync).
+# Usage: _atomic_settings_jq '<jq filter>'   → 0 on success, non-zero on no-op.
+_atomic_settings_jq() {
+    local filter="$1" tmp
+    tmp=$(mktemp "${HOME}/.claude/.settings.json.XXXXXX" 2>/dev/null) || return 1
+    if jq "$filter" ~/.claude/settings.json > "$tmp" 2>/dev/null \
+        && [ -s "$tmp" ] \
+        && jq -e . "$tmp" >/dev/null 2>&1; then
+        mv "$tmp" ~/.claude/settings.json
+    else
+        rm -f "$tmp" 2>/dev/null || true
+        return 1
+    fi
+}
+
 sync_hooks() {
     echo -e "\n${BOLD}Syncing Hooks:${NC}"
 
@@ -833,8 +854,7 @@ sync_hooks() {
                 if [ "$tmpl_cfg" != "$usr_cfg" ]; then
                     local event_config
                     event_config=$(jq ".hooks[\"$event\"]" "$template")
-                    jq ".hooks[\"$event\"] = $event_config" ~/.claude/settings.json > ~/.claude/settings.json.tmp \
-                        && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
+                    _atomic_settings_jq ".hooks[\"$event\"] = $event_config" || true
                     if [ "$usr_cfg" = "null" ]; then
                         print_success "Added hook event $event to settings.json"
                     else
@@ -854,8 +874,7 @@ sync_hooks() {
                 if ! jq -e ".env[\"$key\"]" ~/.claude/settings.json &>/dev/null; then
                     local val
                     val=$(jq ".env[\"$key\"]" "$template")
-                    jq ".env[\"$key\"] = $val" ~/.claude/settings.json > ~/.claude/settings.json.tmp \
-                        && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
+                    _atomic_settings_jq ".env[\"$key\"] = $val" || true
                     print_success "Added env var $key to settings.json"
                 fi
             done
@@ -870,8 +889,7 @@ sync_hooks() {
                 if [ "$tmpl_perms" != "$usr_perms" ]; then
                     local perms_value
                     perms_value=$(jq '.permissions' "$template")
-                    jq ".permissions = $perms_value" ~/.claude/settings.json > ~/.claude/settings.json.tmp \
-                        && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
+                    _atomic_settings_jq ".permissions = $perms_value" || true
                     if [ "$usr_perms" = "null" ]; then
                         print_success "Added permissions block to settings.json"
                     else

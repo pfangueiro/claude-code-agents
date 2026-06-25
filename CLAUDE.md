@@ -138,6 +138,8 @@ The framework reconciles its own deployed state. Two paths, one diagnostic strea
   - Compare backup vs current before clobbering: `tar -xzOf ~/.claude/snapshots/memory-latest.tgz projects/<slug>/memory/MEMORY.md | diff - ~/.claude/projects/<slug>/memory/MEMORY.md`
   - All memory (fresh machine / mass loss): `tar -xzf ~/.claude/snapshots/memory-latest.tgz -C ~/.claude`
 
+**Known external cause — CLI settings-sync hooks wipe:** Claude Code's own settings-sync (`tengu_enable_settings_sync_push`) does a *wholesale replace* of `~/.claude/settings.json` (CLI `src/services/settingsSync/index.ts:519`, no merge, change-detection suppressed). In the two-Mac setup, a sync cycle can pull a payload lacking the framework's `.hooks` block and overwrite it to `{}` — with no install.sh involvement and no drift event at write time. This is external CLI behavior, not an install bug. Defense is detect-and-heal: the SessionStart `hook_wiring` check and hourly watchdog catch the empty/`{}` hooks and re-run `install.sh --update` to reconcile from template. install.sh's settings writes are hardened via `_atomic_settings_jq` (unique mktemp temp file + non-empty + valid-JSON guards) so the framework's own reconcile can never contribute to a wipe.
+
 **Diagnostic stream:** `~/.claude/analytics/framework-health.jsonl` — single source for drift events, validation output, snapshot activity. `~/.claude/analytics/watchdog-alerts.jsonl` for corruption alerts.
 
 ## Reasoning Effort
