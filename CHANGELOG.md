@@ -33,6 +33,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Deploy-integrity exclusion for rules-source repos** (`validate.sh`): generalized
+  the two hardcoded exclusions (claude-code-agents, claude-code) into an
+  `INTEGRITY_EXCLUDE` list and added `engineering-playbook` — Jumia's canonical
+  engineering-standards repo, which intentionally ships its own `code-quality.md`
+  and `security.md` rules. Those are authoritative overrides (per the framework's
+  own "project rules override general ones" model), not drift, so byte-identity
+  against framework source must not flag them. Deploying `--full` there preserves
+  its rules (install_rules is skip-if-exists) and adds the 4 non-colliding
+  framework rules + all agents/skills/commands/lib. Verified: Jumia's 4 rules
+  byte-unchanged, framework tooling byte-identical, the other 102 projects still
+  strictly integrity-checked (proven by inject-test: without the exclusion,
+  exactly the 2 overridden rules drift-fail).
 - **Reasoning effort default → `xhigh`** (`settings.json.template`, `8d1cb5f`):
   raised `CLAUDE_CODE_EFFORT_LEVEL` from `high` to `xhigh` (the highest persistent
   tier; `max`/`ultracode` are session-only and invalid as env values). Added an
