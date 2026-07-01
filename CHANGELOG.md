@@ -31,6 +31,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/diverge` in all three CLAUDE.md emitters, so fresh and existing deployments
   both learn the skill.
 
+### Removed
+
+- **Dead `activation-keywords.json` router** (`0b343bb`): removed
+  `.claude/lib/activation-keywords.json`. Its `confidence_scoring` weights,
+  `thresholds`, and `multi_agent_triggers` "router" were never wired into any
+  code path — exhaustive grep confirmed install.sh/quick-install.sh only *copied*
+  the file, validate.sh only *existence-checked* it, and `meta-agent.md` read it
+  as an authoring reference; the scoring keys (`confidence_scoring`,
+  `multi_agent_triggers`, `force_opus_model`, `minimum_activation`) appear in zero
+  hooks/scripts. Real agent routing is model-native: Claude Code reads each
+  agent's `description:` frontmatter and selects, so tuning those weights changed
+  runtime behavior by exactly nothing. Removed the entry from `LIB_FILES`
+  (install.sh, quick-install.sh) and `EXPECTED_LIBS` (validate.sh), the
+  EXTENSIBILITY.md file tree, and repointed `meta-agent.md` to author new agents
+  from the real `description:` router surface. Corrects the false "Confidence
+  scoring" capability claimed for this file under the v0.x entry below. Surfaced
+  while evaluating Sakana Fugu (arXiv:2606.21228) — wrong-layer for direct
+  adoption (trained coordinator weights vs. our prompt/config layer), but its
+  critique of hand-designed routers exposed that ours was not only hand-designed
+  but inert.
+
 ### Fixed
 
 - **Deploy-integrity exclusion for rules-source repos** (`validate.sh`): generalized
@@ -467,6 +488,9 @@ This release transforms Claude Agents into a comprehensive enterprise-grade SDLC
   - Confidence scoring
   - Technology-specific keywords
   - Multi-agent triggers
+  - _Correction: this scoring/router logic was never wired into any executing
+    code path (agent routing is model-native via `description:` fields). The file
+    was removed as dead config — see **Removed** under [2.10.0]._
 
 #### Installation System
 - 🛠️ **Intelligent Installer** (`install.sh`)
