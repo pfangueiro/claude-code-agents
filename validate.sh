@@ -729,11 +729,18 @@ if [ -d "$PROJECTS_DIR" ]; then
     _gen_manifest ".claude" > "$src_manifest"
     src_file_count=$(grep -c . "$src_manifest" 2>/dev/null || echo 0)
 
+    # Repos excluded from per-project deploy-integrity. Beyond the framework repo
+    # itself, this covers rules-SOURCE repos that intentionally ship their own
+    # versions of framework-named rules (e.g. engineering-playbook = Jumia's
+    # canonical engineering standards). Their rules are authoritative overrides,
+    # not drift; byte-identity against framework source does not apply. Add a
+    # rules-source repo here rather than letting it emit permanent false drift.
+    INTEGRITY_EXCLUDE="claude-code-agents claude-code engineering-playbook"
+
     all_projects=()
     for d in "$PROJECTS_DIR"/*/; do
         bn=$(basename "$d")
-        [ "$bn" = "claude-code-agents" ] && continue
-        [ "$bn" = "claude-code" ] && continue
+        case " $INTEGRITY_EXCLUDE " in *" $bn "*) continue ;; esac
         [ -d "$d/.claude/agents" ] || continue
         all_projects+=("$d")
     done
