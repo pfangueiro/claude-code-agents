@@ -516,7 +516,7 @@ This release transforms Claude Agents into a comprehensive enterprise-grade SDLC
 ### Enhanced
 - 💡 **Natural Language Processing**
   - Auto-activation based on conversation context
-  - Weighted confidence scoring
+  - Weighted confidence scoring _(never wired into any code path — see **Removed** under [2.10.0]; real routing is model-native via agent `description:` fields)_
   - Context-aware agent selection
   - Phrase pattern matching
 
