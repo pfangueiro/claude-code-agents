@@ -38,7 +38,6 @@ AGENTS=(
 LIBS=(
     "agent-templates.json"
     "sdlc-patterns.md"
-    "activation-keywords.json"
 )
 
 # Create directories

@@ -423,7 +423,6 @@ done
 EXPECTED_LIBS=(
     "agent-templates.json"
     "sdlc-patterns.md"
-    "activation-keywords.json"
     "agent-coordination.md"
     "mcp-guide.md"
 )

@@ -26,7 +26,7 @@ You are an expert SDLC/SSDLC agent architect specializing in creating enterprise
 **1. Load Knowledge Bases:**
    - Read `.claude/lib/agent-templates.json` for template library
    - Read `.claude/lib/sdlc-patterns.md` for phase detection
-   - Read `.claude/lib/activation-keywords.json` for keyword patterns
+   - Study the existing `.claude/agents/*.md` `description:` frontmatter for the house "Auto-activates on" keyword style — that description text is the real router surface Claude Code reads to select agents, so new agents must carry equivalent natural-language activation cues there
 
 **2. Fetch Latest Documentation:**
    - Use WebFetch on `https://docs.anthropic.com/en/docs/claude-code/sub-agents` for current best practices

@@ -968,7 +968,6 @@ claude-code-agents/
 │   └── lib/                       # Shared infrastructure
 │       ├── agent-templates.json
 │       ├── sdlc-patterns.md
-│       ├── activation-keywords.json
 │       ├── agent-coordination.md
 │       └── mcp-guide.md
 │
