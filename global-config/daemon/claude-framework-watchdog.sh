@@ -60,13 +60,43 @@ fi
 
 log "watchdog: run start (repo=$REPO)"
 
-# -------- Task 1: validate.sh --quick --json --------
+# -------- Task 1: validate.sh --quick --json, then HEAL on drift --------
+# CRITICAL: the watchdog is the ONLY self-heal component that survives a
+# settings.json .hooks wipe (it runs under launchd, independent of the wiped
+# SessionStart hook). It must therefore HEAL, not merely detect — otherwise a
+# wipe removes the SessionStart healer and nothing recovers. Parse the errors
+# count from the --json summary; on errors>0, run install.sh --update (the
+# reconcile re-injects hooks/statusLine from template via _atomic_settings_jq)
+# and re-validate. Snapshot-before is covered by the daily userconfig tarball.
 if [ -x "$REPO/validate.sh" ]; then
     validate_out=$(cd "$REPO" && ./validate.sh --quick --json 2>&1 || true)
-    # Escape for JSONL (truncate if huge)
     validate_snippet=$(printf '%s' "$validate_out" | head -c 4000 | tr '\n' ' ' | sed 's/"/\\"/g')
     log_jsonl "$HEALTH_LOG" "\"event\":\"validate_quick\",\"output\":\"$validate_snippet\""
     log "watchdog: validate.sh --quick --json completed"
+
+    err_count=0
+    if command -v jq >/dev/null 2>&1; then
+        err_count=$(printf '%s' "$validate_out" | jq -r '.errors // 0' 2>/dev/null || echo 0)
+    fi
+    case "$err_count" in ''|*[!0-9]*) err_count=0 ;; esac
+    if [ "$err_count" -gt 0 ]; then
+        log_jsonl "$HEALTH_LOG" "\"event\":\"heal_triggered\",\"source\":\"watchdog\",\"errors\":$err_count,\"action\":\"install.sh --update\""
+        log "watchdog: drift ($err_count errors) — running install.sh --update to heal"
+        (cd "$REPO" && ./install.sh --update >/dev/null 2>&1) || true
+        heal_out=$(cd "$REPO" && ./validate.sh --quick --json 2>&1 || true)
+        heal_errs=0
+        if command -v jq >/dev/null 2>&1; then
+            heal_errs=$(printf '%s' "$heal_out" | jq -r '.errors // 0' 2>/dev/null || echo 0)
+        fi
+        case "$heal_errs" in ''|*[!0-9]*) heal_errs=0 ;; esac
+        if [ "$heal_errs" -eq 0 ]; then
+            log_jsonl "$HEALTH_LOG" "\"event\":\"heal_succeeded\",\"source\":\"watchdog\""
+            log "watchdog: heal succeeded (0 errors after install --update)"
+        else
+            log_jsonl "$ALERT_LOG" "\"event\":\"heal_failed\",\"source\":\"watchdog\",\"errors_remaining\":$heal_errs"
+            log "watchdog: heal FAILED — $heal_errs errors remain after install --update"
+        fi
+    fi
 else
     log "watchdog: validate.sh not found or not executable"
 fi
