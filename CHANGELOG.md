@@ -33,6 +33,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Self-heal now survives its own failure mode — watchdog heals, not just detects**
+  (`claude-framework-watchdog.sh`, `d6932b6`): the flagship self-heal had a bootstrap
+  paradox — the only healer (`install.sh --update`, via `_trigger_heal`) was wired as
+  a SessionStart hook *inside* the `.hooks` block that a CLI settings-sync wipes, so
+  the wipe removed the healer and the surviving launchd watchdog only *logged* drift
+  (a "warning nobody reads" — framework-integrity.md violation). The watchdog now
+  parses the `--quick --json` error count and, on `errors>0`, runs `install.sh --update`
+  itself, re-validates, and logs `heal_triggered`/`heal_succeeded`/`heal_failed`. The
+  wipe-surviving component is now the healer. Verified: `.hooks`→`{}` → watchdog →
+  10 hooks + statusLine restored. Corrected the false CLAUDE.md claim that the watchdog
+  already re-ran install.
+- **`.statusLine` self-heal** (`e1717fe`): the same settings-sync wipe that empties
+  `.hooks` also drops `.statusLine` (killing the status bar), but only hooks were in
+  the reconcile set, so `install --update` healed hooks and silently left the bar dead.
+  Added `.statusLine` to the sync_hooks reconcile (replace-on-drift), a SessionStart
+  `statusline_wiring` drift check, and a validate.sh structural assertion — statusLine
+  now self-heals like hooks.
+- **Atomic, guarded settings.json writes** (`install.sh`, `16f1a75`): routed all three
+  reconcile writes through `_atomic_settings_jq` — a unique `mktemp` temp file (no
+  cross-process collision) plus non-empty + valid-JSON guards, so the framework's own
+  reconcile can never contribute to a wipe even on already-corrupted input. Root cause
+  documented: CLI settings-sync (`src/services/settingsSync/index.ts:519`) wholesale-
+  replaces settings.json with change-detection suppressed — external CLI behavior, not
+  an install bug.
+- **Fail-closed secrets guard + daemon PATH + settings.json delete recovery**
+  (`4e57582`): (1) `file-protection.sh` used `exit 1`, which is *non-blocking* for
+  PreToolUse — the write to a `.env`/`.pem`/etc. proceeded, making the guard theater;
+  now `exit 2` with the message on stderr so it actually blocks. (2) The watchdog plist
+  had no `EnvironmentVariables`, so a Homebrew-only `jq` was invisible to launchd and
+  the jq-gated heal path silently no-oped; added a `PATH` including
+  `/opt/homebrew/bin`. (3) A full *delete* of settings.json (vs an emptied `{}`) was
+  both undetected (every check is gated on `[ -f settings.json ]`) and unrecoverable
+  (`--update` never recreated it); validate.sh now fails on a missing file (→ watchdog
+  heals) and sync_hooks recreates it from template. All three verified end-to-end.
+- **EXTENSIBILITY.md appendix counts** (`b37e067`): the Project Structure diagram had
+  drifted (skills 15→28, agents 12→13, commands 6→13, rules 4→6); the body already
+  listed 28 skills correctly — only the appendix tree was stale.
 - **Deploy-integrity exclusion for rules-source repos** (`validate.sh`): generalized
   the two hardcoded exclusions (claude-code-agents, claude-code) into an
   `INTEGRITY_EXCLUDE` list and added `engineering-playbook` — Jumia's canonical
