@@ -837,6 +837,17 @@ sync_hooks() {
     done
     [ "$pruned" -eq 0 ] && print_skip "No orphan hooks to prune"
 
+    # Recover from a full DELETE of settings.json (not just an emptied {} wipe):
+    # the reconcile below is gated on the file existing, so if the file is gone
+    # entirely, seed it from the template first. Without this, --update can never
+    # recreate a deleted settings.json (only install_global_config did, and that
+    # runs only in --team-setup). Atomic cp so a concurrent reader never sees half.
+    if [ ! -f ~/.claude/settings.json ] && [ -f "${SCRIPT_DIR}/global-config/settings.json.template" ]; then
+        cp "${SCRIPT_DIR}/global-config/settings.json.template" ~/.claude/settings.json.recreate.$$ \
+            && mv ~/.claude/settings.json.recreate.$$ ~/.claude/settings.json \
+            && print_success "Recreated missing settings.json from template"
+    fi
+
     # Reconcile hook events and env vars in settings.json against template.
     # Framework-managed hook events (those present in template) are the source of truth:
     # if user's version differs (missing, drifted command, drifted timeout, missing sub-hook),

@@ -77,6 +77,14 @@ section() {
 run_structural_checks() {
     section "Structural Checks"
 
+    # Existence guard: a full DELETE of settings.json (vs an emptied {} wipe) must
+    # be an ERROR, not a silent skip — every hook/statusLine/env check below is
+    # gated on the file existing, so without this a deleted file yields 0 errors
+    # and the watchdog never heals it. Fail -> errors>0 -> watchdog runs install --update.
+    if [ ! -f "$HOME/.claude/settings.json" ]; then
+        fail "Structural: ~/.claude/settings.json is MISSING (deleted) — self-heal must recreate it"
+    fi
+
     # Regression guard: SessionStart hook in TEMPLATE must NOT be a decorative echo
     if [ -f "global-config/settings.json.template" ] && command -v jq &>/dev/null; then
         local sess_cmd
