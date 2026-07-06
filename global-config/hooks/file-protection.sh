@@ -30,9 +30,12 @@ BLOCKED_PATTERNS=(
 for pattern in "${BLOCKED_PATTERNS[@]}"; do
   case "$file_path" in
     *$pattern*)
-      echo "🔒 BLOCKED: Cannot modify sensitive file: $file_path"
-      echo "This file matches protected pattern: $pattern"
-      exit 1
+      # PreToolUse blocks ONLY on exit 2 (stderr is fed back to Claude);
+      # exit 1 is a non-blocking error and the tool call PROCEEDS — so this
+      # must be exit 2 to actually protect the file. Message goes to stderr.
+      echo "🔒 BLOCKED: Cannot modify sensitive file: $file_path" >&2
+      echo "This file matches protected pattern: $pattern" >&2
+      exit 2
       ;;
   esac
 done
