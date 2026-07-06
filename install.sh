@@ -65,6 +65,19 @@ LIB_FILES=(
     "mcp-guide.md"
 )
 
+# Lib files the framework once shipped and has since RETIRED. install copies
+# LIB_FILES forward but never reverse-prunes, so a removed lib file lingers in
+# every deployed project forever (activation-keywords.json did, across 92 repos,
+# after 0b343bb). prune_retired_lib_files() deletes these from each project.
+# SAFETY: an explicit retired-list (not "anything not in LIB_FILES") because
+# .claude/lib lives inside the user's project repo and may be git-committed —
+# we only ever delete files the framework itself shipped and retired, never an
+# unrecognized user file (fail-closed, per security.md). Add an entry here in
+# the same commit that removes a file from LIB_FILES.
+RETIRED_LIB_FILES=(
+    "activation-keywords.json"
+)
+
 # Statistics
 STATS_CHECKED=0
 STATS_INSTALLED=0
@@ -384,6 +397,20 @@ install_lib_file() {
             return 1
         fi
     fi
+}
+
+# Reverse-prune: delete retired framework lib files from the current project's
+# .claude/lib. Runs from the project cwd (like install_lib_file). Only touches
+# names in RETIRED_LIB_FILES, so a user's own .claude/lib files are never at risk.
+prune_retired_lib_files() {
+    [ -d ".claude/lib" ] || return 0
+    local retired
+    for retired in "${RETIRED_LIB_FILES[@]}"; do
+        if [ -f ".claude/lib/${retired}" ]; then
+            rm -f ".claude/lib/${retired}" \
+                && print_skip "Pruned retired lib file ${retired} (no longer shipped)"
+        fi
+    done
 }
 
 install_minimal_claude_md() {
@@ -1169,6 +1196,7 @@ install_full() {
     for lib in "${LIB_FILES[@]}"; do
         install_lib_file "$lib" || ((install_errors++))
     done
+    prune_retired_lib_files
 
     # Install rules
     install_rules
@@ -1252,6 +1280,7 @@ repair_installation() {
             print_skip "Library ${lib} already present"
         fi
     done
+    prune_retired_lib_files
 
     # Repair rules, skills, and commands
     install_rules
@@ -1558,6 +1587,7 @@ update_installation() {
         print_success "Updated ${lib}"
         (( STATS_UPDATED++ )) || true
     done
+    prune_retired_lib_files
 
     # Update rules, skills, and commands (re-copy from source)
     echo -e "\n${BOLD}Updating Rules:${NC}"
