@@ -954,6 +954,21 @@ install_watchdog() {
                 print_success "Watchdog plist changed — daemon reloaded"
             fi
         fi
+
+        # After a load/reload the watchdog's hourly timer resets, so its next health log is
+        # up to StartInterval (~1h) away — which makes the statusline's freshness check show a
+        # transient ⚠ (stale) right after a SUCCESSFUL install. Fix it two ways, skipping the
+        # watchdog's own --update (CLAUDE_WATCHDOG_RUN=1 — already running, a self-kick re-enters):
+        #   1. kickstart the daemon so it does a real health check now (async — logs in a few s);
+        #   2. stamp a fresh health event SYNCHRONOUSLY and drop the statusline's 60s cache, so
+        #      the bar's freshness check is satisfied immediately (the async kick lands behind
+        #      the cache). Both best-effort — never fail the install on them.
+        if [ "${CLAUDE_WATCHDOG_RUN:-}" != "1" ]; then
+            launchctl kickstart "gui/$uid/com.claude-code-agents.framework-watchdog" 2>/dev/null \
+                && print_skip "Kicked watchdog to run a health check now"
+            _health_log "\"event\":\"install_reconciled\""
+            rm -f /tmp/statusline-fw-cache-* 2>/dev/null || true
+        fi
     fi
 }
 

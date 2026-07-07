@@ -106,6 +106,16 @@ run_structural_checks() {
         else
             fail "Structural: statusline.sh MISSING the framework-status segment"
         fi
+        # Deploy check: the LIVE status bar runs ~/.claude/statusline.sh, so a skipped or
+        # failed deploy would drop the segment from the actual bar even though source has it.
+        # Assert deployed == source (auto-heals via install --update; mirrors analytics-drift).
+        if [ -f "$HOME/.claude/statusline.sh" ]; then
+            if diff -q global-config/statusline.sh "$HOME/.claude/statusline.sh" >/dev/null 2>&1; then
+                pass "Structural: deployed ~/.claude/statusline.sh matches source"
+            else
+                fail "Structural: deployed ~/.claude/statusline.sh differs from source (re-run install.sh)"
+            fi
+        fi
     fi
 
     # Hook-drift check: every event in template must match user's ~/.claude/settings.json.

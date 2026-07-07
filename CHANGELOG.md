@@ -69,6 +69,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--update` prunes it surgically (settings otherwise byte-identical), validate goes green; a user's own
   `Stop → ~/bin/my-hook.sh` is preserved. Found on the sister machine (it carried the stale binding); the mini was
   clean only because a prior `settings.json` wipe had rebuilt it from the `Stop`-less template.
+- **Statusline deploy-drift check + no transient `⚠` right after install** (follow-ups to the statusline
+  feature, from the sister machine's adversarial review): (1) `validate.sh` now also asserts the **deployed**
+  `~/.claude/statusline.sh` matches source — the earlier guard only grepped the source file, so a skipped/failed
+  deploy would drop the segment from the LIVE bar undetected (mirrors the analytics-drift check; inject-tested to
+  fail on drift, pass when synced). (2) `install.sh` now kickstarts the watchdog after a load/reload AND stamps a
+  fresh `install_reconciled` health event + drops the statusline's 60s cache, so the freshness check is satisfied
+  immediately — previously a reload reset the watchdog's hourly timer and the bar showed a transient `⚠` (stale)
+  after a successful install (the kickstarted watchdog logs too, but async and behind the cache). Both are guarded
+  against the watchdog's own `--update` (`CLAUDE_WATCHDOG_RUN`).
 
 ## [3.0.0] - 2026-07-07
 
