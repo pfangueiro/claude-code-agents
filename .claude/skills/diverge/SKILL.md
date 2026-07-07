@@ -34,7 +34,7 @@ Decide whether to run BEFORE doing anything else.
 
 1. Restate the problem in one sentence and list the hard constraints (these go to every frame).
 2. Pick ~5 frames from the table below whose vantage best surfaces structurally different approaches for THIS problem. Use 4 for narrow problems, up to 6–7 for wide ones. More than 7 hits diminishing returns (see `multi-agent-orchestration`).
-3. **Send a single message with multiple `Task` tool calls for parallel agent launches** — one Task per frame, all in the same message. Each runs in isolation and never sees the others.
+3. **Send a single message with multiple `Agent` tool calls for parallel agent launches** — one Agent per frame, all in the same message. Each runs in isolation and never sees the others.
 4. Give every sub-agent the SAME generator-only instruction:
 
 > You are a GENERATOR working under the "<FRAME>" frame. From this vantage only:

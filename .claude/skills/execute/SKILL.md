@@ -91,7 +91,7 @@ Process batches in order. Within each batch, maximize parallelism.
 
 1. Call `TaskUpdate` to set all batch tasks to `in_progress`
 2. Launch all tasks in the batch simultaneously:
-   - **Agent tasks** → use `Task` tool with the appropriate `subagent_type` (see references/agent-selection.md)
+   - **Agent tasks** → use the `Agent` tool with the appropriate `subagent_type` (see references/agent-selection.md)
    - **Direct tool tasks** → use Read, Write, Edit, Grep, Glob, Bash directly
    - **MCP tasks** → use the appropriate MCP server tool
    - **Web research** → use WebSearch, WebFetch
@@ -106,7 +106,7 @@ Process batches in order. Within each batch, maximize parallelism.
 6. Proceed to next batch only when ALL tasks in current batch are resolved (completed or failed-and-handled)
 
 **Execution rules:**
-- Send a single message with multiple `Task` tool calls for parallel agent launches
+- Send a single message with multiple `Agent` tool calls for parallel agent launches
 - Use `run_in_background: true` for agent tasks that can run concurrently
 - For direct edits (Write/Edit), execute sequentially if they touch the same file
 - **Fork subagents** (omit `subagent_type`) when workers need your conversation context — shares prompt cache, much cheaper

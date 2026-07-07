@@ -2,14 +2,14 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-2.10.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
-[![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://docs.anthropic.com/en/docs/claude-code)
+[![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://code.claude.com/docs/en/overview)
 [![Agents](https://img.shields.io/badge/Agents-13-orange.svg)](#-available-agents)
 [![Skills](https://img.shields.io/badge/Skills-28-green.svg)](#-skills-system)
 [![MCP](https://img.shields.io/badge/MCP-5%20Servers-brightgreen.svg)](#-mcp-integration)
 
 **13 auto-activating AI agents for every phase of software development.** Just describe what you want to build — the right specialists engage automatically.
 
-> Works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (Anthropic's CLI). No plugins, no configuration, no commands to memorize.
+> Works with [Claude Code](https://code.claude.com/docs/en/overview) (Anthropic's CLI). No plugins, no configuration, no commands to memorize.
 
 ---
 

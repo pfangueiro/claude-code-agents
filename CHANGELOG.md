@@ -54,6 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Currency follow-up to `c6aa820`**: completed the `Task`→`Agent` rename in the execute/diverge
+  skill prose (the agent frontmatter was done in `c6aa820`; `Task` still works as an alias), and
+  updated the README Claude Code links from the old `docs.anthropic.com` domain to the canonical
+  `code.claude.com/docs`. No behavior change; closes recurring currency-audit residue.
 - **Hook + statusline currency fixes** (`7babc5b`): (1) `smart-guard.sh` PermissionRequest
   auto-approve printed a bare `allow` string that Claude Code does not parse, so safe
   read-only tools were never auto-approved — now emits the required
