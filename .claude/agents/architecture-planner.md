@@ -1,7 +1,7 @@
 ---
 name: architecture-planner
 description: Use proactively when users mention design, architecture, system, blueprint, api contract, interface, structure, pattern, microservice, monolith, framework, planning, or phrases like "design the system", "create architecture", "plan the implementation", "define requirements". Specialist for system design, API specifications, architectural patterns, and technology selection during planning phases.
-tools: Read, Write, Grep, Glob, Task, TodoWrite
+tools: Read, Write, Grep, Glob, Agent, LSP, TodoWrite
 model: sonnet
 color: purple
 ---

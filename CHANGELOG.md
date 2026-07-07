@@ -54,6 +54,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Hook + statusline currency fixes** (`7babc5b`): (1) `smart-guard.sh` PermissionRequest
+  auto-approve printed a bare `allow` string that Claude Code does not parse, so safe
+  read-only tools were never auto-approved — now emits the required
+  `hookSpecificOutput.decision.behavior` JSON. (2) `session-end.sh` was bound to `Stop`
+  (fires every turn), writing a bogus `session_end` record per response — rebound to
+  `SessionEnd`. (3) `statusline.sh` git cache used a fixed `/tmp` path, so concurrent
+  sessions in different repos read each other's cached git state — now scoped to
+  `session_id`. Verified against code.claude.com/docs/en/{hooks,statusline}.
+- **Sub-agent + command currency & safety fixes** (`<pending-sha>`): from a currency sweep
+  of the sub-agents/hooks/skills docs (prompted by the XDA sub-agents eval). (1) SAFETY:
+  added `disable-model-invocation: true` to side-effectful commands (`commit-pr`,
+  `create-jira`, `new-feature`) — commands are now skills, so Claude could otherwise run
+  them (incl. auto-merge/release) autonomously. (2) Removed `TeamCreate`/`TeamDelete` from
+  the agent-teams docs (removed in Claude Code v2.1.178; a team now forms on first teammate
+  spawn, is experimental via `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`, one-per-session),
+  dropped the unsupported `SendMessage to:"*"` broadcast, and corrected the
+  never-available-to-workers list (`TaskStop` → `ScheduleWakeup`/`WaitForMcpServers`).
+  (3) Added `LSP` to the `tools:` of architecture-planner/code-quality/performance-optimizer
+  (their bodies instruct LSP calls that were failing against the strict allowlist).
+  (4) Stripped the inert `Confidence threshold`/keyword-`weight` scaffolding the `meta-agent`
+  factory baked into every generated agent (Claude Code routes on `description:` text only;
+  completes the `0b343bb` cleanup) + fixed its stale `docs.anthropic.com` WebFetch URLs.
+  (5) Renamed the `Task` tool alias → `Agent` across 11 agents. (6) Deleted the dead
+  `security-scan` command (shadowed by the skill). (7) Added an independent, isolated-context
+  acceptance-verifier to `/execute` Phase 5 (gates REPORT on the Phase-2 `Success:` criteria
+  instead of self-grading; double-sourced by the FUGU eval + the sub-agents article) + a
+  `verification.md` independent-oracle clause. (8) Added `validate.sh` currency lints
+  (tool-in-body ⊆ `tools:`; no meta-agent scaffolding; Phase 5 names an independent verifier),
+  each gap-injection tested.
 - **Self-heal now survives its own failure mode — watchdog heals, not just detects**
   (`claude-framework-watchdog.sh`, `d6932b6`): the flagship self-heal had a bootstrap
   paradox — the only healer (`install.sh --update`, via `_trigger_heal`) was wired as

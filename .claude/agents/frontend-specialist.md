@@ -1,7 +1,7 @@
 ---
 name: frontend-specialist
 description: Use proactively for frontend development, UI/UX implementation, React/Vue/Angular components, CSS styling, responsive design, accessibility (a11y/WCAG), layout creation, state management, or whenever users mention "create UI", "build frontend", "style component", "implement design". Specialist for modern web interfaces and user experience.
-tools: Read, Write, Edit, Grep, Glob, WebFetch, Task
+tools: Read, Write, Edit, Grep, Glob, WebFetch, Agent
 model: sonnet
 color: purple
 ---

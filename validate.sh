@@ -425,6 +425,44 @@ for spawner in "${SPAWNER_SKILLS[@]}"; do
 done
 
 # ============================================================================
+# Currency Lints — guard regressions surfaced by the sub-agents/docs eval
+# ============================================================================
+
+section "Checking agent tool-allowlist currency (body-referenced tools in tools:)"
+
+# Any agent whose BODY instructs an LSP call must grant LSP in its tools: allowlist,
+# or the call fails at runtime (tools: is a strict allowlist).
+for agent_file in .claude/agents/*.md; do
+    aname=$(basename "$agent_file" .md)
+    if grep -vE '^tools:' "$agent_file" | grep -qE '\bLSP\b'; then
+        if grep -m1 -iE '^tools:' "$agent_file" | grep -qE '\bLSP\b'; then
+            pass "$aname: body uses LSP and tools: grants it"
+        else
+            fail "$aname: body instructs LSP but tools: omits it (call would fail at runtime)"
+        fi
+    fi
+done
+
+section "Checking meta-agent has no inert routing scaffolding"
+
+# The agent factory must not mint dead confidence/keyword-weight metadata into
+# generated agents — Claude Code routes on description text only (cf. 0b343bb).
+if grep -qEi 'confidence threshold|weight: 1\.0|weight: 0\.5|primary keywords|secondary keywords' .claude/agents/meta-agent.md 2>/dev/null; then
+    fail "meta-agent: contains inert confidence/keyword-weight scaffolding (routes on description text only; see 0b343bb)"
+else
+    pass "meta-agent: no inert confidence/keyword scaffolding"
+fi
+
+section "Checking /execute Phase 5 independent verifier"
+
+# Phase 5 must gate REPORT on an independent verifier, not self-grade.
+if grep -qEi 'independent acceptance check|independent verifier' .claude/skills/execute/SKILL.md 2>/dev/null; then
+    pass "/execute Phase 5: independent verifier gate present"
+else
+    fail "/execute Phase 5: missing independent verifier gate (self-grading regression)"
+fi
+
+# ============================================================================
 # Library File Validation
 # ============================================================================
 

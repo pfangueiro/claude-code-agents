@@ -77,7 +77,7 @@ Skills provide modular knowledge packages that complement agents. See `.claude/s
 **Reference skills:** skill-creator, git-workflow, code-review-checklist, deployment-runbook, security-scan
 **SRE/Cloud skills:** kubernetes-ops, observability-stack, sre-runbooks, infrastructure-as-code
 **Experimentation skills:** experiment-loop (autonomous optimization patterns)
-**Automation skills:** scheduled-tasks (CronCreate), worktree-workflow (EnterWorktree), remote-triggers (RemoteTrigger), multi-agent-orchestration (TeamCreate/SendMessage)
+**Automation skills:** scheduled-tasks (CronCreate), worktree-workflow (EnterWorktree), remote-triggers (RemoteTrigger), multi-agent-orchestration (SendMessage/agent teams)
 **Testing skills:** browser-testing (Playwright MCP for E2E, visual regression), api-contract-testing (OpenAPI / JSON Schema / contract-first)
 **API skills:** api-guidelines (Next.js/TypeScript secure endpoint patterns)
 **UI skills:** ui-guidelines (React/Next.js + Ant Design + shadcn patterns, spacing / typography / color system)
@@ -104,7 +104,7 @@ MCP servers provide external tools that extend Claude Code. See `.claude/lib/mcp
 - `post-edit-lint.sh` — PostToolUse: auto-lints TS/JS after Write/Edit, warns on debug statements
 - `notify.sh` — Notification: desktop alerts when Claude needs attention
 - `agent-tracker.sh` — SubagentStart/SubagentStop: real-time agent lifecycle tracking to `agent-events.jsonl`
-- `session-end.sh` — Stop: logs session completion to `session-summaries.jsonl`
+- `session-end.sh` — SessionEnd: logs session completion to `session-summaries.jsonl`
 - `smart-guard.sh` — PermissionRequest: auto-approves safe read operations, audits dangerous ones
 - `pre-compact.sh` — PreCompact: auto-saves session snapshot before context compaction
 - `post-compact.sh` — PostCompact: verifies session snapshot was saved after compaction

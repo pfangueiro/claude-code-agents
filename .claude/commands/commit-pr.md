@@ -1,6 +1,7 @@
 ---
 description: Stage changes, commit, push, create GitHub PR, auto-update JIRA, auto-merge, and create release
 argument-hint: [optional commit message]
+disable-model-invocation: true
 ---
 
 Execute the complete git workflow with JIRA integration and automatic release creation:

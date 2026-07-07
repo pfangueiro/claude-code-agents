@@ -7,6 +7,7 @@ These rules are always enforced. They cannot be overridden.
 - After implementing a feature or fix, ALWAYS verify it works before reporting completion
 - Run existing tests if they exist (`npm test`, `pytest`, `go test`, etc.)
 - If no tests exist for the changed code, write at least one test that validates the change
+- When no test exists and the change is non-trivial, prefer an INDEPENDENT reviewer (a fresh-context sub-agent or a different agent) to author or confirm the validating test — the producer writing AND grading its own oracle is self-assessment, not verification
 - Build the project to catch compilation/type errors
 - For UI changes, take a screenshot or describe the visual result
 

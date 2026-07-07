@@ -1,7 +1,7 @@
 ---
 name: code-quality
 description: Use proactively for code review, quality assessment, refactoring suggestions, and best practices validation. Specialist for reviewing code changes, identifying technical debt, detecting code smells, and ensuring maintainability.
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, LSP
 model: sonnet
 color: purple
 ---

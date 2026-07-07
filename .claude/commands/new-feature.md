@@ -1,6 +1,7 @@
 ---
 description: Create a new feature branch from the latest master branch
 argument-hint: PROJ-XXX description
+disable-model-invocation: true
 ---
 
 Create a new feature branch following best practices:

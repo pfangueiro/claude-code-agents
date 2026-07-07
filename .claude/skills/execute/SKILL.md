@@ -47,7 +47,7 @@ Description: |
   1. <concrete step>
   2. <concrete step>
   3. <concrete step>
-  **Success:** <how to verify completion — test passes, file exists, output matches>
+  **Success:** <checkable acceptance criteria — the exact test/command/observable that must pass; Phase 5's independent verifier checks the produced artifact against THIS>
   **Output:** <what this task produces — modified files, data, artifacts>
 ActiveForm: <present continuous — "Adding retry logic to Bedrock calls">
 ```
@@ -118,15 +118,16 @@ Process batches in order. Within each batch, maximize parallelism.
 
 ### Phase 5: VERIFY
 
-After all batches complete, verify the overall goal.
+After all batches complete, verify the overall goal with an INDEPENDENT check — not just self-assessment.
 
 1. Call `TaskList` to confirm all tasks are `completed`
 2. For code changes: run the build or test command if applicable
-3. For research: verify all questions in the original goal are answered
-4. If verification fails: create remediation tasks and loop back to Phase 4
-5. Run the `code-quality` agent on modified files if substantial code was written
+3. **Independent acceptance check (blocking):** spawn ONE isolated verifier sub-agent via `Agent` with an explicit `subagent_type` — NOT a fork (a fork shares this context and would merely re-confirm your own reasoning). Give it ONLY: (a) the original goal + each task's Phase-2 `Success:` criteria, and (b) the produced diff/artifacts (`git diff`, new files, command output). It must NOT see your TaskList self-assessment or reasoning. It returns PASS/FAIL per criterion, anchored on objective oracles (build/test output) where one exists.
+4. For research: verify all questions in the original goal are answered
+5. If any criterion is FAIL (or build/tests fail): create remediation tasks and loop back to Phase 4. Do NOT advance to Phase 6 REPORT while any acceptance criterion is unmet.
+6. Run the `code-quality` agent on modified files if substantial code was written
 
-**Gate:** All tasks completed. Build/tests pass (if applicable). Goal satisfied.
+**Gate:** All tasks completed, build/tests pass (if applicable), AND the independent verifier returns PASS on every Phase-2 `Success:` criterion. Only then proceed to REPORT.
 
 ### Phase 6: REPORT
 

@@ -1,7 +1,7 @@
 ---
 name: database-architect
 description: Database architecture and optimization specialist. Use proactively for database design, SQL queries, schema planning, migrations, query optimization, indexing strategies, data modeling, normalization, or any database-related tasks involving PostgreSQL, MySQL, MongoDB, Redis, or other database systems.
-tools: Read, Write, Grep, Glob, Bash, Task
+tools: Read, Write, Grep, Glob, Bash, Agent
 model: sonnet
 color: orange
 ---

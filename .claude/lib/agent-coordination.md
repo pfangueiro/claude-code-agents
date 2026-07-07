@@ -108,18 +108,13 @@ When multiple agents could activate, priority determines which leads:
 
 For persistent multi-agent work, use Claude Code's team system:
 
-### Creating Teams
-```
-TeamCreate:
-  team_name: "auth-team"
-  description: "implementing authentication system"
-```
-Teams persist in `~/.claude/teams/` and provide shared task lists.
+### Forming a Team (experimental)
+Agent teams are experimental — enable with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`. There is no `TeamCreate` tool (removed v2.1.178); a team forms when the first teammate is spawned via the Agent tool with a `team_name`. One team per session; the shared task list persists under `~/.claude/tasks/`, but the team config is removed at session end.
 
 ### Inter-Agent Messaging
 ```
 SendMessage:
-  to: "worker-name"         # or "*" for broadcast to all teammates
+  to: "worker-name"         # a single teammate by name (or "main"); no "*" broadcast — one message per recipient
   message: "implement the login endpoint per the spec above"
   summary: "assign login endpoint"
 ```
@@ -131,7 +126,7 @@ Workers get limited tools based on their type:
 - **Teammates** — Coordination: TaskCreate/Update, SendMessage, CronCreate
 - **Custom agents** — Whatever is specified in the agent definition's `tools:` field
 
-Workers NEVER get: AskUserQuestion, EnterPlanMode, ExitPlanMode, TaskStop
+Workers NEVER get: AskUserQuestion, EnterPlanMode, ExitPlanMode, ScheduleWakeup, WaitForMcpServers
 
 ### Background Agents with Notifications
 Launch agents with `run_in_background: true`. They run async and send a `<task-notification>` when done:

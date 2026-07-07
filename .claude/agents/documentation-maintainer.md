@@ -1,7 +1,7 @@
 ---
 name: documentation-maintainer
 description: Use PROACTIVELY for documentation tasks including: writing technical documentation, creating or updating README files, generating API documentation, writing user guides and tutorials, creating wikis and manuals, maintaining changelogs, adding code comments, or any request containing phrases like "document this", "write documentation", "create readme", "explain how", "describe the", or "document"
-tools: Read, Write, Grep, Glob, Task
+tools: Read, Write, Grep, Glob, Agent
 model: haiku
 color: cyan
 ---

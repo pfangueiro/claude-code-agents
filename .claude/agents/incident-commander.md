@@ -1,7 +1,7 @@
 ---
 name: incident-commander
 description: MUST BE USED IMMEDIATELY for production emergencies when detecting CRITICAL, EMERGENCY, INCIDENT, OUTAGE, production down, crash, failure, hotfix issues. Specialist for rapid incident response, triage, root cause analysis, emergency fixes, and postmortem generation.
-tools: Read, Write, Bash, Grep, Glob, Task, WebFetch, Edit
+tools: Read, Write, Bash, Grep, Glob, Agent, WebFetch, Edit
 model: opus
 color: red
 ---

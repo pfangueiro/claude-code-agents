@@ -1,7 +1,7 @@
 ---
 name: security-auditor
 description: Use proactively for ALL security-related tasks, vulnerability assessments, authentication/authorization validation, OWASP compliance, threat modeling, and SSDLC enforcement. Auto-activates on: security, vulnerability, auth, authentication, authorization, exploit, XSS, CSRF, SQL injection, OWASP, threat, encryption, secrets, penetration, CVE, or any security concerns.
-tools: Read, Write, Grep, Glob, Bash, WebFetch, Task
+tools: Read, Write, Grep, Glob, Bash, WebFetch, Agent
 model: opus
 color: red
 ---

@@ -60,21 +60,16 @@ Agent:
 ### SendMessage (Inter-Agent Communication)
 ```
 SendMessage:
-  to: "agent-name"     # or "*" for broadcast
+  to: "agent-name"     # a single teammate by name (or "main"); no "*" wildcard — send one message per recipient
   message: "instructions or data"
   summary: "5-word preview"
 ```
 
 Used for: assigning tasks, requesting status, sharing results between agents.
 
-### TeamCreate (Persistent Teams)
-```
-TeamCreate:
-  team_name: "feature-team"
-  description: "building auth system"
-```
+### Agent Teams (experimental)
 
-Creates persistent team with shared task list. Teammates communicate via SendMessage and coordinate via TaskCreate/TaskUpdate.
+Peer teammates that message each other directly. **Experimental** — enable with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`. There is NO `TeamCreate`/`TeamDelete` tool (removed in v2.1.178); a team forms implicitly when the first teammate is spawned via the Agent tool with a `team_name`. **One team per session**; the team config is torn down at session end (only the shared task list under `~/.claude/tasks/` persists). Teammates communicate via SendMessage and coordinate via TaskCreate/TaskUpdate.
 
 ## Worker Toolset Restrictions
 
@@ -87,7 +82,7 @@ Workers get restricted tools based on their type:
 | **In-process teammate** | TaskCreate/Update/List/Get, SendMessage, CronCreate |
 | **Custom agent** | Whatever the agent definition specifies in `tools:` |
 
-**Never available to workers:** AskUserQuestion, EnterPlanMode, ExitPlanMode, TaskStop
+**Never available to sub-agents:** AskUserQuestion, EnterPlanMode, ExitPlanMode, ScheduleWakeup, WaitForMcpServers
 
 ## Patterns
 
@@ -130,14 +125,14 @@ Agent:
 # If no changes: worktree auto-cleaned
 ```
 
-### Team-Based Long-Running Work
+### Team-Based Long-Running Work (experimental — needs CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS)
 ```
-1. TeamCreate(team_name: "auth-team")
-2. Spawn teammates with Agent(subagent_type: ...)
-3. Teammates coordinate via:
-   - TaskCreate/TaskUpdate (shared task list)
-   - SendMessage (direct communication)
-4. Team persists in ~/.claude/teams/ across sessions
+1. Spawn teammates with Agent(subagent_type: ..., team_name: "auth-team")
+   — the team forms on the first spawn (no TeamCreate step)
+2. Teammates coordinate via:
+   - TaskCreate/TaskUpdate (shared task list, persists under ~/.claude/tasks/)
+   - SendMessage (one message per named teammate; no "*" broadcast)
+3. One team per session; the team config is removed at session end
 ```
 
 ## Best Practices

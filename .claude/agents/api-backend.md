@@ -1,7 +1,7 @@
 ---
 name: api-backend
 description: Backend API development specialist. Use proactively for backend, API, endpoint, service, server, REST, GraphQL, microservice, middleware, controller, route tasks or when implementing APIs, authentication, data validation, error handling, or business logic.
-tools: Read, Write, Edit, Grep, Glob, Bash, Task
+tools: Read, Write, Edit, Grep, Glob, Bash, Agent
 model: sonnet
 color: purple
 ---

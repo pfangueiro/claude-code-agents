@@ -1,7 +1,7 @@
 ---
 name: performance-optimizer
 description: Use proactively for performance analysis and optimization when users mention slow, performance, optimize, speed, bottleneck, profile, benchmark, latency, throughput, memory leak, CPU usage, or need to improve performance, speed up code, or analyze bottlenecks
-tools: Read, Grep, Glob, Bash, Edit, Write, WebFetch, Task
+tools: Read, Grep, Glob, Bash, Edit, Write, WebFetch, Agent, LSP
 model: sonnet
 color: orange
 ---

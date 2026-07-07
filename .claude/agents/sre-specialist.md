@@ -1,7 +1,7 @@
 ---
 name: sre-specialist
 description: Use proactively for site reliability engineering, SLO/SLI definition, error budgets, on-call workflows, capacity planning, chaos engineering, toil reduction, runbook creation, and production reliability. Activates on reliability, SRE, SLO, SLI, error budget, on-call, postmortem, toil, capacity planning, chaos engineering, runbook, uptime, availability targets.
-tools: Read, Write, Bash, Grep, Glob, Task, WebFetch, Edit
+tools: Read, Write, Bash, Grep, Glob, Agent, WebFetch, Edit
 model: sonnet
 color: cyan
 ---

@@ -234,7 +234,7 @@ Six rule files in `.claude/rules/` are automatically loaded by Claude Code in ev
 | **post-edit-lint.sh** | PostToolUse | Auto-lints TS/JS after Write/Edit, warns on debug statements |
 | **notify.sh** | Notification | Desktop alert when Claude needs attention |
 | **agent-tracker.sh** | SubagentStart/Stop | Real-time agent lifecycle tracking to analytics |
-| **session-end.sh** | Stop | Logs session completion for observability |
+| **session-end.sh** | SessionEnd | Logs session completion for observability |
 | **smart-guard.sh** | PermissionRequest | Auto-approves safe reads, audits dangerous operations |
 | **pre-compact.sh** | PreCompact | Auto-saves session snapshot before context compaction |
 | **post-compact.sh** | PostCompact | Verifies session snapshot was saved after compaction |

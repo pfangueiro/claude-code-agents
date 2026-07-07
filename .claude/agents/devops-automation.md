@@ -1,7 +1,7 @@
 ---
 name: devops-automation
 description: Use proactively for deployment, CI/CD pipelines, containerization, orchestration, and infrastructure automation. Specialist for Docker, Kubernetes, AWS, Azure, GCP, Terraform, release management, and production deployments.
-tools: Read, Write, Bash, Grep, Glob, Task, WebFetch
+tools: Read, Write, Bash, Grep, Glob, Agent, WebFetch
 model: sonnet
 color: orange
 ---

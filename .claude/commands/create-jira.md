@@ -1,6 +1,7 @@
 ---
 description: Create a new JIRA issue (Epic or Story/Task) and assign to current user
 argument-hint: <type> [epic-key] <title>
+disable-model-invocation: true
 ---
 
 Create a new JIRA issue in the JPT Portal project and automatically assign it to you.
