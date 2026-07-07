@@ -722,6 +722,31 @@ sync_hooks() {
                 print_skip "All hook events match template"
             fi
 
+            # Reverse-prune hook EVENTS: the forward loop above adds/repairs every event the
+            # template HAS, but never removes an event the template DROPPED. A stale event
+            # still bound to a framework hook script (e.g. `Stop -> session-end.sh` after
+            # session-end.sh moved to SessionEnd) then double-fires that script every turn,
+            # forever. Framework-scoped: only prune an off-template event whose command is one
+            # of THIS framework's hook scripts — a user's own event/script is left alone.
+            # Mirrors the hook-FILE orphan prune above (files were pruned; event keys weren't).
+            local usr_events uevent
+            usr_events=$(jq -r '.hooks | keys[]' ~/.claude/settings.json 2>/dev/null)
+            for uevent in $usr_events; do
+                printf '%s\n' "$tmpl_events" | grep -qx "$uevent" && continue
+                local runs_fw=0 ucmd ubase src_name
+                while IFS= read -r ucmd; do
+                    [ -n "$ucmd" ] || continue
+                    ubase=$(basename "$ucmd")
+                    for src_name in "${src_hook_names[@]}"; do
+                        [ "$ubase" = "$src_name" ] && runs_fw=1
+                    done
+                done < <(jq -r ".hooks[\"$uevent\"][]?.hooks[]?.command // empty" ~/.claude/settings.json 2>/dev/null)
+                if [ "$runs_fw" -eq 1 ]; then
+                    _atomic_settings_jq "del(.hooks[\"$uevent\"])" || true
+                    print_skip "Pruned stale hook event $uevent (ran a framework hook the template dropped)"
+                fi
+            done
+
             # Merge new env vars into existing settings.json (add-only: user values preserved)
             local new_env_keys
             new_env_keys=$(jq -r '.env | keys[]' "$template" 2>/dev/null)

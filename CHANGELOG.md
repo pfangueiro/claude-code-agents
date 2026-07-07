@@ -49,6 +49,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   section no longer claims the servers are "auto-configured on install" — `install.sh` ships the example config
   but does not register any MCP server (users add them manually). Added a Requirements line and an INSTALL.md link
   to the README.
+- **`sync_hooks` now reverse-prunes stale hook EVENT bindings, and `validate.sh` detects them**: the hook
+  reconcile added/repaired every event the template *has* but never removed one the template *dropped*. A stale
+  event still bound to a framework hook script (e.g. `Stop → session-end.sh`, left over after `session-end.sh`
+  moved from `Stop` to `SessionEnd`) survived `install --update` forever and **double-fired the script every turn**,
+  over-logging `session-summaries.jsonl`. `sync_hooks` now reverse-prunes such off-template events
+  **framework-scoped** — only when the bound command is one of this framework's own hook scripts, so a user's own
+  off-template hook is left untouched — mirroring the existing hook-FILE orphan prune (files were pruned; event
+  keys weren't). `validate.sh` gained the matching assertion that fails on any off-template event still running a
+  framework hook (previously it checked template-events-present but not dropped-events-absent, so it passed 210/0
+  with the double-bind live). Verified by gap-injection: a stale `Stop → session-end.sh` makes validate fail,
+  `--update` prunes it surgically (settings otherwise byte-identical), validate goes green; a user's own
+  `Stop → ~/bin/my-hook.sh` is preserved. Found on the sister machine (it carried the stale binding); the mini was
+  clean only because a prior `settings.json` wipe had rebuilt it from the `Stop`-less template.
 
 ## [3.0.0] - 2026-07-07
 

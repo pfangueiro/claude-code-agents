@@ -117,6 +117,25 @@ run_structural_checks() {
             pass "Structural: ~/.claude/settings.json hook events match template"
         fi
 
+        # Reverse guard: a hook EVENT the template DROPPED but still bound in
+        # ~/.claude/settings.json to a framework hook script is a stale double-bind
+        # (e.g. `Stop -> session-end.sh` after session-end.sh moved to SessionEnd — it then
+        # double-fires every turn, over-logging). The forward check above only asserts
+        # template events match; it cannot see an EXTRA event. sync_hooks must prune these.
+        local stale_events=0 uevent ucmd ubase
+        for uevent in $(jq -r '.hooks | keys[]' "$HOME/.claude/settings.json" 2>/dev/null); do
+            printf '%s\n' "$tmpl_events" | grep -qx "$uevent" && continue
+            while IFS= read -r ucmd; do
+                [ -n "$ucmd" ] || continue
+                ubase=$(basename "$ucmd")
+                if [ -f "global-config/hooks/$ubase" ]; then
+                    fail "Structural: stale hook event '$uevent' still runs framework hook $ubase (template dropped it; sync_hooks event-prune failed)"
+                    stale_events=$((stale_events + 1))
+                fi
+            done < <(jq -r ".hooks[\"$uevent\"][]?.hooks[]?.command // empty" "$HOME/.claude/settings.json" 2>/dev/null)
+        done
+        [ "$stale_events" -eq 0 ] && pass "Structural: no stale framework hook event bindings (no double-bind)"
+
         # statusLine drift: a CLI settings-sync wipe can drop .statusLine (kills the
         # status bar) without touching hooks. Framework-owned → must match template.
         local tmpl_sl usr_sl
