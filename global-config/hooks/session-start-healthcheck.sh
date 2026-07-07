@@ -164,6 +164,68 @@ if [ -f "$SETTINGS_FILE" ] && [ -f "$REPO/global-config/settings.json.template" 
     fi
 fi
 
+# -------- Check 7: shared-set drift (agents/skills/commands/rules) --------
+# Compares FRAMEWORK-OWNED files (those the source repo ships) against their
+# deployed copies under ~/.claude. Only names present in the source repo are
+# inspected, so the user's PERSONAL skills/agents/commands/rules (which are not
+# in source) are never touched — mirrors the install's fail-closed prune scope.
+# On drift the same heal-needed flag is set, so shared-set drift forks
+# install.sh --update just like hook drift (Check 2) does. Budget-safe: hashes
+# ~60 small files (one SKILL.md per skill). Mirrors Check 2's sha256 compare.
+_shared_set_drift() {
+    # $1 = source dir, $2 = deployed dir, $3 = mode ("flat" *.md | "skill" */SKILL.md)
+    local sdir="$1" ddir="$2" mode="$3" dirlabel
+    dirlabel=$(basename "$ddir")
+    [ -d "$sdir" ] || return 0
+
+    if [ "$mode" = "skill" ]; then
+        local sub nm ssrc ddst sh1 sh2
+        for sub in "$sdir"/*/; do
+            [ -d "$sub" ] || continue
+            nm=$(basename "$sub")
+            [ "${nm#._}" != "$nm" ] && continue
+            ssrc="$sub/SKILL.md"
+            ddst="$ddir/$nm/SKILL.md"
+            [ -f "$ssrc" ] || continue
+            if [ ! -f "$ddst" ]; then
+                DRIFT_FOUND=1
+                _log "\"event\":\"drift_detected\",\"check\":\"shared_set\",\"dir\":\"skills\",\"file\":\"$nm\",\"actual\":\"missing\",\"action\":\"trigger_heal\""
+                continue
+            fi
+            sh1=$(_sha256 "$ssrc"); sh2=$(_sha256 "$ddst")
+            if [ -n "$sh1" ] && [ -n "$sh2" ] && [ "$sh1" != "$sh2" ]; then
+                DRIFT_FOUND=1
+                _log "\"event\":\"drift_detected\",\"check\":\"shared_set\",\"dir\":\"skills\",\"file\":\"$nm\",\"actual\":\"hash_mismatch\",\"action\":\"trigger_heal\""
+            fi
+        done
+    else
+        local ssrc nm ddst sh1 sh2
+        for ssrc in "$sdir"/*.md; do
+            [ -f "$ssrc" ] || continue
+            nm=$(basename "$ssrc")
+            [ "${nm#._}" != "$nm" ] && continue
+            ddst="$ddir/$nm"
+            if [ ! -f "$ddst" ]; then
+                DRIFT_FOUND=1
+                _log "\"event\":\"drift_detected\",\"check\":\"shared_set\",\"dir\":\"$dirlabel\",\"file\":\"$nm\",\"actual\":\"missing\",\"action\":\"trigger_heal\""
+                continue
+            fi
+            sh1=$(_sha256 "$ssrc"); sh2=$(_sha256 "$ddst")
+            if [ -n "$sh1" ] && [ -n "$sh2" ] && [ "$sh1" != "$sh2" ]; then
+                DRIFT_FOUND=1
+                _log "\"event\":\"drift_detected\",\"check\":\"shared_set\",\"dir\":\"$dirlabel\",\"file\":\"$nm\",\"actual\":\"hash_mismatch\",\"action\":\"trigger_heal\""
+            fi
+        done
+    fi
+}
+
+if [ -d "$REPO/.claude" ]; then
+    _shared_set_drift "$REPO/.claude/agents"   "$HOME/.claude/agents"   flat
+    _shared_set_drift "$REPO/.claude/rules"    "$HOME/.claude/rules"    flat
+    _shared_set_drift "$REPO/.claude/commands" "$HOME/.claude/commands" flat
+    _shared_set_drift "$REPO/.claude/skills"   "$HOME/.claude/skills"   skill
+fi
+
 # -------- Heal if needed --------
 if [ "$DRIFT_FOUND" -eq 1 ]; then
     _trigger_heal

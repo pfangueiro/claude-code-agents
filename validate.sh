@@ -142,8 +142,7 @@ run_structural_checks() {
 
     # Warn if watchdog daemon not loaded (macOS only).
     # Use `launchctl print` (direct query by domain/label) instead of `launchctl list | grep`:
-    # the grep-parse variant races against concurrent install_watchdog invocations
-    # during deploy-all (88 × launchctl bootstrap) and false-positives.
+    # the grep-parse variant can race a concurrent install_watchdog invocation and false-positive.
     if [[ "$(uname -s)" == "Darwin" ]]; then
         if launchctl print "gui/$(id -u)/com.claude-code-agents.framework-watchdog" >/dev/null 2>&1; then
             pass "Structural: claude-framework-watchdog daemon loaded"
@@ -303,6 +302,27 @@ if $QUICK_MODE; then
                 *) fail "Quick: CLAUDE_CODE_EFFORT_LEVEL invalid ('$eff') — persistent tiers are low|medium|high|xhigh (max/ultracode are session-only)" ;;
             esac
         fi
+    fi
+
+    # Shared-set sync: the framework's agents/skills/commands/rules/lib must be
+    # present + identical at ~/.claude (install --update reconciles them). Lives in
+    # --quick so the watchdog heals shared-set drift, alongside the SessionStart Check 7.
+    ss_ok=true
+    _ss_cmp() {
+        local src="$1" dst="$HOME/.claude/${1#.claude/}"
+        if [ ! -f "$dst" ]; then fail "Quick: shared-set missing: ${1#.claude/}"; ss_ok=false
+        elif ! diff -q "$src" "$dst" >/dev/null 2>&1; then fail "Quick: shared-set drift: ${1#.claude/}"; ss_ok=false; fi
+    }
+    if [ -d "$HOME/.claude/agents" ]; then
+        while IFS= read -r f; do _ss_cmp "$f"; done < <(
+            { [ -d .claude/agents ]   && find .claude/agents -type f -name '*.md' ! -name '._*'
+              [ -d .claude/rules ]    && find .claude/rules -type f -name '*.md' ! -name '._*'
+              [ -d .claude/commands ] && find .claude/commands -type f -name '*.md' ! -name '._*'
+              [ -d .claude/lib ]      && find .claude/lib -type f ! -name '._*'
+              [ -d .claude/skills ]   && find .claude/skills -type f -path '.claude/skills/*/*' ! -name '._*'; } 2>/dev/null )
+        [ "$ss_ok" = true ] && pass "Quick: shared set synced to ~/.claude (agents/skills/commands/rules/lib)"
+    else
+        fail "Quick: framework not installed user-global (~/.claude/agents missing) — run ./install.sh"
     fi
 
     # Memory backup freshness — the watchdog's automated path runs ONLY --quick,
@@ -763,96 +783,6 @@ else
     warn "No observability/ directory found (optional)"
 fi
 
-# ============================================================================
-# Deployment Integrity (md5 manifest — ALL projects; 5 sampled in --quick)
-# ============================================================================
-# Verifies every install-deployed source file is PRESENT and md5-IDENTICAL in
-# each project. Detects BOTH content drift AND missing files — a file absent
-# from a project is a deploy gap the old sampled diff-check silently ignored
-# (its per-file check was guarded by `[ -f "$dst" ]` with no else branch).
-
-section "Checking Deployment Integrity ($([ "$QUICK_MODE" = true ] && echo 'md5 manifest, sample 5' || echo 'md5 manifest, all projects'))"
-
-PROJECTS_DIR="$HOME/local-codebase"
-
-_md5of() { md5 -q "$1" 2>/dev/null || md5sum "$1" 2>/dev/null | cut -d' ' -f1; }
-
-# Canonical deployable set (mirrors install.sh selection): agents/*.md, lib/*,
-# rules/*.md, skills/<name>/** subdir contents, commands/*.md. Emits
-# "relpath<TAB>md5", LC_ALL=C-sorted so two manifests are comm-comparable.
-_gen_manifest() {
-    local root="$1"
-    [ -d "$root" ] || return 0
-    (
-        cd "$root" || return 0
-        {
-            [ -d agents ]   && find agents -type f -name '*.md' ! -name '._*'
-            [ -d lib ]      && find lib -type f ! -name '._*'
-            [ -d rules ]    && find rules -type f -name '*.md' ! -name '._*'
-            [ -d skills ]   && find skills -type f -path 'skills/*/*' ! -name '._*'
-            [ -d commands ] && find commands -type f -name '*.md' ! -name '._*'
-        } 2>/dev/null | while IFS= read -r f; do
-            printf '%s\t%s\n' "$f" "$(_md5of "$f")"
-        done
-    ) | LC_ALL=C sort
-}
-
-if [ -d "$PROJECTS_DIR" ]; then
-    src_manifest=$(mktemp)
-    proj_manifest=$(mktemp)
-    _gen_manifest ".claude" > "$src_manifest"
-    src_file_count=$(grep -c . "$src_manifest" 2>/dev/null || echo 0)
-
-    # Repos excluded from per-project deploy-integrity. Beyond the framework repo
-    # itself, this covers rules-SOURCE repos that intentionally ship their own
-    # versions of framework-named rules (e.g. engineering-playbook = Jumia's
-    # canonical engineering standards). Their rules are authoritative overrides,
-    # not drift; byte-identity against framework source does not apply. Add a
-    # rules-source repo here rather than letting it emit permanent false drift.
-    INTEGRITY_EXCLUDE="claude-code-agents claude-code engineering-playbook"
-
-    all_projects=()
-    for d in "$PROJECTS_DIR"/*/; do
-        bn=$(basename "$d")
-        case " $INTEGRITY_EXCLUDE " in *" $bn "*) continue ;; esac
-        [ -d "$d/.claude/agents" ] || continue
-        all_projects+=("$d")
-    done
-
-    # Full run checks ALL projects; --quick samples up to 5 (watchdog speed).
-    target_projects=()
-    if [ "$QUICK_MODE" = true ]; then
-        sc=${#all_projects[@]}
-        cc=$((sc < 5 ? sc : 5))
-        st=$((sc / (cc > 0 ? cc : 1))); [ "$st" -eq 0 ] && st=1
-        for ((i=0; i<sc && ${#target_projects[@]}<cc; i+=st)); do
-            target_projects+=("${all_projects[$i]}")
-        done
-    else
-        target_projects=("${all_projects[@]}")
-    fi
-
-    for proj in "${target_projects[@]}"; do
-        pname=$(basename "$proj")
-        _gen_manifest "$proj/.claude" > "$proj_manifest"
-        gaps=0
-        # comm -23 yields source lines not present verbatim in the project =
-        # either a missing file or an md5 mismatch; classify by relpath presence.
-        while IFS=$'\t' read -r rel shash; do
-            [ -z "$rel" ] && continue
-            if cut -f1 "$proj_manifest" | grep -qxF "$rel"; then
-                fail "Deploy drift (md5): $pname/$rel"
-            else
-                fail "Deploy gap (missing): $pname/$rel"
-            fi
-            gaps=$((gaps + 1))
-        done < <(comm -23 "$src_manifest" "$proj_manifest")
-        [ "$gaps" -eq 0 ] && pass "Deployment $pname: $src_file_count files present + md5-identical"
-    done
-    rm -f "$src_manifest" "$proj_manifest"
-else
-    warn "No ~/local-codebase directory found — skipping deployment checks"
-fi
 
 # ============================================================================
 # Global Hooks Integrity

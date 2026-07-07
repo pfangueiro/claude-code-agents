@@ -51,8 +51,8 @@ Out of scope:
 This framework intentionally enables several safety features by default:
 
 - **Secret scanning + push protection** are enabled on this GitHub repository.
-- **No `eval` / `exec` of user input** anywhere in `install.sh`, `deploy-all.sh`,
-  `validate.sh`, or the hook scripts. (Verified via grep; see security-scan in
+- **No `eval` / `exec` of user input** anywhere in `install.sh`, `validate.sh`,
+  `quick-install.sh`, or the hook scripts. (Verified via grep; see security-scan in
   the audit history.)
 - **Hooks log to JSONL audit streams** under `~/.claude/analytics/` for
   postmortem analysis.

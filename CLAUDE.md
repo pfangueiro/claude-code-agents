@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Git & Commit Conventions
 
-Applies to **every machine** committing to this repo — keeps the multi-Mac setup consistent (these live here, not only in a per-machine `~/.claude/CLAUDE.md`, so both machines honor them):
+These apply to everyone committing to this repo. They live here in the repo (not only in a personal `~/.claude/CLAUDE.md`), so every contributor honors them:
 
 - **Conventional Commits**: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`; add a scope when it clarifies (`fix(install):`, `feat(validate):`).
 - **No AI-attribution trailers** — do NOT add `Co-Authored-By:` or any assistant/AI trailer. Commits are authored solely by the maintainer.
@@ -123,11 +123,11 @@ Built-in dashboard aggregating Claude Code JSONL session logs across all project
 
 ## Self-Healing
 
-The framework reconciles its own deployed state. Two paths, one diagnostic stream.
+The framework reconciles its own user-global install at `~/.claude` (the single install that serves every project). Two paths, one diagnostic stream.
 
 **Fast path — SessionStart hook (`global-config/hooks/session-start-healthcheck.sh`):**
 - Runs on every Claude Code session start, budget <2s
-- Checks env keys in `~/.claude/settings.json` against template, hook script sha256 against source, analytics files present
+- Checks env keys in `~/.claude/settings.json` against template, hook script sha256 against source, the shared set (agents/skills/commands/rules) sha256 against source (Check 7), analytics files present
 - On drift: logs to `~/.claude/analytics/framework-health.jsonl` and forks `install.sh --update` in background
 - Exit 0 always — never blocks session start
 
@@ -147,7 +147,7 @@ The framework reconciles its own deployed state. Two paths, one diagnostic strea
   - Compare backup vs current before clobbering: `tar -xzOf ~/.claude/snapshots/memory-latest.tgz projects/<slug>/memory/MEMORY.md | diff - ~/.claude/projects/<slug>/memory/MEMORY.md`
   - All memory (fresh machine / mass loss): `tar -xzf ~/.claude/snapshots/memory-latest.tgz -C ~/.claude`
 
-**Known external cause — CLI settings-sync hooks wipe:** Claude Code's own settings-sync (`tengu_enable_settings_sync_push`) does a *wholesale replace* of `~/.claude/settings.json` (CLI `src/services/settingsSync/index.ts:519`, no merge, change-detection suppressed). In the two-Mac setup, a sync cycle can pull a payload lacking the framework's `.hooks` block and overwrite it to `{}` — with no install.sh involvement and no drift event at write time. This is external CLI behavior, not an install bug. Defense is detect-and-heal on TWO independent triggers: (1) the SessionStart `hook_wiring`/`statusline_wiring` checks re-run `install.sh --update` on the next session — but the SessionStart hook itself lives in the wiped `.hooks`, so it cannot recover the wipe that removed it; (2) the launchd watchdog, which runs independently of `~/.claude/settings.json` and therefore SURVIVES the wipe, parses `validate.sh --quick --json` and on `errors>0` runs `install.sh --update` itself (Task 1) — this is the trigger that actually recovers a `.hooks` wipe, logging `heal_triggered`/`heal_succeeded` to `framework-health.jsonl`. install.sh's settings writes are hardened via `_atomic_settings_jq` (unique mktemp temp file + non-empty + valid-JSON guards) so the framework's own reconcile can never contribute to a wipe.
+**Known external cause — CLI settings-sync hooks wipe:** Claude Code's own settings-sync (`tengu_enable_settings_sync_push`) does a *wholesale replace* of `~/.claude/settings.json` (CLI `src/services/settingsSync/index.ts:519`, no merge, change-detection suppressed). When settings-sync is enabled across machines, a sync cycle can pull a payload lacking the framework's `.hooks` block and overwrite it to `{}` — with no install.sh involvement and no drift event at write time. This is external CLI behavior, not an install bug. Defense is detect-and-heal on TWO independent triggers: (1) the SessionStart `hook_wiring`/`statusline_wiring` checks re-run `install.sh --update` on the next session — but the SessionStart hook itself lives in the wiped `.hooks`, so it cannot recover the wipe that removed it; (2) the launchd watchdog, which runs independently of `~/.claude/settings.json` and therefore SURVIVES the wipe, parses `validate.sh --quick --json` and on `errors>0` runs `install.sh --update` itself (Task 1) — this is the trigger that actually recovers a `.hooks` wipe, logging `heal_triggered`/`heal_succeeded` to `framework-health.jsonl`. install.sh's settings writes are hardened via `_atomic_settings_jq` (unique mktemp temp file + non-empty + valid-JSON guards) so the framework's own reconcile can never contribute to a wipe.
 
 **Diagnostic stream:** `~/.claude/analytics/framework-health.jsonl` — single source for drift events, validation output, snapshot activity. `~/.claude/analytics/watchdog-alerts.jsonl` for corruption alerts.
 

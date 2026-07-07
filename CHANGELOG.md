@@ -7,9 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Outcome of a framework self-review (reversibility-ordered revamp, Phases 1–4). The
-architectural user-global/plugin migration (Phase 5) is deferred pending a goal decision
-and accrued skill-usage data.
+Outcome of a framework self-review (reversibility-ordered revamp). Phases 1–4 shipped the
+low-regret cleanup; Phase 5 migrated the framework to a **user-global install** (goal resolved to
+leverage-per-effort; a single public product) and repositioned it as a public tool.
+
+### Changed
+
+- **User-global install** (`install.sh` ~1900→~1023 LOC): the framework now installs ONCE into
+  `~/.claude` — Claude Code loads `~/.claude/{agents,skills,commands,rules}` in every project — instead of
+  copying into each project's `.claude/`. New `install_shared_set` REPLACE-copies the framework's own files
+  with a **framework-scoped orphan-prune** that provably never removes a user's personal skills/agents
+  (prune eligibility is limited to names the framework itself ships). Bare `install.sh` is the canonical
+  install; `--update` reconciles `~/.claude` non-interactively under the concurrency lock (the self-heal
+  path). Deleted ~840 LOC of per-project machinery (`detect_*`, the 5 `patch_*_in_claude_md`, CLAUDE.md
+  emission, backup rotation, interactive menu, per-project markers).
+- **Self-heal now covers the shared set**: SessionStart healthcheck Check 7 (agents/skills/commands/rules
+  sha256 vs source → heal) plus a `validate.sh --quick` shared-set sync check, so the launchd watchdog
+  heals shared-set drift too.
+- **Public repositioning**: `README.md`/`INSTALL.md` rewritten from "deploy to each project" to "install
+  once, user-global"; `quick-install.sh` is now a `curl … | bash` wrapper delegating to `install.sh`;
+  retired the per-project seed fragments (`CLAUDE-DEPLOYMENT.md`, `CLAUDE-minimal.md`,
+  `CLAUDE-append-section.md`, `CLAUDE-ultra-minimal.md`, `install-claude-config.sh`).
+- **Removed the multi-project fan-out**: deleted `deploy-all.sh` and the per-project deploy-integrity md5
+  manifest in `validate.sh` (obsolete under a single install).
+- **Scrubbed personal/employer leakage** from the public repo (employer name, a private internal repo,
+  `~/local-codebase` paths, project counts, two-Mac framing) across `CHANGELOG.md`/`CLAUDE.md`/
+  `CONTRIBUTING.md`/`SECURITY.md`/`validate.sh`.
 
 ### Added
 
@@ -172,17 +195,13 @@ and accrued skill-usage data.
   drifted (skills 15→28, agents 12→13, commands 6→13, rules 4→6); the body already
   listed 28 skills correctly — only the appendix tree was stale.
 - **Deploy-integrity exclusion for rules-source repos** (`validate.sh`): generalized
-  the two hardcoded exclusions (claude-code-agents, claude-code) into an
-  `INTEGRITY_EXCLUDE` list and added `engineering-playbook` — Jumia's canonical
-  engineering-standards repo, which intentionally ships its own `code-quality.md`
-  and `security.md` rules. Those are authoritative overrides (per the framework's
-  own "project rules override general ones" model), not drift, so byte-identity
-  against framework source must not flag them. Deploying `--full` there preserves
-  its rules (install_rules is skip-if-exists) and adds the 4 non-colliding
-  framework rules + all agents/skills/commands/lib. Verified: Jumia's 4 rules
-  byte-unchanged, framework tooling byte-identical, the other 102 projects still
-  strictly integrity-checked (proven by inject-test: without the exclusion,
-  exactly the 2 overridden rules drift-fail).
+  the hardcoded exclusions into an `INTEGRITY_EXCLUDE` list so a downstream repo that
+  intentionally ships its own versions of framework-named rules is not flagged as drift.
+  Such rules are authoritative overrides (per the framework's own "project rules override
+  general ones" model), not drift, so byte-identity against framework source must not flag
+  them. Verified by inject-test: without the exclusion, exactly the overridden rules
+  drift-fail. _(The whole per-project deploy-integrity check was later retired when the
+  framework moved to a single user-global install.)_
 - **Reasoning effort default → `xhigh`** (`settings.json.template`, `8d1cb5f`):
   raised `CLAUDE_CODE_EFFORT_LEVEL` from `high` to `xhigh` (the highest persistent
   tier; `max`/`ultracode` are session-only and invalid as env values). Added an
@@ -357,7 +376,7 @@ Follow-up to 2.9.0 addressing gaps found by a pre-deploy deep-analysis pass.
 
 ### Added
 
-- **deploy-all.sh**: driver for batch install across `~/local-codebase/*/` with per-project pre-install tarballs, `--dry-run`, `--continue-on-error` (default), `--halt-on-error`, `--only <name>`, and JSONL failure manifest. Retention: keep last 2 runs' tarballs.
+- **deploy-all.sh**: driver for batch install across local projects with per-project pre-install tarballs, `--dry-run`, `--continue-on-error` (default), `--halt-on-error`, `--only <name>`, and JSONL failure manifest. _(Retired when the framework moved to a single user-global install.)_
 - **.claude/.framework-version marker**: written into every deployed project (version + short SHA + UTC timestamp). Enables targeted re-deploy and staggered rollout.
 - **Watchdog claude-obs.db regeneration**: when the DB is missing, watchdog runs `python3 collector.py` with a 120s timeout. Closes the "deferred_regen" path logged by the healthcheck hook.
 

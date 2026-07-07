@@ -1,137 +1,73 @@
 # Claude Agents - Installation Guide
 
-## Team Setup (Recommended)
+## Install (one command, user-global)
 
-Clone the repo and run the full team onboarding:
+Clone the repo and run the installer:
 
 ```bash
 git clone git@github.com:pfangueiro/claude-code-agents.git
 cd claude-code-agents
-./install.sh --team-setup
+./install.sh
 ```
 
-This installs everything: agents, skills, commands, hooks, statusline, output styles, and global settings.
+That's it. Everything installs **once**, user-global to `~/.claude`. Claude Code natively loads `~/.claude/{agents,skills,commands,rules}`, so every project on your machine gets the agents automatically — there is no per-project step.
 
-## Installation Options
+The install includes: agents, skills, commands, rules, hooks, statusline, output styles, the observability dashboard, MCP servers, and global settings.
+
+## Commands
 
 | Command | What it does |
 |---------|-------------|
-| `./install.sh --team-setup` | Full team onboarding (project + global config) |
-| `./install.sh` | Interactive mode (detects existing setup) |
-| `./install.sh --minimal` | CLAUDE.md only (agent activation) |
-| `./install.sh --full` | All agents + library files (project-level) |
-| `./install.sh --repair` | Fix missing components |
-| `./install.sh --update` | Update to latest version |
-
-### Team Setup
-```bash
-./install.sh --team-setup
-```
-- Installs all 13 agents, skills, and library files (project-level)
-- Installs slash commands (`.claude/commands/`)
-- Installs hooks, statusline, output styles (`~/.claude/`)
-- Merges or installs global settings (`~/.claude/settings.json`)
-- Installs observability dashboard to `~/.claude/analytics/` with `claude-obs` alias
-- Personalizes `~/.claude/CLAUDE.md` with your name and email
-- Checks prerequisites (`git`, `curl` required; `jq`, `npx` optional)
-
-### Interactive Mode (Default)
-```bash
-./install.sh
-```
-- Detects existing components
-- Recommends best installation type
-- Offers choices: Minimal, Full, Repair, or Update
-
-### Minimal Installation
-```bash
-./install.sh --minimal
-```
-- Adds only CLAUDE.md for agent auto-activation
-- Perfect for quick setup
-- No file dependencies
-
-### Full Installation
-```bash
-./install.sh --full
-```
-- Installs all 13 agents
-- Adds supporting library files
-- Complete system deployment
-
-### Repair Installation
-```bash
-./install.sh --repair
-```
-- Fixes missing components
-- Preserves existing files
-- Adds only what's needed
-
-### Update Installation
-```bash
-./install.sh --update
-```
-- Updates all components to latest version
-- Creates backup before updating
-- Preserves customizations
+| `./install.sh` | Install everything user-global to `~/.claude` |
+| `./install.sh --update` | Reconcile an existing install to the latest version (backs up first, preserves customizations) |
+| `./install.sh --help` | Show all options |
 
 ## What Gets Installed
 
-### Team Setup Mode (`--team-setup`)
-```
-# Project-level (current directory)
-CLAUDE.md                          # Agent auto-activation config
-.claude/
-├── agents/                        # 13 specialized agents
-├── commands/                      # Slash commands (/new-feature, /commit-pr, /create-jira)
-├── skills/                        # Modular knowledge packages
-├── lib/                           # Activation patterns & templates
-└── history/                       # Usage tracking (auto-created)
+Everything lands under `~/.claude/` and is loaded by Claude Code in every project:
 
-# Global (~/.claude/)
+```
 ~/.claude/
-├── hooks/
-│   ├── notify.sh                  # Desktop notification hook
-│   └── post-edit-lint.sh          # Auto-lint after Write/Edit
-├── output-styles/
-│   └── concise.md                 # Code-first output style
-├── statusline.sh                  # Rich status bar
-├── settings.json                  # Model, hooks, deny rules, attribution
-└── CLAUDE.md                      # Personal coding preferences
-```
-
-### Minimal Mode
-```
-CLAUDE.md                  # Agent auto-activation config
-```
-
-### Full Mode
-```
-CLAUDE.md                  # Agent auto-activation config
-.claude/
 ├── agents/                # 13 specialized agents
-├── skills/                # Modular knowledge packages
-├── lib/                   # Supporting files
-└── history/               # Usage tracking (auto-created)
+├── commands/              # 13 slash commands
+├── skills/                # 28 modular knowledge packages
+├── rules/                 # 6 auto-enforced rule sets
+├── lib/                   # Activation patterns, templates, coordination protocol
+├── hooks/                 # 9 command hooks + 2 reference configs
+├── daemon/                # launchd watchdog (hourly validate + snapshots)
+├── analytics/             # Observability dashboard (claude-obs alias)
+├── output-styles/
+│   └── concise.md         # Code-first output style
+├── statusline.sh          # Rich status bar
+├── settings.json          # Model, hooks, deny rules, MCP config
+└── CLAUDE.md              # Personal coding preferences (personalized with your name/email)
 ```
 
-## Detection Features
+The installer also:
 
-The installer intelligently detects:
+- Merges or installs global settings in `~/.claude/settings.json`
+- Configures 5 MCP servers (context7, sequential-thinking, playwright, github, postgres)
+- Installs the observability dashboard with the `claude-obs` alias
+- Checks prerequisites (`git`, `curl` required; `jq`, `npx` optional)
 
-1. **Existing .claude directory** - Preserves your files
-2. **Installed agents** - Skips duplicates
-3. **Library files** - Only adds missing ones
-4. **CLAUDE.md status** - Merges or creates as needed
-5. **Partial installations** - Offers repair option
+## Update
+
+```bash
+cd claude-code-agents
+git pull
+./install.sh --update
+```
+
+- Updates all components to the latest version
+- Creates a backup before updating
+- Preserves your customizations
 
 ## Safety Features
 
-- **Automatic Backups** - Creates timestamped backups before modifications
-- **Non-Destructive** - Never overwrites without backing up
-- **Idempotent** - Safe to run multiple times
-- **Verification** - Confirms successful installation
-- **Rollback Ready** - Backups allow easy restoration
+- **Automatic Backups** — Creates timestamped backups before modifications
+- **Non-Destructive** — Never overwrites without backing up
+- **Idempotent** — Safe to run multiple times
+- **Verification** — Confirms successful installation
 
 ## Installation Summary
 
@@ -150,7 +86,7 @@ After installation, you'll see:
 
 ## Usage After Installation
 
-Once installed, just use natural language:
+Open any project with Claude Code and use natural language:
 
 ```
 "Design a user authentication system"
@@ -159,7 +95,7 @@ Once installed, just use natural language:
 "Deploy this to production"
 ```
 
-Agents auto-activate based on your words - no commands needed!
+Agents auto-activate based on your words — no commands needed.
 
 ## Troubleshooting
 
@@ -178,48 +114,35 @@ chmod +x install.sh
 ```
 
 ### Verification Failed
-Run repair mode:
+Reconcile the install:
 ```bash
-./install.sh --repair
-```
-
-### Custom Installation Path
-The installer works in the current directory. Navigate to your project:
-```bash
-cd /path/to/your/project
-./install.sh
+./install.sh --update
 ```
 
 ## Uninstallation
 
-To remove the agent system:
+The framework installs into `~/.claude`, which also holds your personal Claude Code data (your own `CLAUDE.md`, `projects/`, `settings.json`). Do **not** `rm -rf ~/.claude`. Remove only the framework-owned components:
+
 ```bash
-rm -rf .claude
-# Optionally remove or edit CLAUDE.md
+rm -rf ~/.claude/agents ~/.claude/commands ~/.claude/skills \
+       ~/.claude/rules ~/.claude/lib ~/.claude/hooks ~/.claude/daemon \
+       ~/.claude/output-styles ~/.claude/statusline.sh
 ```
 
-To keep agents but remove from CLAUDE.md:
-- Remove the section between:
-  - `<!-- ============ CLAUDE AGENTS AUTO-ACTIVATION SECTION START ============ -->`
-  - `<!-- ============ CLAUDE AGENTS AUTO-ACTIVATION SECTION END ============ -->`
+Then edit `~/.claude/settings.json` and `~/.claude/CLAUDE.md` by hand to remove the framework's `hooks`/statusline blocks and the agent auto-activation section (between the `CLAUDE AGENTS AUTO-ACTIVATION SECTION START`/`END` markers) if you want them gone.
+
+To unload the background watchdog:
+```bash
+launchctl bootout gui/$(id -u)/com.claude-code-agents.framework-watchdog 2>/dev/null || true
+rm -f ~/Library/LaunchAgents/com.claude-code-agents.framework-watchdog.plist
+```
 
 ## Support & Updates
 
 - **Repository**: github.com/pfangueiro/claude-code-agents
 - **Issues**: Report problems in GitHub Issues
-- **Updates**: Run `./install.sh --update` to get latest version
-
-## Quick Reference
-
-| Command | Action | Use When |
-|---------|--------|----------|
-| `./install.sh --team-setup` | Full onboarding | New team member |
-| `./install.sh` | Interactive | First time or unsure |
-| `./install.sh --minimal` | CLAUDE.md only | Quick setup |
-| `./install.sh --full` | Everything | Complete system |
-| `./install.sh --repair` | Fix issues | Missing components |
-| `./install.sh --update` | Latest version | Upgrade existing |
+- **Updates**: Run `./install.sh --update` to get the latest version
 
 ---
 
-*The installer is intelligent - it detects what you have and installs only what you need.*
+*One install, user-global — the agents are available in every project on your machine.*

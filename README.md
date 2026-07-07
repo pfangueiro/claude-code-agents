@@ -18,10 +18,10 @@
 ```bash
 git clone https://github.com/pfangueiro/claude-code-agents.git
 cd claude-code-agents
-./install.sh --team-setup
+./install.sh
 ```
 
-Then open any project with Claude Code and talk naturally:
+Installs once, user-global to `~/.claude`. Now **every project on your machine has the agents** — open any project with Claude Code and talk naturally:
 
 ```
 "Build a REST API with JWT authentication"
@@ -89,30 +89,24 @@ See [`.claude/lib/agent-coordination.md`](.claude/lib/agent-coordination.md) for
 
 ---
 
-## Installation Options
+## Installation
 
-| Mode | Command | What It Does |
-|------|---------|-------------|
-| **Team Setup** | `./install.sh --team-setup` | Everything: agents, skills, commands, hooks, MCP, global config |
-| **Full** | `./install.sh --full` | Agents + skills + commands for one project (no global config) |
-| **Minimal** | `./install.sh --minimal` | Just CLAUDE.md with agent activation |
-| **Repair** | `./install.sh --repair` | Fix missing components |
-| **Update** | `./install.sh --update` | Update to latest version |
-| **Validate** | `./validate.sh` | Run all checks (count auto-discovered, scales with deployed projects) |
+One install, user-global. Claude Code natively loads `~/.claude/{agents,skills,commands,rules}`, so a single install makes the agents available in **every** project on your machine — no per-project setup.
 
-### Deploy to an Existing Project
-
-```bash
-cd /path/to/your/project
-/path/to/claude-code-agents/install.sh --full
-```
+| Command | What It Does |
+|---------|-------------|
+| `./install.sh` | Install everything to `~/.claude`: agents, skills, commands, rules, hooks, MCP, global config |
+| `./install.sh --update` | Reconcile an existing install to the latest version |
+| `./install.sh --help` | Show all options |
 
 ### Verify Installation
 
 ```bash
 ./validate.sh
-# All validations passed! (full + --quick modes; check count auto-discovered, scales with deployed projects)
+# All validations passed! (full + --quick modes)
 ```
+
+Installed components live under `~/.claude/` — verify with `ls ~/.claude/agents ~/.claude/skills ~/.claude/commands ~/.claude/rules`.
 
 ---
 
@@ -188,7 +182,7 @@ python3 .claude/skills/skill-creator/scripts/init_skill.py my-skill --path .clau
 
 ## MCP Integration
 
-5 Model Context Protocol servers auto-configured with team setup:
+5 Model Context Protocol servers auto-configured on install:
 
 | Server | What It Does |
 |--------|-------------|
@@ -212,7 +206,7 @@ claude mcp add postgres -- npx -y @modelcontextprotocol/server-postgres
 
 ## Auto-Enforced Rules
 
-Six rule files in `.claude/rules/` are automatically loaded by Claude Code in every session:
+Six rule files in `~/.claude/rules/` are automatically loaded by Claude Code in every session:
 
 - **security.md** — No secrets in commits, parameterized queries, input validation, security headers, least privilege
 - **code-quality.md** — No dead code, single responsibility, early returns, explicit error handling, descriptive naming
@@ -247,20 +241,20 @@ Six rule files in `.claude/rules/` are automatically loaded by Claude Code in ev
 
 ## Architecture
 
+Installed once, user-global under `~/.claude/` — Claude Code loads it in every project:
+
 ```
-.claude/
+~/.claude/
 ├── agents/          # 13 auto-activating SDLC agents
 ├── commands/        # 13 slash commands
 ├── skills/          # 28 modular knowledge packages
 ├── rules/           # 6 auto-enforced rule sets
 ├── lib/             # Templates, patterns, coordination protocol
-└── history/         # Session history
-
-global-config/
 ├── hooks/           # 9 command hooks + 2 reference configs
 ├── daemon/          # launchd watchdog (hourly validate + snapshots)
-├── settings.json.template  # 10 hook events, permissions, model config
-└── ...              # statusline, output styles
+├── analytics/       # Observability dashboard + ingested session logs
+├── statusline.sh    # Rich status bar
+└── settings.json    # 10 hook events, permissions, model config
 ```
 
 See [EXTENSIBILITY.md](./EXTENSIBILITY.md) for the complete guide on Skills, MCP, Slash Commands, and Subagents.
@@ -303,7 +297,7 @@ You: "CRITICAL: Production API is returning 500 errors!"
 Built-in analytics dashboard that reads Claude Code's native JSONL session logs — zero cloud dependencies, Python stdlib only, single SQLite database.
 
 ```bash
-# Quick start (after install --team-setup)
+# Quick start (after install)
 claude-obs
 
 # Or run manually
@@ -335,7 +329,7 @@ python3 server.py --port 8080        # Custom port
 python3 server.py --open             # Auto-open browser
 ```
 
-Installed automatically with `--team-setup`. Data stays entirely local.
+Installed automatically by `./install.sh`. Data stays entirely local.
 
 ---
 

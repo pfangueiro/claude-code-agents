@@ -35,7 +35,7 @@ Include `Co-Authored-By:` trailers for collaborative work.
 1. **`./validate.sh`** — must report `0 Errors`, `0 Warnings` (all checks Passed; count auto-discovered).
 2. **`bash -n` syntax check** — every shell file you touched:
    ```bash
-   bash -n install.sh validate.sh deploy-all.sh global-config/hooks/*.sh global-config/daemon/*.sh
+   bash -n install.sh validate.sh quick-install.sh global-config/hooks/*.sh global-config/daemon/*.sh
    ```
 3. **Healthcheck round-trip** — if you changed `session-start-healthcheck.sh`:
    ```bash
@@ -60,12 +60,12 @@ Include `Co-Authored-By:` trailers for collaborative work.
 
 After any of the above, run `./validate.sh` — it auto-discovers and validates the new component.
 
-## Deploying changes across local projects
+## Updating an installation
 
-After a merge, anyone using `deploy-all.sh` can roll the new version into every
-`~/local-codebase/*/` project. The driver creates per-project backups, writes a
-JSONL manifest, and continues on per-project errors by default. See the script's
-`--help` for `--dry-run`, `--halt-on-error`, `--only <name>`.
+The framework installs once, user-global, to `~/.claude`, so it applies to every
+project on the machine. After pulling a new version, run `./install.sh --update` to
+reconcile `~/.claude` — or let the self-healing watchdog / SessionStart healthcheck
+reconcile it automatically.
 
 ## Self-healing safety net
 

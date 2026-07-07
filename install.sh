@@ -1,27 +1,24 @@
 #!/bin/bash
 
 # ============================================================================
-# Claude Agents - Intelligent Installation Script
+# Claude Agents - User-Global Installer
 # ============================================================================
-# Detects existing components and deploys only what's needed
-# Supports minimal, full, repair, update, and team-setup modes
+# Installs the framework ONCE into ~/.claude, where Claude Code picks it up in
+# EVERY project. No per-project deployment. Self-healing: the SessionStart
+# healthcheck hook and the launchd watchdog fork `install.sh --update` to
+# reconcile ~/.claude against this source repo.
 #
 # Usage:
-#   ./install.sh              - Interactive installation
-#   ./install.sh --minimal    - Minimal CLAUDE.md only
-#   ./install.sh --full       - Complete agent system
-#   ./install.sh --repair     - Fix missing components
-#   ./install.sh --update     - Update existing installation
-#   ./install.sh --team-setup - Full team onboarding (agents + global config)
-#   ./install.sh --full /path/to/project - Install into a specific directory
+#   ./install.sh            - Install / re-install into ~/.claude (canonical)
+#   ./install.sh --update   - Non-interactive reconcile of ~/.claude (self-heal)
+#   ./install.sh --help      - Show this help message
 # ============================================================================
 
 set -e
 
 # Configuration
-SCRIPT_VERSION="2.10.0"
+SCRIPT_VERSION="3.0.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_DIR=".claude-backup-$(date +%Y%m%d-%H%M%S)"
 DEBUG="${DEBUG:-false}"
 
 # Colors
@@ -34,12 +31,8 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
-# Installation mode and optional target directory
-MODE="${1:-interactive}"
-if [ -n "$2" ] && [ -d "$2" ]; then
-    cd "$2"
-    echo -e "${CYAN}Target directory: $2${NC}"
-fi
+# Installation mode (no-args = canonical install)
+MODE="${1:-install}"
 
 # Component lists
 AGENTS=(
@@ -66,24 +59,21 @@ LIB_FILES=(
 )
 
 # Lib files the framework once shipped and has since RETIRED. install copies
-# LIB_FILES forward but never reverse-prunes, so a removed lib file lingers in
-# every deployed project forever (activation-keywords.json did, across 92 repos,
-# after 0b343bb). prune_retired_lib_files() deletes these from each project.
+# LIB_FILES forward but never reverse-prunes, so a removed lib file would linger
+# in ~/.claude/lib forever (activation-keywords.json did, after 0b343bb).
+# prune_retired_lib_files() deletes these from ~/.claude/lib.
 # SAFETY: an explicit retired-list (not "anything not in LIB_FILES") because
-# .claude/lib lives inside the user's project repo and may be git-committed —
-# we only ever delete files the framework itself shipped and retired, never an
-# unrecognized user file (fail-closed, per security.md). Add an entry here in
-# the same commit that removes a file from LIB_FILES.
+# ~/.claude/lib may hold a user's own files — we only ever delete files the
+# framework itself shipped and retired, never an unrecognized user file
+# (fail-closed, per security.md). Add an entry here in the same commit that
+# removes a file from LIB_FILES.
 RETIRED_LIB_FILES=(
     "activation-keywords.json"
 )
 
 # Statistics
-STATS_CHECKED=0
 STATS_INSTALLED=0
 STATS_SKIPPED=0
-STATS_UPDATED=0
-STATS_BACKED_UP=0
 
 # ============================================================================
 # Helper Functions
@@ -92,7 +82,7 @@ STATS_BACKED_UP=0
 print_header() {
     echo ""
     echo -e "${PURPLE}╔══════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${PURPLE}║${BOLD}     🤖 Claude Agents - Intelligent Installer v${SCRIPT_VERSION}     ${NC}${PURPLE}║${NC}"
+    echo -e "${PURPLE}║${BOLD}     🤖 Claude Agents - User-Global Installer v${SCRIPT_VERSION}     ${NC}${PURPLE}║${NC}"
     echo -e "${PURPLE}╚══════════════════════════════════════════════════════════╝${NC}"
     echo ""
 }
@@ -120,494 +110,7 @@ print_info() {
 }
 
 # ============================================================================
-# Preflight Checks
-# ============================================================================
-
-preflight_checks() {
-    local errors=0
-
-    # Check write permissions
-    if [ ! -w "." ]; then
-        print_error "No write permission in current directory: $(pwd)"
-        ((errors++))
-    fi
-
-    # Check disk space (need at least 1MB)
-    local available_kb
-    available_kb=$(df -k . 2>/dev/null | awk 'NR==2 {print $4}')
-    if [ -n "$available_kb" ] && [ "$available_kb" -lt 1024 ]; then
-        print_error "Insufficient disk space (need at least 1MB, have ${available_kb}KB)"
-        ((errors++))
-    fi
-
-    # Validate source directory has agent files
-    if [ ! -d "${SCRIPT_DIR}/.claude/agents" ]; then
-        print_error "Source directory missing .claude/agents/. Run from the cloned repo."
-        ((errors++))
-    fi
-
-    if [ $errors -gt 0 ]; then
-        print_error "Preflight checks failed with $errors error(s). Aborting."
-        exit 1
-    fi
-
-    print_success "Preflight checks passed"
-}
-
-# ============================================================================
-# Detection Functions
-# ============================================================================
-
-detect_claude_directory() {
-    print_progress "Checking for .claude directory..."
-    (( STATS_CHECKED++ )) || true
-
-    if [ -d ".claude" ]; then
-        print_info ".claude directory exists"
-
-        # Check subdirectories
-        local subdirs=("agents" "lib" "history")
-        for dir in "${subdirs[@]}"; do
-            if [ -d ".claude/$dir" ]; then
-                echo "  └─ /$dir found"
-            else
-                echo "  └─ /$dir missing"
-            fi
-        done
-        return 0
-    else
-        print_info ".claude directory not found"
-        return 1
-    fi
-}
-
-detect_agents() {
-    print_progress "Scanning for installed agents..."
-    local found_agents=0
-    local missing_agents=0
-
-    echo -e "\n${BOLD}Agent Status:${NC}"
-    for agent in "${AGENTS[@]}"; do
-        (( STATS_CHECKED++ )) || true
-        if [ -f ".claude/agents/${agent}.md" ]; then
-            echo -e "  ${GREEN}✓${NC} ${agent}"
-            ((found_agents++))
-        else
-            echo -e "  ${RED}✗${NC} ${agent}"
-            ((missing_agents++))
-        fi
-    done
-
-    echo -e "\n  Found: ${found_agents}/${#AGENTS[@]} agents"
-
-    if [ $found_agents -eq ${#AGENTS[@]} ]; then
-        return 0 # All agents present
-    elif [ $found_agents -gt 0 ]; then
-        return 2 # Partial installation
-    else
-        return 1 # No agents
-    fi
-}
-
-detect_lib_files() {
-    print_progress "Checking library files..."
-    local found_libs=0
-
-    echo -e "\n${BOLD}Library Files:${NC}"
-    for lib in "${LIB_FILES[@]}"; do
-        (( STATS_CHECKED++ )) || true
-        if [ -f ".claude/lib/${lib}" ]; then
-            echo -e "  ${GREEN}✓${NC} ${lib}"
-            ((found_libs++))
-        else
-            echo -e "  ${RED}✗${NC} ${lib}"
-        fi
-    done
-
-    echo -e "\n  Found: ${found_libs}/${#LIB_FILES[@]} library files"
-
-    if [ $found_libs -eq ${#LIB_FILES[@]} ]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-detect_claude_md() {
-    print_progress "Checking CLAUDE.md configuration..."
-    (( STATS_CHECKED++ )) || true
-
-    if [ ! -f "CLAUDE.md" ]; then
-        print_info "CLAUDE.md not found"
-        return 1
-    fi
-
-    # Check for agent configuration
-    if grep -q "Auto-Activating" CLAUDE.md 2>/dev/null; then
-        print_success "CLAUDE.md has agent configuration"
-
-        # Check completeness
-        local agent_count=$(grep -c "**.*-.*\*\*" CLAUDE.md 2>/dev/null || echo "0")
-        echo "  └─ Found $agent_count agent references"
-
-        if [ $agent_count -ge 10 ]; then
-            return 0 # Full config
-        else
-            return 2 # Partial config
-        fi
-    else
-        print_info "CLAUDE.md exists but lacks agent configuration"
-        return 3 # Exists but no agents
-    fi
-}
-
-# ============================================================================
-# Installation Functions
-# ============================================================================
-
-create_directories() {
-    print_progress "Creating directory structure..."
-
-    mkdir -p .claude/agents
-    mkdir -p .claude/lib
-    mkdir -p .claude/history
-    mkdir -p .claude/rules
-
-    print_success "Directory structure created"
-}
-
-install_rules() {
-    echo -e "\n${BOLD}Installing Rules:${NC}"
-
-    local src_dir="${SCRIPT_DIR}/.claude/rules"
-    local dest_dir=".claude/rules"
-
-    if [ ! -d "$src_dir" ]; then
-        print_info "No rules directory found in source — skipping"
-        return 0
-    fi
-
-    mkdir -p "$dest_dir"
-
-    for file in "$src_dir"/*.md; do
-        [ -f "$file" ] || continue
-        local name
-        name=$(basename "$file")
-        [[ "$name" == ._* ]] && continue
-        if [ -f "$dest_dir/$name" ]; then
-            print_skip "Rule $name already exists"
-        else
-            cp "$file" "$dest_dir/$name"
-            print_success "Installed rule $name"
-        fi
-    done
-}
-
-backup_existing() {
-    if [ -d ".claude" ] || [ -f "CLAUDE.md" ]; then
-        print_progress "Creating backup..."
-        mkdir -p "$BACKUP_DIR"
-
-        if [ -d ".claude" ]; then
-            cp -r .claude "$BACKUP_DIR/"
-            (( STATS_BACKED_UP++ )) || true
-        fi
-
-        if [ -f "CLAUDE.md" ]; then
-            cp CLAUDE.md "$BACKUP_DIR/"
-            (( STATS_BACKED_UP++ )) || true
-        fi
-
-        print_success "Backup created in $BACKUP_DIR"
-
-        # Rotation: keep the 3 most-recent backups, delete older. Without this
-        # every --update accumulates a new dir; observed 3,901 stale dirs across
-        # 88 projects (~780MB) before this rotation landed.
-        local stale
-        stale=$(ls -1d .claude-backup-* 2>/dev/null | sort -r | tail -n +4)
-        if [ -n "$stale" ]; then
-            local stale_count
-            stale_count=$(echo "$stale" | wc -l | tr -d ' ')
-            echo "$stale" | xargs -I{} rm -rf {}
-            print_skip "Pruned $stale_count older backup dir(s); kept latest 3"
-        fi
-    fi
-}
-
-download_or_copy() {
-    local source_file="$1"
-    local dest_file="$2"
-    local file_type="$3"
-
-    # Create directory if it doesn't exist
-    local dest_dir
-    dest_dir=$(dirname "$dest_file")
-    mkdir -p "$dest_dir"
-
-    # Resolve actual source path
-    local src_path=""
-    if [ -f "${SCRIPT_DIR}/${source_file}" ]; then
-        src_path="${SCRIPT_DIR}/${source_file}"
-    elif [ -f "$source_file" ]; then
-        src_path="$source_file"
-    else
-        print_error "File not found: $source_file"
-        print_info "Run this script from the cloned repository directory."
-        return 1
-    fi
-
-    # Skip if source and destination resolve to the same inode
-    # (happens when install.sh --update runs inside the source repo itself)
-    if [ -f "$dest_file" ] && [ "$src_path" -ef "$dest_file" ]; then
-        echo -e "  ${YELLOW}⏭${NC}  Skipped $file_type (in-place)"
-        return 0
-    fi
-
-    cp "$src_path" "$dest_file"
-    echo -e "  ${GREEN}✓${NC} Copied $file_type"
-}
-
-install_agent() {
-    local agent="$1"
-
-    if [ -f ".claude/agents/${agent}.md" ]; then
-        print_skip "Agent ${agent} already exists"
-    else
-        print_progress "Installing ${agent} agent..."
-        if download_or_copy ".claude/agents/${agent}.md" ".claude/agents/${agent}.md" "$agent"; then
-            print_success "Installed ${agent}"
-        else
-            print_error "Failed to install agent ${agent}"
-            return 1
-        fi
-    fi
-}
-
-install_lib_file() {
-    local lib="$1"
-
-    if [ -f ".claude/lib/${lib}" ]; then
-        print_skip "Library file ${lib} already exists"
-    else
-        print_progress "Installing ${lib}..."
-        if download_or_copy ".claude/lib/${lib}" ".claude/lib/${lib}" "$lib"; then
-            print_success "Installed ${lib}"
-        else
-            print_error "Failed to install library file ${lib}"
-            return 1
-        fi
-    fi
-}
-
-# Reverse-prune: delete retired framework lib files from the current project's
-# .claude/lib. Runs from the project cwd (like install_lib_file). Only touches
-# names in RETIRED_LIB_FILES, so a user's own .claude/lib files are never at risk.
-prune_retired_lib_files() {
-    [ -d ".claude/lib" ] || return 0
-    local retired
-    for retired in "${RETIRED_LIB_FILES[@]}"; do
-        if [ -f ".claude/lib/${retired}" ]; then
-            rm -f ".claude/lib/${retired}" \
-                && print_skip "Pruned retired lib file ${retired} (no longer shipped)"
-        fi
-    done
-}
-
-install_minimal_claude_md() {
-    print_progress "Installing minimal CLAUDE.md..."
-
-    cat > CLAUDE.md << 'EOF'
-# CLAUDE.md
-
-## 🤖 Auto-Activating AI Agents
-
-This project has specialized AI agents that **automatically activate** when you describe tasks in natural language.
-
-### 🚀 Just Use Natural Language - Agents Auto-Activate
-
-| Say This | Agent Activates | Does This |
-|----------|-----------------|-----------|
-| "design the system" | **architecture-planner** | Creates system design & API specs |
-| "review the code" | **code-quality** | Reviews code quality & suggests improvements |
-| "check security" | **security-auditor** 🔴 | Scans vulnerabilities (Opus) |
-| "write tests" | **test-automation** | Generates comprehensive tests |
-| "running slow" | **performance-optimizer** | Profiles & optimizes performance |
-| "deploy to production" | **devops-automation** | Handles CI/CD & deployment |
-| "document this" | **documentation-maintainer** | Creates docs (Haiku - 95% cheaper) |
-| "design database" | **database-architect** | Optimizes schemas & queries |
-| "create UI" | **frontend-specialist** | Builds responsive components |
-| "create API" | **api-backend** | Implements backend services |
-| "production is down!" | **incident-commander** 🚨 | Emergency response (Opus) |
-| "define SLOs" | **sre-specialist** | SRE, reliability, runbooks |
-| "create an agent" | **meta-agent** | Generates new specialized agents |
-
-### 💡 Example
-
-```
-You: "I need to build a user authentication system"
-```
-
-**Auto-triggers:**
-1. **architecture-planner** → Designs the system
-2. **api-backend** → Implements authentication logic
-3. **database-architect** → Creates user schema
-4. **security-auditor** → Ensures secure implementation
-5. **test-automation** → Generates tests
-6. **documentation-maintainer** → Documents the API
-
-### 🎯 Orchestration Skills (Slash Commands)
-
-Use these for structured, multi-phase task execution:
-
-- **`/deep-read <target>`** — 6-phase codebase reading engine. Reads actual source code line by line with file:line citations.
-- **`/execute <goal>`** — Orchestrated task engine. Decomposes goals into atomic tasks, plans dependencies, executes in parallel batches.
-- **`/investigate <symptom>`** — 8-phase root cause analysis. Uses 5 Whys, competing hypotheses, evidence classification.
-- **`/deep-analysis <problem>`** — Structured multi-step reasoning via sequential-thinking MCP. For architecture decisions and trade-offs.
-- **`/diverge <decision>`** — De-anchoring engine: isolated parallel sub-agents under cognitive frames, then a critic pass. The divergent complement to /deep-analysis.
-
-### 🛠️ Developer Workflow Commands
-
-- **`/build-fix [path]`** — Auto-detect build system, run build, fix errors one at a time with regression guard.
-- **`/tdd <feature>`** — Enforce RED-GREEN-REFACTOR cycle: failing test → minimal implementation → refactor.
-- **`/quality-gate [path] [--fix]`** — Pre-commit validation: formatter + linter + type checker + tests.
-- **`/checkpoint <name>`** — Named save points via git branches for complex multi-step work.
-- **`/save-session [id]`** — Save structured session state with "What Did NOT Work" section.
-- **`/resume-session [id]`** — Resume from a saved session with full context briefing.
-- **`/optimize <metric>`** — Autonomous metric-driven improvement loop: measure → improve → keep/revert.
-
-### 🔧 Built-in Tools (Always Available)
-
-Beyond agents and skills, Claude Code provides these tools directly:
-
-| Tool | Use When |
-|------|----------|
-| **TaskCreate/TaskUpdate/TaskList** | Multi-step work — structured task tracking with dependencies and progress |
-| **CronCreate/CronDelete/CronList** | Recurring prompts, polling, reminders (session-scoped, 7-day max) |
-| **EnterWorktree/ExitWorktree** | Parallel development — isolated git worktree branches for experiments or features |
-| **RemoteTrigger** | Cross-session automation — create/run scheduled remote agents |
-| **LSP** | Code intelligence — go-to-definition, find-references, hover, document symbols |
-| **AskUserQuestion** | Structured user input with labeled options and previews |
-
-### 🔒 Security First
-
-- **security-auditor** & **incident-commander** always use Opus for maximum intelligence
-- All agents follow OWASP & DevSecOps best practices
-- Security scanning activates automatically on auth/security keywords
-
----
-
-*No configuration needed. Just describe what you want to build.*
-EOF
-
-    print_success "Created minimal CLAUDE.md"
-}
-
-append_claude_md_section() {
-    print_progress "Appending agent configuration to existing CLAUDE.md..."
-
-    # Check if already has agent config
-    if grep -q "Auto-Activating" CLAUDE.md 2>/dev/null; then
-        print_skip "CLAUDE.md already has agent configuration"
-        return 0
-    fi
-
-    cat >> CLAUDE.md << 'EOF'
-
-<!-- ============ CLAUDE AGENTS AUTO-ACTIVATION SECTION START ============ -->
-
-## 🤖 Auto-Activating AI Agents
-
-**NEW:** This project has specialized agents that auto-activate based on natural language.
-
-### Quick Reference - Just Say What You Need
-
-- **Planning:** "design", "architecture" → `architecture-planner`
-- **Quality:** "review", "refactor" → `code-quality`
-- **Security:** "security", "auth" → `security-auditor` (Opus)
-- **Testing:** "test", "coverage" → `test-automation`
-- **Performance:** "slow", "optimize" → `performance-optimizer`
-- **Deployment:** "deploy", "CI/CD" → `devops-automation`
-- **Docs:** "document", "README" → `documentation-maintainer` (Haiku -95%)
-- **Database:** "SQL", "schema" → `database-architect`
-- **Frontend:** "UI", "React" → `frontend-specialist`
-- **Backend:** "API", "endpoint" → `api-backend`
-- **Emergency:** "CRITICAL", "outage" → `incident-commander` (Opus)
-- **SRE:** "SLO", "reliability", "runbook" → `sre-specialist`
-- **Agent Creation:** "create agent", "generate agent" → `meta-agent`
-
-**Orchestration Skills (Slash Commands):**
-- `/deep-read <target>` — 6-phase codebase reading engine
-- `/execute <goal>` — Orchestrated task execution with parallel batches
-- `/investigate <symptom>` — 8-phase root cause analysis
-- `/deep-analysis <problem>` — Structured multi-step reasoning
-- `/diverge <decision>` — De-anchoring engine: diverge under cognitive frames, then converge
-
-**Developer Workflow Commands:**
-- `/build-fix` — Auto-detect build system, fix errors with regression guard
-- `/tdd <feature>` — RED-GREEN-REFACTOR test-driven development
-- `/quality-gate [--fix]` — Pre-commit formatter + linter + type checker
-- `/checkpoint <name>` — Named save points for complex work
-- `/save-session` / `/resume-session` — Cross-session continuity
-- `/optimize <metric>` — Autonomous metric-driven improvement loop
-
-**Built-in Tools (Always Available):**
-- **TaskCreate/TaskUpdate/TaskList** — Structured task tracking with dependencies and progress
-- **CronCreate/CronDelete/CronList** — Recurring prompts, polling, reminders (session-scoped, 7-day max)
-- **EnterWorktree/ExitWorktree** — Isolated git worktree branches for experiments or features
-- **RemoteTrigger** — Cross-session automation with scheduled remote agents
-- **LSP** — Code intelligence: go-to-definition, find-references, hover, document symbols
-- **AskUserQuestion** — Structured user input with labeled options and previews
-
-**Example:** Say "build a REST API with authentication" and watch multiple agents collaborate automatically.
-
-<!-- ============ CLAUDE AGENTS AUTO-ACTIVATION SECTION END ============ -->
-EOF
-
-    print_success "Appended agent configuration to CLAUDE.md"
-}
-
-append_orchestration_skills_section() {
-    print_progress "Adding orchestration skills to CLAUDE.md..."
-
-    cat >> CLAUDE.md << 'EOF'
-
-### 🎯 Orchestration Skills (Slash Commands)
-
-Use these for structured, multi-phase task execution:
-
-- **`/deep-read <target>`** — 6-phase codebase reading engine. Reads actual source code line by line with file:line citations.
-- **`/execute <goal>`** — Orchestrated task engine. Decomposes goals into atomic tasks, plans dependencies, executes in parallel batches.
-- **`/investigate <symptom>`** — 8-phase root cause analysis. Uses 5 Whys, competing hypotheses, evidence classification.
-- **`/deep-analysis <problem>`** — Structured multi-step reasoning via sequential-thinking MCP. For architecture decisions and trade-offs.
-- **`/diverge <decision>`** — De-anchoring engine: isolated parallel sub-agents under cognitive frames, then a critic pass. The divergent complement to /deep-analysis.
-
-### 🛠️ Developer Workflow Commands
-
-- **`/build-fix [path]`** — Auto-detect build system, run build, fix errors one at a time with regression guard.
-- **`/tdd <feature>`** — Enforce RED-GREEN-REFACTOR cycle: failing test → minimal implementation → refactor.
-- **`/quality-gate [path] [--fix]`** — Pre-commit validation: formatter + linter + type checker + tests.
-- **`/checkpoint <name>`** — Named save points via git branches for complex multi-step work.
-- **`/save-session [id]`** — Save structured session state with "What Did NOT Work" section.
-- **`/resume-session [id]`** — Resume from a saved session with full context briefing.
-- **`/optimize <metric>`** — Autonomous metric-driven improvement loop: measure → improve → keep/revert.
-
-### 🔧 Built-in Tools (Always Available)
-
-| Tool | Use When |
-|------|----------|
-| **TaskCreate/TaskUpdate/TaskList** | Multi-step work — structured task tracking with dependencies and progress |
-| **CronCreate/CronDelete/CronList** | Recurring prompts, polling, reminders (session-scoped, 7-day max) |
-| **EnterWorktree/ExitWorktree** | Parallel development — isolated git worktree branches for experiments or features |
-| **RemoteTrigger** | Cross-session automation — create/run scheduled remote agents |
-| **LSP** | Code intelligence — go-to-definition, find-references, hover, document symbols |
-| **AskUserQuestion** | Structured user input with labeled options and previews |
-EOF
-
-    print_success "Added orchestration skills section to CLAUDE.md"
-}
-
-# ============================================================================
-# Team Setup Functions
+# Prerequisites & Preflight
 # ============================================================================
 
 check_prerequisites() {
@@ -640,60 +143,293 @@ check_prerequisites() {
     print_success "Prerequisites satisfied"
 }
 
-install_skills() {
-    echo -e "\n${BOLD}Installing Skills:${NC}"
+preflight_checks() {
+    local errors=0
 
-    local src_dir="${SCRIPT_DIR}/.claude/skills"
-    local dest_dir=".claude/skills"
-
-    if [ ! -d "$src_dir" ]; then
-        print_info "No skills directory found in source — skipping"
-        return 0
+    # Ensure ~/.claude exists and is writable (install destination)
+    mkdir -p "$HOME/.claude" 2>/dev/null || true
+    if [ ! -w "$HOME/.claude" ]; then
+        print_error "No write permission in destination: $HOME/.claude"
+        ((errors++)) || true
     fi
 
-    mkdir -p "$dest_dir"
+    # Check disk space in $HOME (need at least 1MB)
+    local available_kb
+    available_kb=$(df -k "$HOME" 2>/dev/null | awk 'NR==2 {print $4}')
+    if [ -n "$available_kb" ] && [ "$available_kb" -lt 1024 ]; then
+        print_error "Insufficient disk space (need at least 1MB, have ${available_kb}KB)"
+        ((errors++)) || true
+    fi
 
-    for skill_dir in "$src_dir"/*/; do
-        [ -d "$skill_dir" ] || continue
-        local name
-        name=$(basename "$skill_dir")
-        [[ "$name" == ._* ]] && continue
-        if [ -f "$dest_dir/$name/SKILL.md" ]; then
-            print_skip "Skill $name already exists"
-        else
-            cp -r "$skill_dir" "$dest_dir/$name"
-            print_success "Installed skill $name"
+    # Validate source directory has the shared set
+    if [ ! -d "${SCRIPT_DIR}/.claude/agents" ]; then
+        print_error "Source directory missing .claude/agents/. Run from the cloned repo."
+        ((errors++)) || true
+    fi
+
+    if [ $errors -gt 0 ]; then
+        print_error "Preflight checks failed with $errors error(s). Aborting."
+        exit 1
+    fi
+
+    print_success "Preflight checks passed"
+}
+
+# ============================================================================
+# Shared Set — agents / lib / rules / skills / commands → ~/.claude
+# ============================================================================
+#
+# FRAMEWORK-SCOPED PRUNE CONTRACT (security-critical):
+# ~/.claude/{skills,agents,commands,lib,rules} may already hold the user's OWN
+# personal entries (e.g. skills: cloudflare, wrangler, durable-objects). The
+# install must NEVER delete or overwrite anything the framework does not own.
+#   * Every copy REPLACES the framework's own files (heals drift) — it never
+#     touches a name outside the framework's set.
+#   * Every orphan-prune only ever removes a name PROVABLY framework-owned:
+#       - agents  : the AGENTS array (hand-maintained allowlist)
+#       - lib     : LIB_FILES + RETIRED_LIB_FILES (via prune_retired_lib_files)
+#       - skills/commands/rules : the set the framework ships in
+#         ${SCRIPT_DIR}/.claude/<dir> — names outside that set are never eligible.
+# This is fail-closed, per the RETIRED_LIB_FILES precedent above: we only ever
+# remove names the framework itself ships/shipped, never an unrecognized file.
+
+# Reverse-prune retired framework lib files from ~/.claude/lib. Only touches
+# names in RETIRED_LIB_FILES, so a user's own lib files are never at risk.
+prune_retired_lib_files() {
+    [ -d "$HOME/.claude/lib" ] || return 0
+    local retired
+    for retired in "${RETIRED_LIB_FILES[@]}"; do
+        if [ -f "$HOME/.claude/lib/${retired}" ]; then
+            rm -f "$HOME/.claude/lib/${retired}" \
+                && print_skip "Pruned retired lib file ${retired} (no longer shipped)"
         fi
     done
 }
 
-install_commands() {
-    echo -e "\n${BOLD}Installing Slash Commands:${NC}"
+install_global_agents() {
+    echo -e "\n${BOLD}Installing Agents (~/.claude/agents):${NC}"
 
-    local src_dir="${SCRIPT_DIR}/.claude/commands"
-    local dest_dir=".claude/commands"
+    local src_dir="${SCRIPT_DIR}/.claude/agents"
+    local dest_dir="$HOME/.claude/agents"
 
     if [ ! -d "$src_dir" ]; then
-        print_info "No commands directory found in source — skipping"
-        return 0
+        print_error "Source agents dir missing: $src_dir"
+        return 1
     fi
-
     mkdir -p "$dest_dir"
 
+    # Copy (REPLACE) every framework-owned agent so drift heals.
+    local agent src
+    for agent in "${AGENTS[@]}"; do
+        src="$src_dir/${agent}.md"
+        if [ -f "$src" ]; then
+            cp "$src" "$dest_dir/${agent}.md"
+            print_success "Synced agent ${agent}"
+        else
+            print_error "Framework agent source missing: ${agent}.md"
+        fi
+    done
+
+    # Framework-scoped orphan prune: remove a DEPLOYED agent only if its name is
+    # framework-owned (in AGENTS) AND its source file is gone. Personal agents
+    # (names not in AGENTS) are never eligible.
+    local deployed dname owned
+    for deployed in "$dest_dir"/*.md; do
+        [ -f "$deployed" ] || continue
+        dname=$(basename "$deployed" .md)
+        [[ "$dname" == ._* ]] && continue
+        owned=0
+        for agent in "${AGENTS[@]}"; do
+            [ "$agent" = "$dname" ] && { owned=1; break; }
+        done
+        if [ "$owned" -eq 1 ] && [ ! -f "$src_dir/${dname}.md" ]; then
+            rm -f "$deployed"
+            print_skip "Pruned orphan agent ${dname} (framework-owned, no longer in source)"
+        fi
+    done
+}
+
+install_global_lib() {
+    echo -e "\n${BOLD}Installing Library Files (~/.claude/lib):${NC}"
+
+    local src_dir="${SCRIPT_DIR}/.claude/lib"
+    local dest_dir="$HOME/.claude/lib"
+
+    if [ ! -d "$src_dir" ]; then
+        print_info "No lib directory in source — skipping"
+        return 0
+    fi
+    mkdir -p "$dest_dir"
+
+    # Copy (REPLACE) every framework-owned lib file.
+    local lib src
+    for lib in "${LIB_FILES[@]}"; do
+        src="$src_dir/${lib}"
+        if [ -f "$src" ]; then
+            cp "$src" "$dest_dir/${lib}"
+            print_success "Synced lib ${lib}"
+        else
+            print_error "Framework lib source missing: ${lib}"
+        fi
+    done
+
+    # Orphan prune for lib is the explicit retired-list (fail-closed).
+    prune_retired_lib_files
+}
+
+install_global_rules() {
+    echo -e "\n${BOLD}Installing Rules (~/.claude/rules):${NC}"
+
+    local src_dir="${SCRIPT_DIR}/.claude/rules"
+    local dest_dir="$HOME/.claude/rules"
+
+    if [ ! -d "$src_dir" ]; then
+        print_info "No rules directory in source — skipping"
+        return 0
+    fi
+    mkdir -p "$dest_dir"
+
+    # Framework's own rule set = names shipped in source. Copy (REPLACE) each.
+    local -a src_names=()
+    local file name
     for file in "$src_dir"/*.md; do
         [ -f "$file" ] || continue
-        local name
         name=$(basename "$file")
-        # Skip macOS resource fork files
         [[ "$name" == ._* ]] && continue
-        if [ -f "$dest_dir/$name" ]; then
-            print_skip "Command $name already exists"
-        else
-            cp "$file" "$dest_dir/$name"
-            print_success "Installed command $name"
+        [ "$name" = ".DS_Store" ] && continue
+        src_names+=("$name")
+        cp "$file" "$dest_dir/$name"
+        print_success "Synced rule $name"
+    done
+
+    _prune_framework_orphan_files "$dest_dir" "$src_dir" "rule" "${src_names[@]}"
+}
+
+install_global_skills() {
+    echo -e "\n${BOLD}Installing Skills (~/.claude/skills):${NC}"
+
+    local src_dir="${SCRIPT_DIR}/.claude/skills"
+    local dest_dir="$HOME/.claude/skills"
+
+    if [ ! -d "$src_dir" ]; then
+        print_info "No skills directory in source — skipping"
+        return 0
+    fi
+    mkdir -p "$dest_dir"
+
+    # Framework's own skill set = directory names shipped in source.
+    local -a src_names=()
+    local skill_dir name
+    for skill_dir in "$src_dir"/*/; do
+        [ -d "$skill_dir" ] || continue
+        name=$(basename "$skill_dir")
+        [[ "$name" == ._* ]] && continue
+        [ "$name" = ".DS_Store" ] && continue
+        src_names+=("$name")
+        # REPLACE: rm then copy so intra-skill drift (files deleted inside a
+        # skill) heals too. Only ever removes a framework-owned skill name.
+        rm -rf "$dest_dir/$name"
+        cp -r "$skill_dir" "$dest_dir/$name"
+        print_success "Synced skill $name"
+    done
+
+    _prune_framework_orphan_dirs "$dest_dir" "$src_dir" "${src_names[@]}"
+}
+
+install_global_commands() {
+    echo -e "\n${BOLD}Installing Slash Commands (~/.claude/commands):${NC}"
+
+    local src_dir="${SCRIPT_DIR}/.claude/commands"
+    local dest_dir="$HOME/.claude/commands"
+
+    if [ ! -d "$src_dir" ]; then
+        print_info "No commands directory in source — skipping"
+        return 0
+    fi
+    mkdir -p "$dest_dir"
+
+    # Framework's own command set = names shipped in source. Copy (REPLACE) each.
+    local -a src_names=()
+    local file name
+    for file in "$src_dir"/*.md; do
+        [ -f "$file" ] || continue
+        name=$(basename "$file")
+        [[ "$name" == ._* ]] && continue
+        [ "$name" = ".DS_Store" ] && continue
+        src_names+=("$name")
+        cp "$file" "$dest_dir/$name"
+        print_success "Synced command $name"
+    done
+
+    _prune_framework_orphan_files "$dest_dir" "$src_dir" "command" "${src_names[@]}"
+}
+
+# Framework-scoped orphan prune for a FLAT dir of *.md files (rules, commands).
+# Args: <dest_dir> <src_dir> <label> <framework-owned name>...
+# Only a deployed file whose name is in the framework's own set (the passed
+# names) AND is absent from source is removed. Since the owned set is derived
+# from source, a personal file (name not shipped by the framework) is never
+# eligible — the fail-closed guard that guarantees personal entries survive.
+# (A framework file retired from source is left in place, same as lib was before
+# RETIRED_LIB_FILES; add a retired-list to actively prune such names.)
+_prune_framework_orphan_files() {
+    local dest_dir="$1" src_dir="$2" label="$3"
+    shift 3
+    local -a owned=("$@")
+    [ -d "$dest_dir" ] || return 0
+    local deployed dname is_owned o
+    for deployed in "$dest_dir"/*.md; do
+        [ -f "$deployed" ] || continue
+        dname=$(basename "$deployed")
+        [[ "$dname" == ._* ]] && continue
+        is_owned=0
+        for o in "${owned[@]}"; do
+            [ "$o" = "$dname" ] && { is_owned=1; break; }
+        done
+        if [ "$is_owned" -eq 1 ] && [ ! -f "$src_dir/$dname" ]; then
+            rm -f "$deployed"
+            print_skip "Pruned orphan $label $dname (framework-owned, no longer in source)"
         fi
     done
 }
+
+# Framework-scoped orphan prune for a dir of skill SUBDIRECTORIES (skills).
+# Args: <dest_dir> <src_dir> <framework-owned name>...
+# Same fail-closed guarantee as _prune_framework_orphan_files: only a subdir
+# whose name is in the framework's own (source-derived) set is ever eligible,
+# so the user's personal skills are never removed.
+_prune_framework_orphan_dirs() {
+    local dest_dir="$1" src_dir="$2"
+    shift 2
+    local -a owned=("$@")
+    [ -d "$dest_dir" ] || return 0
+    local deployed dname is_owned o
+    for deployed in "$dest_dir"/*/; do
+        [ -d "$deployed" ] || continue
+        dname=$(basename "$deployed")
+        [[ "$dname" == ._* ]] && continue
+        is_owned=0
+        for o in "${owned[@]}"; do
+            [ "$o" = "$dname" ] && { is_owned=1; break; }
+        done
+        if [ "$is_owned" -eq 1 ] && [ ! -d "$src_dir/$dname" ]; then
+            rm -rf "$deployed"
+            print_skip "Pruned orphan skill $dname (framework-owned, no longer in source)"
+        fi
+    done
+}
+
+install_shared_set() {
+    install_global_agents
+    install_global_lib
+    install_global_rules
+    install_global_skills
+    install_global_commands
+}
+
+# ============================================================================
+# Global Configuration (hooks / output-styles / statusline / settings)
+# ============================================================================
 
 install_global_config() {
     echo -e "\n${BOLD}Installing Global Configuration:${NC}"
@@ -744,43 +480,15 @@ install_global_config() {
         print_success "Installed statusline.sh"
     fi
 
-    # Keybindings removed in v2.7 — personal preference, not framework-level
-
-    # Handle settings.json
+    # Handle settings.json — NON-INTERACTIVE. Seed from template on first run;
+    # otherwise leave the user's file untouched (sync_hooks reconciles the
+    # framework-owned keys: hooks / env / permissions / statusLine).
     if [ -f "$src_dir/settings.json.template" ]; then
         if [ ! -f ~/.claude/settings.json ]; then
             cp "$src_dir/settings.json.template" ~/.claude/settings.json
             print_success "Installed settings.json from template"
         else
-            echo ""
-            echo -e "  ${YELLOW}~/.claude/settings.json already exists.${NC}"
-            echo "  1) Keep existing"
-            echo "  2) Replace (backup created)"
-            echo "  3) Show diff"
-            echo ""
-            read -p "  Choose [1-3]: " settings_choice
-            case $settings_choice in
-                2)
-                    cp ~/.claude/settings.json ~/.claude/settings.json.backup
-                    cp "$src_dir/settings.json.template" ~/.claude/settings.json
-                    print_success "Replaced settings.json (backup: settings.json.backup)"
-                    ;;
-                3)
-                    diff ~/.claude/settings.json "$src_dir/settings.json.template" || true
-                    echo ""
-                    read -p "  Replace? [y/N]: " replace_yn
-                    if [[ "$replace_yn" =~ ^[Yy]$ ]]; then
-                        cp ~/.claude/settings.json ~/.claude/settings.json.backup
-                        cp "$src_dir/settings.json.template" ~/.claude/settings.json
-                        print_success "Replaced settings.json (backup: settings.json.backup)"
-                    else
-                        print_skip "Kept existing settings.json"
-                    fi
-                    ;;
-                *)
-                    print_skip "Kept existing settings.json"
-                    ;;
-            esac
+            print_skip "settings.json exists — leaving it (sync_hooks reconciles framework keys)"
         fi
     fi
 }
@@ -866,8 +574,7 @@ sync_hooks() {
     # Recover from a full DELETE of settings.json (not just an emptied {} wipe):
     # the reconcile below is gated on the file existing, so if the file is gone
     # entirely, seed it from the template first. Without this, --update can never
-    # recreate a deleted settings.json (only install_global_config did, and that
-    # runs only in --team-setup). Atomic cp so a concurrent reader never sees half.
+    # recreate a deleted settings.json. Atomic cp so a concurrent reader never sees half.
     if [ ! -f ~/.claude/settings.json ] && [ -f "${SCRIPT_DIR}/global-config/settings.json.template" ]; then
         cp "${SCRIPT_DIR}/global-config/settings.json.template" ~/.claude/settings.json.recreate.$$ \
             && mv ~/.claude/settings.json.recreate.$$ ~/.claude/settings.json \
@@ -1007,26 +714,17 @@ install_analytics() {
 }
 
 write_framework_path_marker() {
-    # Records the repo root so the SessionStart healthcheck hook can locate it.
+    # Records the repo root so the SessionStart healthcheck hook and the watchdog
+    # can locate it (they cd here to fork install.sh --update).
     mkdir -p "$HOME/.claude"
     echo "$SCRIPT_DIR" > "$HOME/.claude/.framework-path"
     print_success "Wrote framework path marker ($SCRIPT_DIR)"
 }
 
 write_framework_version_marker() {
-    # Records the framework version and source SHA in the deployed project.
-    # Invoked from every install mode so downstream tooling can tell what's deployed.
-    # Skip when CWD is the source repo itself — the marker is a *deployment* artifact,
-    # not part of the framework tree. Writing it there would dirty git status and
-    # propagate via the next install to the 88 projects, overwriting their own markers.
-    local cwd_real src_real
-    cwd_real=$(pwd -P)
-    src_real=$(cd "$SCRIPT_DIR" && pwd -P)
-    if [ "$cwd_real" = "$src_real" ]; then
-        print_skip "Framework version marker (source repo — marker is for deployments only)"
-        return 0
-    fi
-    mkdir -p .claude
+    # Records the installed framework version and source SHA under ~/.claude so
+    # downstream tooling can tell what's deployed.
+    mkdir -p "$HOME/.claude"
     local sha="unknown"
     if command -v git >/dev/null 2>&1; then
         sha=$(git -C "$SCRIPT_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -1037,7 +735,7 @@ write_framework_version_marker() {
         echo "version=${SCRIPT_VERSION}"
         echo "sha=${sha}"
         echo "installed_at=${ts}"
-    } > .claude/.framework-version
+    } > "$HOME/.claude/.framework-version"
     print_success "Wrote framework version marker (v${SCRIPT_VERSION} @ ${sha})"
 }
 
@@ -1162,369 +860,8 @@ ensure_statusline() {
 }
 
 # ============================================================================
-# Installation Modes
+# Update (non-interactive reconcile under a concurrency lock)
 # ============================================================================
-
-install_minimal() {
-    echo -e "\n${BOLD}Installing Minimal Configuration${NC}"
-    echo "This will only add CLAUDE.md for agent auto-activation"
-
-    if [ -f "CLAUDE.md" ]; then
-        append_claude_md_section
-    else
-        install_minimal_claude_md
-    fi
-}
-
-install_full() {
-    echo -e "\n${BOLD}Installing Full Agent System${NC}"
-    echo "This will install all agents and supporting files"
-
-    local install_errors=0
-
-    backup_existing
-    create_directories
-
-    # Install all agents
-    echo -e "\n${BOLD}Installing Agents:${NC}"
-    for agent in "${AGENTS[@]}"; do
-        install_agent "$agent" || ((install_errors++))
-    done
-
-    # Install library files
-    echo -e "\n${BOLD}Installing Library Files:${NC}"
-    for lib in "${LIB_FILES[@]}"; do
-        install_lib_file "$lib" || ((install_errors++))
-    done
-    prune_retired_lib_files
-
-    # Install rules
-    install_rules
-
-    # Install skills
-    install_skills
-
-    # Install slash commands
-    install_commands
-
-    # Install MCP configuration
-    if [ -f ".mcp.json" ] && grep -q '/Users/\|/home/' ".mcp.json" 2>/dev/null; then
-        # Existing config has hardcoded user paths — replace with portable template
-        if [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
-            cp "${SCRIPT_DIR}/.mcp.json.example" ".mcp.json"
-            print_success "Replaced MCP configuration (removed hardcoded paths)"
-        fi
-    elif [ -f ".mcp.json" ]; then
-        print_skip "MCP configuration (.mcp.json) already exists"
-    elif [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
-        cp "${SCRIPT_DIR}/.mcp.json.example" ".mcp.json"
-        print_success "Installed MCP configuration (.mcp.json from template)"
-    elif [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
-        cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
-        print_success "Installed MCP configuration (.mcp.json)"
-    fi
-
-    # Handle CLAUDE.md
-    if [ -f "CLAUDE.md" ]; then
-        append_claude_md_section
-    else
-        install_minimal_claude_md
-    fi
-
-    # Install analytics dashboard (global, once per machine)
-    install_analytics || ((install_errors++)) || true
-
-    # Ensure statusline is installed (global, once per machine)
-    ensure_statusline
-
-    # Record framework path for SessionStart healthcheck hook
-    write_framework_path_marker
-
-    # Record framework version/SHA in the deployed project
-    write_framework_version_marker
-
-    # Install watchdog daemon (macOS only)
-    install_watchdog || true
-
-    if [ $install_errors -gt 0 ]; then
-        print_error "$install_errors component(s) failed to install"
-        return 1
-    fi
-}
-
-repair_installation() {
-    echo -e "\n${BOLD}Repairing Installation${NC}"
-    echo "This will fix missing components"
-
-    # Create directories if missing
-    if [ ! -d ".claude" ]; then
-        create_directories
-    fi
-
-    # Install missing agents
-    echo -e "\n${BOLD}Checking Agents:${NC}"
-    for agent in "${AGENTS[@]}"; do
-        if [ ! -f ".claude/agents/${agent}.md" ]; then
-            install_agent "$agent"
-        else
-            print_skip "Agent ${agent} already present"
-        fi
-    done
-
-    # Install missing library files
-    echo -e "\n${BOLD}Checking Library Files:${NC}"
-    for lib in "${LIB_FILES[@]}"; do
-        if [ ! -f ".claude/lib/${lib}" ]; then
-            install_lib_file "$lib"
-        else
-            print_skip "Library ${lib} already present"
-        fi
-    done
-    prune_retired_lib_files
-
-    # Repair rules, skills, and commands
-    install_rules
-    install_skills
-    install_commands
-
-    # Repair MCP configuration
-    if [ -f ".mcp.json" ] && grep -q '/Users/\|/home/' ".mcp.json" 2>/dev/null; then
-        if [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
-            cp "${SCRIPT_DIR}/.mcp.json.example" ".mcp.json"
-            print_success "Replaced MCP configuration (removed hardcoded paths)"
-        fi
-    elif [ -f ".mcp.json" ]; then
-        print_skip "MCP configuration already present"
-    elif [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
-        cp "${SCRIPT_DIR}/.mcp.json.example" ".mcp.json"
-        print_success "Installed MCP configuration (.mcp.json from template)"
-    elif [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
-        cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
-        print_success "Installed MCP configuration (.mcp.json)"
-    else
-        print_skip "No MCP configuration template found"
-    fi
-
-    # Fix CLAUDE.md if needed
-    if [ ! -f "CLAUDE.md" ]; then
-        install_minimal_claude_md
-    elif ! grep -q "Auto-Activating" CLAUDE.md 2>/dev/null; then
-        append_claude_md_section
-    else
-        print_skip "CLAUDE.md already configured"
-    fi
-
-    # Patch meta-agent into existing CLAUDE.md agents table
-    patch_meta_agent_in_claude_md
-
-    # Patch sre-specialist into existing CLAUDE.md agents table
-    patch_sre_specialist_in_claude_md
-
-    # Patch Developer Workflow Commands section if missing
-    patch_developer_workflow_in_claude_md
-
-    # Patch Built-in Tools section if missing
-    patch_builtin_tools_in_claude_md
-
-    # Patch /diverge into orchestration skills if missing
-    patch_diverge_in_claude_md
-
-    # Sync hooks to global ~/.claude/hooks/
-    sync_hooks
-
-    # Repair analytics dashboard
-    install_analytics || print_error "Analytics installation failed"
-
-    # Ensure statusline is installed
-    ensure_statusline
-
-    # Record framework path for SessionStart healthcheck hook
-    write_framework_path_marker
-
-    # Record framework version/SHA in the deployed project
-    write_framework_version_marker
-
-    # Install watchdog daemon (macOS only)
-    install_watchdog || true
-}
-
-patch_developer_workflow_in_claude_md() {
-    # Patch CLAUDE.md to add Developer Workflow Commands section if missing
-    if [ ! -f "CLAUDE.md" ]; then
-        return 0
-    fi
-    if grep -q "Developer Workflow" CLAUDE.md 2>/dev/null; then
-        return 0
-    fi
-    if ! grep -q "Orchestration Skills\|Auto-Activating" CLAUDE.md 2>/dev/null; then
-        return 0
-    fi
-
-    # Append developer workflow section after orchestration skills or at end of agents section
-    cat >> CLAUDE.md << 'EOF'
-
-### 🛠️ Developer Workflow Commands
-
-- **`/build-fix [path]`** — Auto-detect build system, run build, fix errors one at a time with regression guard.
-- **`/tdd <feature>`** — Enforce RED-GREEN-REFACTOR cycle: failing test → minimal implementation → refactor.
-- **`/quality-gate [path] [--fix]`** — Pre-commit validation: formatter + linter + type checker + tests.
-- **`/checkpoint <name>`** — Named save points via git branches for complex multi-step work.
-- **`/save-session [id]`** — Save structured session state with "What Did NOT Work" section.
-- **`/resume-session [id]`** — Resume from a saved session with full context briefing.
-- **`/optimize <metric>`** — Autonomous metric-driven improvement loop: measure → improve → keep/revert.
-EOF
-
-    print_success "Patched CLAUDE.md: added Developer Workflow Commands section"
-}
-
-patch_builtin_tools_in_claude_md() {
-    # Patch CLAUDE.md to add Built-in Tools section if missing
-    if [ ! -f "CLAUDE.md" ]; then
-        return 0
-    fi
-    if grep -q "Built-in Tools" CLAUDE.md 2>/dev/null; then
-        return 0
-    fi
-    if ! grep -q "Auto-Activating\|Orchestration Skills\|Developer Workflow" CLAUDE.md 2>/dev/null; then
-        return 0
-    fi
-
-    cat >> CLAUDE.md << 'EOF'
-
-### 🔧 Built-in Tools (Always Available)
-
-| Tool | Use When |
-|------|----------|
-| **TaskCreate/TaskUpdate/TaskList** | Multi-step work — structured task tracking with dependencies and progress |
-| **CronCreate/CronDelete/CronList** | Recurring prompts, polling, reminders (session-scoped, 7-day max) |
-| **EnterWorktree/ExitWorktree** | Parallel development — isolated git worktree branches for experiments or features |
-| **RemoteTrigger** | Cross-session automation — create/run scheduled remote agents |
-| **LSP** | Code intelligence — go-to-definition, find-references, hover, document symbols |
-| **AskUserQuestion** | Structured user input with labeled options and previews |
-EOF
-
-    print_success "Patched CLAUDE.md: added Built-in Tools section"
-}
-
-patch_sre_specialist_in_claude_md() {
-    # Patch CLAUDE.md to add sre-specialist row if missing from agents table
-    if [ ! -f "CLAUDE.md" ]; then
-        return 0
-    fi
-    if grep -q "sre-specialist" CLAUDE.md 2>/dev/null; then
-        return 0
-    fi
-    if ! grep -q "incident-commander" CLAUDE.md 2>/dev/null; then
-        return 0
-    fi
-    # Insert sre-specialist line after incident-commander (handles both table and list formats)
-    if grep -q 'incident-commander.*|' CLAUDE.md 2>/dev/null; then
-        # Table format
-        sed -i '' '/incident-commander.*|/{
-a\
-| "define SLOs" | **sre-specialist** | SRE, reliability, runbooks |
-}' CLAUDE.md
-    elif grep -q 'incident-commander' CLAUDE.md 2>/dev/null; then
-        # List format
-        sed -i '' '/incident-commander/{
-a\
-- **SRE:** "SLO", "reliability", "runbook" → `sre-specialist`
-}' CLAUDE.md
-    fi
-    if grep -q "sre-specialist" CLAUDE.md 2>/dev/null; then
-        print_success "Patched CLAUDE.md: added sre-specialist to agents table"
-    fi
-}
-
-patch_meta_agent_in_claude_md() {
-    # Patch CLAUDE.md to add meta-agent row if missing from agents table
-    if [ ! -f "CLAUDE.md" ]; then
-        return 0
-    fi
-    if grep -q "meta-agent" CLAUDE.md 2>/dev/null; then
-        return 0
-    fi
-    if ! grep -q "incident-commander" CLAUDE.md 2>/dev/null; then
-        return 0
-    fi
-    # Insert meta-agent line after incident-commander (handles both table and list formats)
-    if grep -q 'incident-commander.*|' CLAUDE.md 2>/dev/null; then
-        # Table format: | "production is down!" | **incident-commander** | ... |
-        sed -i '' '/incident-commander.*|/{
-a\
-| "create an agent" | **meta-agent** | Generates new specialized agents |
-}' CLAUDE.md
-    elif grep -q 'incident-commander' CLAUDE.md 2>/dev/null; then
-        # List format: - **Emergency:** ... → `incident-commander`
-        sed -i '' '/incident-commander/{
-a\
-- **Agent Creation:** "create agent", "generate agent" → `meta-agent`
-}' CLAUDE.md
-    fi
-    if grep -q "meta-agent" CLAUDE.md 2>/dev/null; then
-        print_success "Patched CLAUDE.md: added meta-agent to agents table"
-    fi
-}
-
-patch_diverge_in_claude_md() {
-    # Patch CLAUDE.md to add /diverge to the orchestration skills list if missing
-    if [ ! -f "CLAUDE.md" ]; then
-        return 0
-    fi
-    if grep -q "/diverge" CLAUDE.md 2>/dev/null; then
-        return 0
-    fi
-    if ! grep -q "deep-analysis <problem>" CLAUDE.md 2>/dev/null; then
-        return 0
-    fi
-    # Insert /diverge after the /deep-analysis line (handles both bold and plain list formats)
-    if grep -q '\*\*`/deep-analysis' CLAUDE.md 2>/dev/null; then
-        # Bold format (minimal template / orchestration-skills append)
-        sed -i '' '/deep-analysis <problem>/{
-a\
-- **`/diverge <decision>`** — De-anchoring engine: isolated parallel sub-agents under cognitive frames, then a critic pass. The divergent complement to /deep-analysis.
-}' CLAUDE.md
-    else
-        # Plain list format (append_claude_md_section)
-        sed -i '' '/deep-analysis <problem>/{
-a\
-- `/diverge <decision>` — De-anchoring engine: diverge under cognitive frames, then converge
-}' CLAUDE.md
-    fi
-    if grep -q "/diverge" CLAUDE.md 2>/dev/null; then
-        print_success "Patched CLAUDE.md: added /diverge to orchestration skills"
-    fi
-}
-
-clean_old_agents() {
-    # Remove agent files from v1.0 that have been renamed or replaced
-    local OLD_AGENTS=(
-        "architect.md"
-        "connector.md"
-        "documenter.md"
-        "guardian.md"
-        "accessibility.md"
-        "api-reliability.md"
-        "documentation.md"
-        "mobile-ux.md"
-        "performance.md"
-        "schema-guardian.md"
-        "security.md"
-    )
-
-    local cleaned=0
-    for agent in "${OLD_AGENTS[@]}"; do
-        if [ -f ".claude/agents/${agent}" ]; then
-            rm ".claude/agents/${agent}"
-            echo -e "  ${GREEN}✓${NC} Removed old ${agent}"
-            ((cleaned++))
-        fi
-    done
-
-    if [ $cleaned -gt 0 ]; then
-        print_success "Cleaned $cleaned old v1.0 agent file(s)"
-    fi
-}
 
 update_installation() {
     # Concurrency guard: prevent two concurrent --update runs from racing on
@@ -1559,254 +896,49 @@ update_installation() {
     trap "rm -rf '$lock_dir' 2>/dev/null || true" EXIT INT TERM
 
     echo -e "\n${BOLD}Updating Installation${NC}"
-    echo "This will update all components to latest version"
+    echo "Reconciling ~/.claude against source (non-interactive)"
 
-    backup_existing
-
-    # Ensure all directories exist (old installs may lack skills/, commands/, rules/)
-    mkdir -p .claude/agents .claude/lib .claude/rules .claude/skills .claude/commands
-
-    # Clean old v1.0 agents that have been renamed
-    echo -e "\n${BOLD}Cleaning Old Components:${NC}"
-    clean_old_agents
-
-    # Update all agents
-    echo -e "\n${BOLD}Updating Agents:${NC}"
-    for agent in "${AGENTS[@]}"; do
-        print_progress "Updating ${agent}..."
-        download_or_copy ".claude/agents/${agent}.md" ".claude/agents/${agent}.md" "$agent"
-        print_success "Updated ${agent}"
-        (( STATS_UPDATED++ )) || true
-    done
-
-    # Update library files
-    echo -e "\n${BOLD}Updating Library Files:${NC}"
-    for lib in "${LIB_FILES[@]}"; do
-        print_progress "Updating ${lib}..."
-        download_or_copy ".claude/lib/${lib}" ".claude/lib/${lib}" "$lib"
-        print_success "Updated ${lib}"
-        (( STATS_UPDATED++ )) || true
-    done
-    prune_retired_lib_files
-
-    # Update rules, skills, and commands (re-copy from source)
-    echo -e "\n${BOLD}Updating Rules:${NC}"
-    local src_rules="${SCRIPT_DIR}/.claude/rules"
-    if [ -d "$src_rules" ]; then
-        mkdir -p .claude/rules
-        for file in "$src_rules"/*.md; do
-            [ -f "$file" ] || continue
-            local name
-            name=$(basename "$file")
-            [[ "$name" == ._* ]] && continue
-            if [ -f ".claude/rules/$name" ] && [ "$file" -ef ".claude/rules/$name" ]; then
-                print_skip "Rule $name (in-place)"
-            else
-                cp "$file" ".claude/rules/$name"
-                print_success "Updated rule $name"
-            fi
-            (( STATS_UPDATED++ )) || true
-        done
-    fi
-
-    echo -e "\n${BOLD}Updating Skills:${NC}"
-    local src_skills="${SCRIPT_DIR}/.claude/skills"
-    if [ -d "$src_skills" ]; then
-        mkdir -p .claude/skills
-        for skill_dir in "$src_skills"/*/; do
-            [ -d "$skill_dir" ] || continue
-            local name
-            name=$(basename "$skill_dir")
-            [[ "$name" == ._* ]] && continue
-            if [ -d ".claude/skills/$name" ] && [ "$skill_dir" -ef ".claude/skills/$name" ]; then
-                print_skip "Skill $name (in-place)"
-            else
-                cp -r "$skill_dir" ".claude/skills/$name"
-                print_success "Updated skill $name"
-            fi
-            (( STATS_UPDATED++ )) || true
-        done
-    fi
-
-    echo -e "\n${BOLD}Updating Slash Commands:${NC}"
-    local src_cmds="${SCRIPT_DIR}/.claude/commands"
-    if [ -d "$src_cmds" ]; then
-        mkdir -p .claude/commands
-        for file in "$src_cmds"/*.md; do
-            [ -f "$file" ] || continue
-            local name
-            name=$(basename "$file")
-            [[ "$name" == ._* ]] && continue
-            if [ -f ".claude/commands/$name" ] && [ "$file" -ef ".claude/commands/$name" ]; then
-                print_skip "Command $name (in-place)"
-            else
-                cp "$file" ".claude/commands/$name"
-                print_success "Updated command $name"
-            fi
-            (( STATS_UPDATED++ )) || true
-        done
-    fi
-
-    # Update MCP configuration
-    if [ ! -f ".mcp.json" ]; then
-        # No config exists — install from template
-        if [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
-            cp "${SCRIPT_DIR}/.mcp.json.example" ".mcp.json"
-            print_success "Installed MCP configuration (.mcp.json from template)"
-            (( STATS_UPDATED++ )) || true
-        elif [ -f "${SCRIPT_DIR}/.mcp.json" ]; then
-            cp "${SCRIPT_DIR}/.mcp.json" ".mcp.json"
-            print_success "Installed MCP configuration (.mcp.json)"
-            (( STATS_UPDATED++ )) || true
-        fi
-    elif grep -q '/Users/\|/home/' ".mcp.json" 2>/dev/null; then
-        # Existing config has hardcoded user paths — replace with portable template
-        if [ -f "${SCRIPT_DIR}/.mcp.json.example" ]; then
-            cp "${SCRIPT_DIR}/.mcp.json.example" ".mcp.json"
-            print_success "Replaced MCP configuration (removed hardcoded paths)"
-            (( STATS_UPDATED++ )) || true
-        fi
-    else
-        print_skip "MCP configuration (.mcp.json) already exists"
-    fi
-
-    # Sync hooks to global ~/.claude/hooks/
+    # Reconcile the shared set + hooks/settings/analytics/statusline/markers/watchdog.
+    # NO personalize_setup — never clobber the user's own ~/.claude/CLAUDE.md edits.
+    install_shared_set
     sync_hooks
-
-    # Update analytics dashboard (installs if missing, updates if present)
     install_analytics || print_error "Analytics installation failed"
-
-    # Handle CLAUDE.md — regenerate framework sections, preserve user content
-    if [ -f "CLAUDE.md" ]; then
-        if grep -q "CLAUDE AGENTS AUTO-ACTIVATION SECTION START" CLAUDE.md 2>/dev/null; then
-            # Has markers — delete between markers and re-append latest
-            sed -i '' '/<!-- .* CLAUDE AGENTS AUTO-ACTIVATION SECTION START/,/<!-- .* CLAUDE AGENTS AUTO-ACTIVATION SECTION END/d' CLAUDE.md
-            append_claude_md_section
-            print_success "Regenerated agent section in CLAUDE.md (marker-based)"
-        elif grep -q "Just Use Natural Language" CLAUDE.md 2>/dev/null; then
-            # Minimal template (we own the file) — regenerate entirely
-            install_minimal_claude_md
-            print_success "Regenerated CLAUDE.md (minimal template)"
-        elif grep -q "Auto-Activating\|auto-activate" CLAUDE.md 2>/dev/null; then
-            # Patched file (no markers) — use patch functions for incremental updates
-            patch_meta_agent_in_claude_md
-            patch_sre_specialist_in_claude_md
-            patch_developer_workflow_in_claude_md
-            patch_builtin_tools_in_claude_md
-            patch_diverge_in_claude_md
-        else
-            # No agent section at all — append
-            append_claude_md_section
-        fi
-    else
-        install_minimal_claude_md
-    fi
-
-    # Ensure statusline is installed
     ensure_statusline
-
-    # Record framework path for SessionStart healthcheck hook
     write_framework_path_marker
-
-    # Record framework version/SHA in the deployed project
     write_framework_version_marker
-
-    # Install watchdog daemon (macOS only)
     install_watchdog || true
 }
 
 # ============================================================================
-# Interactive Mode
-# ============================================================================
-
-interactive_installation() {
-    # Detection phase
-    echo -e "\n${BOLD}=== System Detection ===${NC}"
-
-    local has_claude_dir=false
-    local agent_status=0
-    local lib_status=0
-    local claude_md_status=0
-
-    detect_claude_directory && has_claude_dir=true
-
-    if [ "$has_claude_dir" = true ]; then
-        detect_agents || agent_status=$?
-        detect_lib_files || lib_status=$?
-    fi
-
-    detect_claude_md || claude_md_status=$?
-
-    # Analysis
-    echo -e "\n${BOLD}=== Installation Analysis ===${NC}"
-
-    if [ "$has_claude_dir" = false ] && [ $claude_md_status -eq 1 ]; then
-        print_info "This appears to be a fresh installation"
-        local recommendation="full"
-    elif [ $agent_status -eq 0 ] && [ $lib_status -eq 0 ] && [ $claude_md_status -eq 0 ]; then
-        print_info "Full system already installed"
-        local recommendation="update"
-    elif [ $agent_status -eq 2 ] || [ $lib_status -eq 1 ] || [ $claude_md_status -eq 2 ]; then
-        print_info "Partial installation detected"
-        local recommendation="repair"
-    else
-        print_info "Minimal configuration recommended"
-        local recommendation="minimal"
-    fi
-
-    # User choice
-    echo -e "\n${BOLD}=== Installation Options ===${NC}"
-    echo "Recommended: ${YELLOW}${recommendation}${NC}"
-    echo ""
-    echo "1) Minimal  - Just CLAUDE.md for auto-activation"
-    echo "2) Full     - Complete agent system (all files)"
-    echo "3) Repair   - Fix missing components"
-    echo "4) Update   - Update to latest version"
-    echo "5) Cancel   - Exit without changes"
-    echo ""
-
-    read -p "Choose installation type [1-5]: " choice
-
-    case $choice in
-        1) install_minimal ;;
-        2) install_full ;;
-        3) repair_installation ;;
-        4) update_installation ;;
-        5)
-            echo "Installation cancelled"
-            exit 0
-            ;;
-        *)
-            print_error "Invalid choice"
-            exit 1
-            ;;
-    esac
-}
-
-# ============================================================================
-# Verification
+# Verification & Summary
 # ============================================================================
 
 verify_installation() {
     echo -e "\n${BOLD}=== Verifying Installation ===${NC}"
 
     local all_good=true
+    local d
+    for d in agents skills commands rules; do
+        if [ -d "$HOME/.claude/$d" ]; then
+            print_success "~/.claude/$d present"
+        else
+            print_error "~/.claude/$d missing"
+            all_good=false
+        fi
+    done
 
-    # Quick verification
-    if [ -f "CLAUDE.md" ] && grep -q "Auto-Activating" CLAUDE.md 2>/dev/null; then
-        print_success "CLAUDE.md configured correctly"
+    if [ -d "$HOME/.claude/hooks" ]; then
+        print_success "~/.claude/hooks present"
     else
-        print_error "CLAUDE.md configuration issue"
+        print_error "~/.claude/hooks missing"
         all_good=false
     fi
 
-    if [ "$MODE" = "--full" ] || [ "$MODE" = "--update" ] || [ "$choice" = "2" ] || [ "$choice" = "4" ]; then
-        if [ -d ".claude/agents" ] && [ -d ".claude/lib" ]; then
-            print_success "Directory structure verified"
-        else
-            print_error "Directory structure issue"
-            all_good=false
-        fi
+    if [ -f "$HOME/.claude/settings.json" ]; then
+        print_success "~/.claude/settings.json present"
+    else
+        print_error "~/.claude/settings.json missing"
+        all_good=false
     fi
 
     if [ "$all_good" = true ]; then
@@ -1816,19 +948,14 @@ verify_installation() {
     fi
 }
 
-# ============================================================================
-# Summary
-# ============================================================================
-
 print_summary() {
     echo -e "\n${BOLD}=== Installation Summary ===${NC}"
     echo "┌─────────────────────────────┐"
-    echo "│ Components Checked:    $(printf "%4d" $STATS_CHECKED) │"
     echo "│ Components Installed:  $(printf "%4d" $STATS_INSTALLED) │"
     echo "│ Components Skipped:    $(printf "%4d" $STATS_SKIPPED) │"
-    echo "│ Components Updated:    $(printf "%4d" $STATS_UPDATED) │"
-    echo "│ Files Backed Up:       $(printf "%4d" $STATS_BACKED_UP) │"
     echo "└─────────────────────────────┘"
+
+    echo -e "\n${BOLD}Installed to:${NC} ~/.claude (user-global — active in every project)"
 
     echo -e "\n${BOLD}=== Quick Start ===${NC}"
     echo "Just use natural language and agents will auto-activate:"
@@ -1838,7 +965,7 @@ print_summary() {
     echo '  ⚡ "Why is this query running slow?"'
     echo '  🚀 "Deploy this to AWS"'
     echo ""
-    echo -e "${CYAN}No configuration needed - just describe what you need!${NC}"
+    echo -e "${CYAN}No per-project setup — describe what you need in any project!${NC}"
 }
 
 # ============================================================================
@@ -1849,52 +976,47 @@ main() {
     print_header
 
     case "$MODE" in
-        --minimal)
-            echo -e "${BOLD}Running in MINIMAL mode${NC}"
-            install_minimal
-            ;;
-        --full)
-            echo -e "${BOLD}Running in FULL mode${NC}"
-            preflight_checks
-            install_full
-            ;;
-        --repair)
-            echo -e "${BOLD}Running in REPAIR mode${NC}"
-            repair_installation
-            ;;
-        --update)
-            echo -e "${BOLD}Running in UPDATE mode${NC}"
-            update_installation
-            ;;
-        --team-setup)
-            echo -e "${BOLD}Running TEAM SETUP mode${NC}"
+        install|--install|--team-setup)
+            echo -e "${BOLD}Installing Claude Agents (user-global → ~/.claude)${NC}"
             check_prerequisites
             preflight_checks
-            install_full
+            install_shared_set
+            sync_hooks
             install_global_config
-            personalize_setup
+            install_analytics || print_error "Analytics installation failed"
+            ensure_statusline
+            personalize_setup || true
+            write_framework_path_marker
+            write_framework_version_marker
+            install_watchdog || true
+            verify_installation
+            print_summary
             ;;
-        --help)
-            echo "Usage: ./install.sh [OPTIONS]"
+        --update)
+            echo -e "${BOLD}Running in UPDATE mode (non-interactive reconcile)${NC}"
+            update_installation
+            ;;
+        --help|-h)
+            echo "Usage: ./install.sh [OPTION]"
+            echo ""
+            echo "Installs the Claude Agents framework once into ~/.claude, where"
+            echo "Claude Code picks it up in EVERY project (no per-project setup)."
             echo ""
             echo "Options:"
-            echo "  --minimal      Install minimal CLAUDE.md only"
-            echo "  --full         Install complete agent system"
-            echo "  --repair       Fix missing components"
-            echo "  --update       Update to latest version"
-            echo "  --team-setup   Full team onboarding (agents + global config)"
+            echo "  (no option)    Install / re-install into ~/.claude (canonical)"
+            echo "  --update       Non-interactive reconcile of ~/.claude (self-heal path)"
             echo "  --help         Show this help message"
             echo ""
-            echo "No options = Interactive mode"
+            echo "The SessionStart healthcheck hook and launchd watchdog fork"
+            echo "'install.sh --update' automatically to heal drift under ~/.claude."
             exit 0
             ;;
         *)
-            interactive_installation
+            print_error "Unknown option: $MODE"
+            echo "Run './install.sh --help' for usage."
+            exit 1
             ;;
     esac
-
-    verify_installation
-    print_summary
 }
 
 # Run main

@@ -155,6 +155,8 @@ Skills are modular knowledge packages that teach Claude how to handle specific t
     └── example_data.csv
 ```
 
+> **Where skills live:** the framework installs its skills user-global to `~/.claude/skills/`, so they are available in every project. To author your own, create it under `~/.claude/skills/<name>/` (global) or `<project>/.claude/skills/<name>/` (project-local) — Claude Code loads both. The `.claude/skills/` paths shown in the commands below are relative to whichever of those roots you are authoring in.
+
 ### Progressive Disclosure
 
 Skills use a three-level loading strategy to optimize context:
@@ -987,7 +989,7 @@ claude-code-agents/
 - [Claude Code Documentation](https://docs.claude.com/claude-code)
 - [MCP Documentation](https://modelcontextprotocol.io)
 
-### Skills in This Project (15)
+### Skills in This Project (28)
 - `skill-creator`: Create new skills from templates
 - `git-workflow`: Git best practices and conventions
 - `code-review-checklist`: Systematic code review framework
@@ -998,6 +1000,7 @@ claude-code-agents/
 - `ci-cd-templates`: GitHub Actions, GitLab CI, deployment strategies
 - `docker-deployment`: Multi-stage builds, Docker Compose, security
 - `handoff`: Session continuity via HANDOFF.md
+- `context-escalation`: Five-level context-pressure policy (truncate → drop-reads → fork-subagent → /compact → handoff)
 - `execute`: Orchestrated task engine with parallel batch execution
 - `investigate`: 8-phase root cause analysis protocol
 - `deep-read`: 6-phase codebase reading engine
