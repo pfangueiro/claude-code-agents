@@ -464,14 +464,31 @@ reconcile_legacy_projects() {
     case "$dir" in "~") dir="$HOME" ;; "~/"*) dir="$HOME/${dir#\~/}" ;; esac
     [ -n "$dir" ] && [ -d "$dir" ] || return 0
 
-    # Pass 1 (read-only): collect UNTRACKED per-project framework copies.
+    # Framework-owned names (from source) — we ONLY ever remove THESE, and a project
+    # qualifies for teardown ONLY if it actually carries one (so a project with only its
+    # OWN custom agents is never a candidate → no snapshot spam, stays idempotent).
+    local src="${SCRIPT_DIR}/.claude"
+    local -a fw_agents=() fw_skills=() fw_cmds=() fw_rules=() fw_lib=()
+    local f d
+    [ -d "$src/agents" ]   && for f in "$src/agents"/*.md;   do [ -f "$f" ] && fw_agents+=("$(basename "$f")"); done
+    [ -d "$src/skills" ]   && for d in "$src/skills"/*/;     do [ -d "$d" ] && fw_skills+=("$(basename "$d")"); done
+    [ -d "$src/commands" ] && for f in "$src/commands"/*.md; do [ -f "$f" ] && fw_cmds+=("$(basename "$f")"); done
+    [ -d "$src/rules" ]    && for f in "$src/rules"/*.md;    do [ -f "$f" ] && fw_rules+=("$(basename "$f")"); done
+    [ -d "$src/lib" ]      && for f in "$src/lib"/*;         do [ -f "$f" ] && fw_lib+=("$(basename "$f")"); done
+    [ "${#fw_agents[@]}" -gt 0 ] || return 0   # no framework agents in source → nothing to key on
+
+    # Pass 1 (read-only): collect projects that carry a FRAMEWORK agent copy and are UNTRACKED.
     local -a candidates=()
-    local proj bn
+    local proj bn n has_fw
     for proj in "$dir"/*/; do
         [ -L "${proj%/}" ] && continue                 # skip symlinked project dirs
         [ -d "${proj}.claude/agents" ] || continue
         bn=$(basename "$proj")
         case "$bn" in claude-code-agents|claude-code) continue ;; esac
+        # qualify ONLY a project that actually holds a framework-owned agent file
+        has_fw=0
+        for n in "${fw_agents[@]}"; do [ -f "${proj}.claude/agents/$n" ] && { has_fw=1; break; }; done
+        [ "$has_fw" -eq 1 ] || continue
         # Committed guard (FAIL-CLOSED): only tear down when git can DEFINITIVELY confirm
         # .claude/agents is UNTRACKED. `git ls-files --error-unmatch` exits 0=tracked (skip),
         # 1=untracked (eligible), anything else = git error → skip (never risk removing
@@ -502,13 +519,19 @@ reconcile_legacy_projects() {
         return 0
     fi
 
-    # Remove framework shared-set subdirs only (never other .claude content).
-    local removed=0 sub
+    # Remove ONLY framework-owned files (by name); rmdir the now-empty framework subdirs
+    # (rmdir no-ops on a non-empty dir, so any custom content is left in place).
+
+    local removed=0 n sub
     for proj in "${candidates[@]}"; do
-        for sub in agents skills commands rules lib; do
-            [ -e "${proj}.claude/$sub" ] && rm -rf "${proj}.claude/$sub"
-        done
+        for n in "${fw_agents[@]}"; do rm -f  "${proj}.claude/agents/$n"   2>/dev/null; done
+        for n in "${fw_skills[@]}"; do rm -rf "${proj}.claude/skills/$n"   2>/dev/null; done
+        for n in "${fw_cmds[@]}";   do rm -f  "${proj}.claude/commands/$n" 2>/dev/null; done
+        for n in "${fw_rules[@]}";  do rm -f  "${proj}.claude/rules/$n"    2>/dev/null; done
+        for n in "${fw_lib[@]}";    do rm -f  "${proj}.claude/lib/$n"      2>/dev/null; done
         [ -e "${proj}.claude/.framework-version" ] && rm -f "${proj}.claude/.framework-version"
+        for sub in agents skills commands rules lib; do rmdir "${proj}.claude/$sub" 2>/dev/null || true; done
+        rmdir "${proj}.claude" 2>/dev/null || true
         removed=$((removed + 1))
     done
     _health_log "\"event\":\"legacy_teardown\",\"projects\":$removed,\"snapshot\":\"$snap\""
