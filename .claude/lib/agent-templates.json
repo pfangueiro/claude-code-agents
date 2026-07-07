@@ -229,19 +229,5 @@
     "deployment": ["devops-automation", "incident-commander"],
     "operations": ["sre-specialist", "incident-commander", "devops-automation"],
     "maintenance": ["performance-optimizer", "documentation-maintainer", "sre-specialist"]
-  },
-  "activation_rules": {
-    "confidence_threshold": 0.7,
-    "keyword_weights": {
-      "primary": 1.0,
-      "secondary": 0.5,
-      "context": 0.3
-    },
-    "priority_override": {
-      "critical": ["incident-commander", "security-auditor"],
-      "high": ["test-automation", "code-quality", "sre-specialist"],
-      "medium": ["architecture-planner", "performance-optimizer"],
-      "low": ["documentation-maintainer"]
-    }
   }
 }

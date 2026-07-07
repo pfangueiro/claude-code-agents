@@ -464,6 +464,24 @@ else
     pass "meta-agent: no inert confidence/keyword scaffolding"
 fi
 
+section "Checking for inert (consumer-less) scoring config in lib JSON"
+
+# Claude Code routes on description text only — the framework has NO scoring / keyword-weight /
+# confidence runtime (0b343bb removed the dead activation-keywords router). So these structured-
+# config keys are ALWAYS dead if present in .claude/lib/*.json. Scope is STRUCTURED CONFIG ONLY —
+# never skill/rule markdown, which legitimately uses "threshold"/"score"/"weight" in prose.
+inert_scoring_hits=0
+for _key in confidence_threshold keyword_weights activation_rules priority_override; do
+    _hit=$(grep -lE "\"${_key}\"" .claude/lib/*.json 2>/dev/null || true)
+    if [ -n "$_hit" ]; then
+        fail "Inert config: \"${_key}\" present in $(echo "$_hit" | tr '\n' ' ')— dead scoring metadata, no runtime consumer (routes on description text only; see 0b343bb)"
+        inert_scoring_hits=$((inert_scoring_hits + 1))
+    fi
+done
+if [ "$inert_scoring_hits" -eq 0 ]; then
+    pass "No inert scoring config (confidence/keyword-weight/priority-override) in lib JSON"
+fi
+
 section "Checking /execute Phase 5 independent verifier"
 
 # Phase 5 must gate REPORT on an independent verifier, not self-grade.
