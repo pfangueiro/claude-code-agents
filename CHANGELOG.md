@@ -78,6 +78,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   immediately — previously a reload reset the watchdog's hourly timer and the bar showed a transient `⚠` (stale)
   after a successful install (the kickstarted watchdog logs too, but async and behind the cache). Both are guarded
   against the watchdog's own `--update` (`CLAUDE_WATCHDOG_RUN`).
+- **Teardown safety hardening — committed-guard now covers all five subdirs, plus symlink guards** (found by an
+  adversarial pre-mortem of the autonomy teardown before building the upgrade flow): `reconcile_legacy_projects`
+  removes framework-named files from `agents/skills/commands/rules/lib`, but the git committed-guard only proved
+  `.claude/agents` was untracked — so a repo that **committed** e.g. `.claude/rules/code-quality.md` (a framework
+  *name*) while leaving `.claude/agents` untracked could reach teardown and have **tracked files `rm`'d** from its
+  working tree. The guard now requires **every existing subdir** to be git-untracked (any tracked/indeterminate
+  subdir → skip the whole project). Added **symlink guards**: a project whose `.claude` or any framework subdir is
+  a symlink is skipped, so `rm -f` can never follow it into a shared/committed target (the prior guard only
+  skipped a symlinked project *dir*). Verified: a mixed-tracking repo (agents untracked, rules committed) is
+  skipped with the committed file intact; a symlinked subdir is skipped with its target intact; a clean
+  fully-untracked copy still tears down; the no-arg autonomous path still exits 0.
 
 ## [3.0.0] - 2026-07-07
 

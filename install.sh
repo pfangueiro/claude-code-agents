@@ -483,21 +483,38 @@ reconcile_legacy_projects() {
     for proj in "$dir"/*/; do
         [ -L "${proj%/}" ] && continue                 # skip symlinked project dirs
         [ -d "${proj}.claude/agents" ] || continue
+        # Symlink guard: line 484 only skips a symlinked PROJECT dir. If .claude (or a
+        # framework subdir) is itself a symlink, `rm -f` would follow it into a shared or
+        # committed target — skip the whole project so teardown never traverses a symlink
+        # out of the project tree.
+        [ -L "${proj}.claude" ] && continue
+        local _sl=0 _s
+        for _s in agents skills commands rules lib; do [ -L "${proj}.claude/$_s" ] && { _sl=1; break; }; done
+        [ "$_sl" -eq 0 ] || continue
         bn=$(basename "$proj")
         case "$bn" in claude-code-agents|claude-code) continue ;; esac
         # qualify ONLY a project that actually holds a framework-owned agent file
         has_fw=0
         for n in "${fw_agents[@]}"; do [ -f "${proj}.claude/agents/$n" ] && { has_fw=1; break; }; done
         [ "$has_fw" -eq 1 ] || continue
-        # Committed guard (FAIL-CLOSED): only tear down when git can DEFINITIVELY confirm
-        # .claude/agents is UNTRACKED. `git ls-files --error-unmatch` exits 0=tracked (skip),
-        # 1=untracked (eligible), anything else = git error → skip (never risk removing
-        # committed content when we cannot determine tracked-status).
+        # Committed guard (FAIL-CLOSED): the teardown removes framework-named files from ALL
+        # five subdirs (agents/skills/commands/rules/lib), so EVERY one that exists must be
+        # git-UNTRACKED. Checking only .claude/agents would let a repo that committed e.g.
+        # .claude/rules/<framework-name>.md (with agents left untracked) reach teardown and
+        # have TRACKED files removed from its working tree. `git ls-files --error-unmatch`
+        # exits 1=untracked (ok), 0=tracked, anything else = git error. If ANY existing
+        # subdir is tracked or indeterminate → skip the whole project (never remove when the
+        # tracked-status of any subdir is uncertain).
         if [ -d "${proj}.git" ]; then
             command -v git >/dev/null 2>&1 || continue
-            local _rc=0
-            ( cd "$proj" && git ls-files --error-unmatch .claude/agents >/dev/null 2>&1 ) || _rc=$?
-            [ "$_rc" -eq 1 ] || continue
+            local _sub _rc _tracked=0
+            for _sub in agents skills commands rules lib; do
+                [ -e "${proj}.claude/$_sub" ] || continue
+                _rc=0
+                ( cd "$proj" && git ls-files --error-unmatch ".claude/$_sub" >/dev/null 2>&1 ) || _rc=$?
+                [ "$_rc" -eq 1 ] || { _tracked=1; break; }
+            done
+            [ "$_tracked" -eq 0 ] || continue
         fi
         candidates+=("$proj")
     done
