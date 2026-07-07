@@ -2,7 +2,7 @@
 
 **The Complete Guide to Extending Claude Code with Skills, MCP, Slash Commands, and Subagents**
 
-Version: 3.0.0
+Version: 3.1.0
 Last Updated: 2026-07-07
 
 ---

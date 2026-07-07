@@ -5,6 +5,25 @@ All notable changes to Claude Agents will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-07-07
+
+### Added
+
+- **Autonomous cross-system self-migration** (opt-in, no auto-pull): after a deliberate `git pull` on any
+  machine, the framework finishes its own migration to user-global with no further manual steps. The existing
+  self-heal path (SessionStart healthcheck / launchd watchdog fork `install.sh --update`) now also runs a
+  guardrailed teardown of old per-project copies.
+  - `reconcile_legacy_projects()` in `install.sh --update`: gated behind an explicit per-machine marker
+    `~/.claude/.framework-autonomy` (`LEGACY_PROJECTS_DIR=<dir>`). For each project under that dir carrying a
+    per-project framework `.claude/agents`, it removes ONLY the framework shared-set subdirs, and ONLY when
+    git-**untracked** (never rewrites a repo's history). Framework-scoped, **snapshot-first**, idempotent (no-op
+    + no snapshot once torn down). **Absent marker → no-op** — public users and fresh installs are unaffected,
+    and there is deliberately **no auto-pull** (`git pull` stays the one manual trigger).
+  - **Watchdog plist self-reload**: `install_watchdog` now sha-tracks the loaded plist and reloads the daemon on
+    a real plist change, **deferring** the reload when running under the watchdog's own `--update` (avoids a
+    self-kill; the next SessionStart-triggered `--update` applies it). The watchdog script already self-updated
+    via launchd re-exec.
+
 ## [3.0.0] - 2026-07-07
 
 Outcome of a framework self-review (reversibility-ordered revamp). Phases 1–4 shipped the

@@ -17,7 +17,7 @@
 set -e
 
 # Configuration
-SCRIPT_VERSION="3.0.0"
+SCRIPT_VERSION="3.1.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEBUG="${DEBUG:-false}"
 
@@ -427,6 +427,82 @@ install_shared_set() {
     install_global_commands
 }
 
+# Append a JSON event to the framework health stream (best-effort, never fails).
+_health_log() {
+    local ts
+    ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)
+    mkdir -p "$HOME/.claude/analytics" 2>/dev/null || true
+    echo "{\"ts\":\"$ts\",$1}" >> "$HOME/.claude/analytics/framework-health.jsonl" 2>/dev/null || true
+}
+
+# sha256 of a file (portable across macOS/Linux); empty on failure.
+_sha_file() {
+    if command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" 2>/dev/null | awk '{print $1}'
+    elif command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" 2>/dev/null | awk '{print $1}'
+    fi
+}
+
+# Autonomous, OPT-IN, guardrailed migration of OLD per-project framework copies to
+# user-global. Runs ONLY if ~/.claude/.framework-autonomy sets LEGACY_PROJECTS_DIR.
+# For each project under that dir carrying a per-project framework .claude/agents,
+# remove ONLY the framework shared-set subdirs (agents/skills/commands/rules/lib) —
+# and ONLY when git-untracked (never rewrite a repo's history), snapshot-first,
+# idempotent. Personal .claude content, committed repos, and the framework repo/clone
+# are never touched. Absent marker → no-op (public users + fresh installs unaffected).
+reconcile_legacy_projects() {
+    local marker="$HOME/.claude/.framework-autonomy"
+    [ -f "$marker" ] || return 0
+
+    local dir
+    dir=$(grep -E '^LEGACY_PROJECTS_DIR=' "$marker" 2>/dev/null | head -1)
+    dir="${dir#LEGACY_PROJECTS_DIR=}"
+    dir="${dir%\"}"; dir="${dir#\"}"
+    dir="${dir%\'}"; dir="${dir#\'}"
+    dir="$(printf '%s' "$dir" | tr -d '[:space:]')"
+    case "$dir" in "~") dir="$HOME" ;; "~/"*) dir="$HOME/${dir#\~/}" ;; esac
+    [ -n "$dir" ] && [ -d "$dir" ] || return 0
+
+    # Pass 1 (read-only): collect UNTRACKED per-project framework copies.
+    local -a candidates=()
+    local proj bn
+    for proj in "$dir"/*/; do
+        [ -d "${proj}.claude/agents" ] || continue
+        bn=$(basename "$proj")
+        case "$bn" in claude-code-agents|claude-code) continue ;; esac
+        # Committed guard: never touch a repo where .claude/agents is git-tracked.
+        if [ -d "${proj}.git" ]; then
+            if ( cd "$proj" && git ls-files --error-unmatch .claude/agents >/dev/null 2>&1 ); then
+                continue
+            fi
+        fi
+        candidates+=("$proj")
+    done
+    [ "${#candidates[@]}" -eq 0 ] && return 0  # idempotent: nothing to migrate, no snapshot spam
+
+    echo -e "\n${BOLD}Autonomous legacy teardown:${NC} ${#candidates[@]} project(s) → user-global"
+
+    # Snapshot-first (only the affected projects' .claude).
+    mkdir -p "$HOME/.claude/snapshots" 2>/dev/null || true
+    local snap="$HOME/.claude/snapshots/preteardown-auto-$(date +%Y%m%d-%H%M%S 2>/dev/null).tgz"
+    local -a rels=()
+    for proj in "${candidates[@]}"; do rels+=("${proj#$dir/}.claude"); done
+    ( cd "$dir" && tar -czf "$snap" "${rels[@]}" ) >/dev/null 2>&1 || true
+
+    # Remove framework shared-set subdirs only (never other .claude content).
+    local removed=0 sub
+    for proj in "${candidates[@]}"; do
+        for sub in agents skills commands rules lib; do
+            [ -e "${proj}.claude/$sub" ] && rm -rf "${proj}.claude/$sub"
+        done
+        [ -e "${proj}.claude/.framework-version" ] && rm -f "${proj}.claude/.framework-version"
+        removed=$((removed + 1))
+    done
+    _health_log "\"event\":\"legacy_teardown\",\"projects\":$removed,\"snapshot\":\"$snap\""
+    print_success "Migrated $removed legacy project(s) to user-global (snapshot: $snap)"
+}
+
 # ============================================================================
 # Global Configuration (hooks / output-styles / statusline / settings)
 # ============================================================================
@@ -775,6 +851,10 @@ install_watchdog() {
         sed -i '' "s|__HOME__|${HOME}|g" "$plist_dst" 2>/dev/null || true
         print_success "Installed plist to LaunchAgents"
 
+        local _plist_marker="$HOME/.claude/.watchdog-plist.sha"
+        local _plist_sha
+        _plist_sha=$(_sha_file "$plist_dst")
+
         # Try bootstrap, fall back to load
         local uid
         uid=$(id -u)
@@ -788,6 +868,30 @@ install_watchdog() {
                 print_skip "Daemon already loaded (re-copy ok)"
             else
                 print_info "Could not auto-load daemon (try manually: launchctl bootstrap gui/$uid $plist_dst)"
+            fi
+        fi
+
+        # Reload the daemon if the plist CONTENT changed since it was last loaded.
+        # (The watchdog SCRIPT self-updates via launchd re-exec each interval; a plist
+        # change — StartInterval, paths — needs a reload.) A marker tracks the loaded
+        # plist's sha so we only reload on a real change. Under the watchdog's OWN
+        # --update (CLAUDE_WATCHDOG_RUN=1) we DEFER — a bootout there would kill the
+        # in-flight run; the next SessionStart-triggered --update (detached from the
+        # daemon) applies it safely, and the marker stays stale until it does.
+        local _loaded_sha=""
+        [ -f "$_plist_marker" ] && _loaded_sha=$(cat "$_plist_marker" 2>/dev/null)
+        if [ -z "$_loaded_sha" ]; then
+            echo "$_plist_sha" > "$_plist_marker" 2>/dev/null || true
+        elif [ -n "$_plist_sha" ] && [ "$_plist_sha" != "$_loaded_sha" ]; then
+            if [ "${CLAUDE_WATCHDOG_RUN:-}" = "1" ]; then
+                _health_log "\"event\":\"plist_reload_deferred\",\"reason\":\"under_watchdog\""
+                print_skip "Watchdog plist changed — reload deferred (under watchdog; next session applies)"
+            else
+                launchctl bootout "gui/$uid/com.claude-code-agents.framework-watchdog" 2>/dev/null || true
+                launchctl bootstrap "gui/$uid" "$plist_dst" 2>/dev/null || true
+                echo "$_plist_sha" > "$_plist_marker" 2>/dev/null || true
+                _health_log "\"event\":\"watchdog_plist_reloaded\""
+                print_success "Watchdog plist changed — daemon reloaded"
             fi
         fi
     fi
@@ -907,6 +1011,7 @@ update_installation() {
     write_framework_path_marker
     write_framework_version_marker
     install_watchdog || true
+    reconcile_legacy_projects
 }
 
 # ============================================================================
@@ -989,6 +1094,7 @@ main() {
             write_framework_path_marker
             write_framework_version_marker
             install_watchdog || true
+            reconcile_legacy_projects
             verify_installation
             print_summary
             ;;

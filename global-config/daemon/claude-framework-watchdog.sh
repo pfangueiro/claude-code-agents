@@ -82,7 +82,7 @@ if [ -x "$REPO/validate.sh" ]; then
     if [ "$err_count" -gt 0 ]; then
         log_jsonl "$HEALTH_LOG" "\"event\":\"heal_triggered\",\"source\":\"watchdog\",\"errors\":$err_count,\"action\":\"install.sh --update\""
         log "watchdog: drift ($err_count errors) — running install.sh --update to heal"
-        (cd "$REPO" && ./install.sh --update >/dev/null 2>&1) || true
+        (cd "$REPO" && CLAUDE_WATCHDOG_RUN=1 ./install.sh --update >/dev/null 2>&1) || true
         heal_out=$(cd "$REPO" && ./validate.sh --quick --json 2>&1 || true)
         heal_errs=0
         if command -v jq >/dev/null 2>&1; then
