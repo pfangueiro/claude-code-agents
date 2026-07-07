@@ -62,7 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `SessionEnd`. (3) `statusline.sh` git cache used a fixed `/tmp` path, so concurrent
   sessions in different repos read each other's cached git state — now scoped to
   `session_id`. Verified against code.claude.com/docs/en/{hooks,statusline}.
-- **Sub-agent + command currency & safety fixes** (`<pending-sha>`): from a currency sweep
+- **Sub-agent + command currency & safety fixes** (`c6aa820`): from a currency sweep
   of the sub-agents/hooks/skills docs (prompted by the XDA sub-agents eval). (1) SAFETY:
   added `disable-model-invocation: true` to side-effectful commands (`commit-pr`,
   `create-jira`, `new-feature`) — commands are now skills, so Claude could otherwise run
