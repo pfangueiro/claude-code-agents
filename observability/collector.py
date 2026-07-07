@@ -214,6 +214,21 @@ def migrate_schema(conn):
         "CREATE INDEX IF NOT EXISTS idx_hook_events_type "
         "ON hook_events(event_type, timestamp)"
     )
+    # skill_activations table: per-skill invocation counts (skill name from Skill tool input.skill),
+    # so skill pruning can be data-backed the way agent pruning already is.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS skill_activations ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "session_id TEXT NOT NULL, "
+        "project TEXT NOT NULL, "
+        "skill_name TEXT NOT NULL, "
+        "tool_use_id TEXT UNIQUE, "
+        "timestamp TEXT NOT NULL)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_skill_project "
+        "ON skill_activations(project, skill_name)"
+    )
     try:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_agent_status "
@@ -272,6 +287,7 @@ def process_jsonl_file(conn, jsonl_path, project, full_mode=False):
     session_data = {}  # Collect session metadata
     api_calls_batch = []
     agent_batch = []
+    skill_batch = []
     tool_batch = {}  # (session_id, tool_name) -> count
     turn_durations = []
 
@@ -374,6 +390,18 @@ def process_jsonl_file(conn, jsonl_path, project, full_mode=False):
                                     timestamp,
                                 ))
 
+                            # Skill activation (the invoked skill name is in input.skill)
+                            elif tool_name == "Skill":
+                                skill_name = block.get("input", {}).get("skill", "")
+                                if skill_name and session_id:
+                                    skill_batch.append((
+                                        session_id,
+                                        project,
+                                        skill_name,
+                                        block.get("id"),
+                                        timestamp,
+                                    ))
+
             # --- type: system, subtype: turn_duration ---
             elif rec_type == "system" and record.get("subtype") == "turn_duration":
                 duration_ms = record.get("durationMs", 0)
@@ -425,6 +453,17 @@ def process_jsonl_file(conn, jsonl_path, project, full_mode=False):
                 "INSERT INTO agent_activations (session_id, project, agent_name, "
                 "description, tool_use_id, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
                 agent_row,
+            )
+        except sqlite3.IntegrityError:
+            pass  # Duplicate tool_use_id, skip
+
+    # Insert skill activations (dedup by tool_use_id)
+    for skill_row in skill_batch:
+        try:
+            conn.execute(
+                "INSERT INTO skill_activations (session_id, project, skill_name, "
+                "tool_use_id, timestamp) VALUES (?, ?, ?, ?, ?)",
+                skill_row,
             )
         except sqlite3.IntegrityError:
             pass  # Duplicate tool_use_id, skip

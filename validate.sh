@@ -733,7 +733,7 @@ if [ -d "observability" ]; then
 
     # Validate schema.sql has expected tables
     if [ -f "observability/schema.sql" ]; then
-        for table in sessions api_calls agent_activations tool_usage ingestion_state hook_events; do
+        for table in sessions api_calls agent_activations skill_activations tool_usage ingestion_state hook_events; do
             if grep -q "CREATE TABLE.*${table}" "observability/schema.sql" 2>/dev/null; then
                 pass "schema.sql: has $table table"
             else

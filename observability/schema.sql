@@ -56,6 +56,17 @@ CREATE TABLE IF NOT EXISTS tool_usage (
     timestamp   TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS skill_activations (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id      TEXT NOT NULL REFERENCES sessions(session_id),
+    project         TEXT NOT NULL,
+    skill_name      TEXT NOT NULL,
+    tool_use_id     TEXT UNIQUE,
+    timestamp       TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_skill_project ON skill_activations(project, skill_name);
+
 CREATE TABLE IF NOT EXISTS ingestion_state (
     jsonl_path      TEXT PRIMARY KEY,
     last_byte_pos   INTEGER DEFAULT 0,
