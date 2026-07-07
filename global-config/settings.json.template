@@ -59,7 +59,7 @@
     "enabled": false
   },
   "attribution": {
-    "commit": "\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>",
+    "commit": "",
     "pr": "\n\n---\n🤖 Generated with [Claude Code](https://claude.com/claude-code)"
   },
   "hooks": {

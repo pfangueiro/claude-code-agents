@@ -127,6 +127,17 @@ run_structural_checks() {
         else
             pass "Structural: ~/.claude/settings.json .statusLine matches template"
         fi
+
+        # Attribution invariant: the maintainer's standing rule is no AI co-author
+        # trailer (see CLAUDE.md Git conventions), so the template must not ship a
+        # commit attribution string. Removes the human obligation to keep the two surfaces in sync.
+        local tmpl_ac
+        tmpl_ac=$(jq -r '.attribution.commit // ""' global-config/settings.json.template 2>/dev/null)
+        if [ -z "$tmpl_ac" ]; then
+            pass "Structural: settings.json.template attribution.commit empty (no AI co-author trailer)"
+        else
+            fail "Structural: settings.json.template attribution.commit non-empty — contradicts the no-AI-trailer rule"
+        fi
     fi
 
     # Warn if watchdog daemon not loaded (macOS only).
