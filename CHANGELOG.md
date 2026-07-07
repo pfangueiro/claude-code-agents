@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     git-**untracked** (never rewrites a repo's history). Framework-scoped, **snapshot-first**, idempotent (no-op
     + no snapshot once torn down). **Absent marker → no-op** — public users and fresh installs are unaffected,
     and there is deliberately **no auto-pull** (`git pull` stays the one manual trigger).
+  - **Autonomous scheduling**: the launchd watchdog runs a fast, teardown-only mode
+    (`install.sh --migrate-legacy`) **every cycle**, so a newly-set marker triggers the teardown within the
+    hour — independent of shared-set drift (the heal path only fires on validate errors). Manual immediate
+    trigger: `install.sh --migrate-legacy`.
   - **Watchdog plist self-reload**: `install_watchdog` now sha-tracks the loaded plist and reloads the daemon on
     a real plist change, **deferring** the reload when running under the watchdog's own `--update` (avoids a
     self-kill; the next SessionStart-triggered `--update` applies it). The watchdog script already self-updated

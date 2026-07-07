@@ -101,6 +101,16 @@ else
     log "watchdog: validate.sh not found or not executable"
 fi
 
+# -------- Task 1b: autonomous legacy migration (opt-in via marker) --------
+# Runs EVERY cycle so a newly-set ~/.claude/.framework-autonomy marker triggers the
+# old-per-project teardown within the hour, independent of shared-set drift (the
+# heal path above only fires on validate errors). Marker-gated + idempotent inside
+# install.sh: no marker → instant no-op; nothing to migrate → no-op + no snapshot.
+if [ -x "$REPO/install.sh" ]; then
+    (cd "$REPO" && ./install.sh --migrate-legacy >/dev/null 2>&1) || true
+    log "watchdog: legacy migration check complete"
+fi
+
 # -------- Task 2: git fsck --------
 # Filter benign noise (reflog residue, dangling commits, refs/ chatter) and
 # only alert on real object-level corruption. Two-stage:

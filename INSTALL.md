@@ -67,7 +67,7 @@ cd claude-code-agents && git pull --ff-only    # the one manual step; the rest i
 echo 'LEGACY_PROJECTS_DIR=/absolute/path/to/your/projects' > ~/.claude/.framework-autonomy
 ```
 
-With the marker set, each `--update` removes the framework's own shared-set subdirs from projects under that dir — **only when git-untracked** (never rewrites a repo's history), **framework-scoped** (your custom agents/skills are never touched), **snapshot-first** (to `~/.claude/snapshots/`), and idempotent. No marker → nothing happens.
+With the marker set, the framework removes its own shared-set subdirs from projects under that dir — **only when git-untracked** (never rewrites a repo's history), **framework-scoped** (your custom agents/skills are never touched), **snapshot-first** (to `~/.claude/snapshots/`), and idempotent. No marker → nothing happens. The watchdog re-runs this every cycle, so setting the marker migrates old copies within the hour; run `./install.sh --migrate-legacy` to do it immediately.
 
 ## Safety Features
 

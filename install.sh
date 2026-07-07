@@ -1102,6 +1102,12 @@ main() {
             echo -e "${BOLD}Running in UPDATE mode (non-interactive reconcile)${NC}"
             update_installation
             ;;
+        --migrate-legacy)
+            # Opt-in autonomous legacy teardown ONLY (marker-gated, idempotent, fast).
+            # The watchdog runs this every cycle so a newly-set ~/.claude/.framework-autonomy
+            # marker triggers the teardown within the hour — independent of shared-set drift.
+            reconcile_legacy_projects
+            ;;
         --help|-h)
             echo "Usage: ./install.sh [OPTION]"
             echo ""
@@ -1111,6 +1117,7 @@ main() {
             echo "Options:"
             echo "  (no option)    Install / re-install into ~/.claude (canonical)"
             echo "  --update       Non-interactive reconcile of ~/.claude (self-heal path)"
+            echo "  --migrate-legacy  Opt-in teardown of old per-project copies (needs ~/.claude/.framework-autonomy)"
             echo "  --help         Show this help message"
             echo ""
             echo "The SessionStart healthcheck hook and launchd watchdog fork"
