@@ -99,6 +99,7 @@ One install, user-global. Claude Code natively loads `~/.claude/{agents,skills,c
 |---------|-------------|
 | `./install.sh` | Install everything to `~/.claude`: agents, skills, commands, rules, hooks, MCP, global config |
 | `./install.sh --update` | Reconcile an existing install to the latest version |
+| `./install.sh --upgrade` | Migrate from an old per-project install: reconcile, confirm + tear down old copies, then self-verify ([details](./INSTALL.md#upgrading-from-the-old-per-project-framework)) |
 | `./install.sh --help` | Show all options |
 
 ### Verify Installation

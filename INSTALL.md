@@ -69,6 +69,24 @@ echo 'LEGACY_PROJECTS_DIR=/absolute/path/to/your/projects' > ~/.claude/.framewor
 
 With the marker set, the framework removes its own shared-set subdirs from projects under that dir — **only when git-untracked** (never rewrites a repo's history), **framework-scoped** (your custom agents/skills are never touched), **snapshot-first** (to `~/.claude/snapshots/`), and idempotent. No marker → nothing happens. The watchdog re-runs this every cycle, so setting the marker migrates old copies within the hour; run `./install.sh --migrate-legacy` to do it immediately.
 
+### Upgrading from the old per-project framework
+
+If you used an **older version that copied `.claude/` into each project**, one command migrates you to the user-global layout — run it **from inside your checkout** (this is a **manual, checkout-local** command; the `curl | bash` one-liner derives its mode from the checkout and can't pass `--upgrade`):
+
+```bash
+cd ~/.claude-code-agents && ./install.sh --upgrade
+```
+
+`--upgrade` (1) reconciles `~/.claude` to the latest, then (2) finds old per-project `.claude/` copies, **shows a count and the list**, asks **once**, and — only if you confirm — removes them snapshot-first, then (3) self-verifies with `validate.sh --quick`. What it touches:
+
+- Removes **only framework-named files** (`agents/skills/commands/rules/lib`), and **only when git-untracked**. Your **committed** repos, your **custom** agents/skills, and your personal `~/.claude/CLAUDE.md` are never touched. A snapshot is written to `~/.claude/snapshots/` first.
+- It reconciles `~/.claude` **even if you decline** the teardown.
+- **CI / non-interactive:** `./install.sh --upgrade --yes` or `CLAUDE_UPGRADE_ASSUME_YES=1 ./install.sh --upgrade`. Flags follow the mode (`--upgrade --yes`, not `--yes --upgrade`). With no terminal and no `--yes`, the teardown is **skipped** (nothing removed) and the exact re-run command is printed.
+
+> **Do NOT `git reset --hard` or delete project `.claude` directories by hand to migrate.** `--upgrade` does it safely (untracked-only, snapshot-first). A manual `reset --hard` can destroy uncommitted work and is never required.
+
+`--upgrade` (like `--update`) also resets `settings.json` `.attribution` to the framework value (empty commit trailer, standard PR footer). If you want a custom attribution, put it in `settings.local.json` (higher precedence).
+
 ## Safety Features
 
 - **Automatic Backups** — Creates timestamped backups before modifications
