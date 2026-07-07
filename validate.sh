@@ -118,6 +118,16 @@ run_structural_checks() {
         fi
     fi
 
+    # Regression guard: install.sh must implement AND advertise the --upgrade mode (the
+    # one-command old→new migration path). Catches an accidental removal of the case arm or help.
+    if [ -f "install.sh" ]; then
+        if grep -qE '^[[:space:]]*--upgrade\)' install.sh && grep -qE 'echo "  --upgrade' install.sh; then
+            pass "Structural: install.sh implements + advertises the --upgrade mode"
+        else
+            fail "Structural: install.sh missing the --upgrade mode or its --help entry"
+        fi
+    fi
+
     # Hook-drift check: every event in template must match user's ~/.claude/settings.json.
     # This catches the "sync_hooks add-if-missing" bug class: hook installed on disk but
     # not wired into settings.json because an older entry already existed.

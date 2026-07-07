@@ -11,6 +11,7 @@
 # Usage:
 #   ./install.sh            - Install / re-install into ~/.claude (canonical)
 #   ./install.sh --update   - Non-interactive reconcile of ~/.claude (self-heal)
+#   ./install.sh --upgrade  - Migrate from old per-project copies (reconcile + confirm teardown + verify)
 #   ./install.sh --help      - Show this help message
 # ============================================================================
 
@@ -33,6 +34,10 @@ NC='\033[0m' # No Color
 
 # Installation mode (no-args = canonical install)
 MODE="${1:-install}"
+# --upgrade consent flag (read ONLY by the --upgrade teardown; harmless no-op on other modes).
+# Canonical flag order is `--upgrade [--yes]` (MODE reads $1); the skip one-liner emits that.
+UPGRADE_ASSUME_YES=0
+for _arg in "$@"; do case "$_arg" in --yes|-y) UPGRADE_ASSUME_YES=1 ;; esac; done
 
 # Component lists
 AGENTS=(
@@ -451,17 +456,134 @@ _sha_file() {
 # and ONLY when git-untracked (never rewrite a repo's history), snapshot-first,
 # idempotent. Personal .claude content, committed repos, and the framework repo/clone
 # are never touched. Absent marker → no-op (public users + fresh installs unaffected).
-reconcile_legacy_projects() {
-    local marker="$HOME/.claude/.framework-autonomy"
-    [ -f "$marker" ] || return 0
+# ─────────────────────────────────────────────────────────────────────────────
+# --upgrade helpers (interactive one-shot old→new migration). NONE of these run on
+# the bare install / --update / --migrate-legacy paths.
+# ─────────────────────────────────────────────────────────────────────────────
 
-    local dir
-    dir=$(grep -E '^LEGACY_PROJECTS_DIR=' "$marker" 2>/dev/null | head -1)
-    dir="${dir#LEGACY_PROJECTS_DIR=}"
-    dir="${dir%\"}"; dir="${dir#\"}"
-    dir="${dir%\'}"; dir="${dir#\'}"
-    dir="$(printf '%s' "$dir" | tr -d '[:space:]')"
+# Concurrency lock — same mkdir scheme as update_installation, EXTRACTED so --upgrade can
+# reuse it without editing the protected --update body. Returns 0 if acquired (EXIT trap
+# cleans up), 1 if another install holds it.
+_acquire_install_lock() {
+    local lock_dir="$HOME/.claude/.install.lock.d" lock_pid_file
+    lock_pid_file="$lock_dir/pid"
+    mkdir -p "$HOME/.claude" 2>/dev/null || true
+    if [ -d "$lock_dir" ]; then
+        if [ -f "$lock_pid_file" ]; then
+            local lock_pid
+            lock_pid=$(cat "$lock_pid_file" 2>/dev/null)
+            if [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null; then
+                echo "another install is running (pid $lock_pid) — exiting cleanly" >&2
+                return 1
+            fi
+        fi
+        echo "removing stale lock at $lock_dir" >&2
+        rm -rf "$lock_dir"
+    fi
+    mkdir "$lock_dir" 2>/dev/null || { echo "lock acquisition failed — exiting" >&2; return 1; }
+    echo $$ > "$lock_pid_file"
+    # shellcheck disable=SC2064
+    trap "rm -rf '$lock_dir' 2>/dev/null || true" EXIT INT TERM
+    return 0
+}
+
+# Fail-closed consent for the interactive --upgrade teardown. $1=count $2=dir → 0 proceed,
+# 1 skip. Deletion happens ONLY on explicit --yes / CLAUDE_UPGRADE_ASSUME_YES, or a typed
+# y/yes at the CONTROLLING TERMINAL read via a DEDICATED fd bound to /dev/tty — never stdin,
+# so a piped `curl|bash` stdin can never be misread as consent. No tty + no explicit → skip.
+_upgrade_confirm_teardown() {
+    local _count="$1" _dir="$2" reply
+    if [ "${CLAUDE_UPGRADE_ASSUME_YES:-0}" = "1" ] || [ "${UPGRADE_ASSUME_YES:-0}" = "1" ]; then
+        _health_log "\"event\":\"upgrade_consent\",\"mode\":\"explicit_yes\",\"count\":$_count"
+        return 0
+    fi
+    if exec 9</dev/tty 2>/dev/null; then
+        {
+            printf '\n%s project(s) under %s carry old per-project framework copies.\n' "$_count" "$_dir"
+            printf 'Only git-untracked framework files are removed; a snapshot is saved first.\n'
+            printf 'Tear them down now? [y/N] '
+        } >/dev/tty 2>/dev/null
+        IFS= read -r -t 30 reply <&9 || reply=""
+        exec 9<&-
+        case "$reply" in
+            y|Y|yes|YES) _health_log "\"event\":\"upgrade_consent\",\"mode\":\"tty_yes\",\"count\":$_count"; return 0 ;;
+            *)           _health_log "\"event\":\"upgrade_consent\",\"mode\":\"tty_no\",\"count\":$_count"; echo "Declined — nothing removed."; return 1 ;;
+        esac
+    fi
+    _health_log "\"event\":\"upgrade_consent\",\"mode\":\"noninteractive_skip\",\"count\":$_count"
+    echo "No terminal for confirmation — teardown skipped (nothing removed)."
+    echo "  To migrate the ${_count} old copy/copies: ${SCRIPT_DIR}/install.sh --upgrade --yes"
+    echo "  (pipe-friendly:                          CLAUDE_UPGRADE_ASSUME_YES=1 ${SCRIPT_DIR}/install.sh --upgrade)"
+    return 1
+}
+
+# Marker-less --upgrade: resolve the projects dir to scan, prompting on /dev/tty. Echoes the
+# chosen dir on STDOUT only; prompts/diagnostics go to /dev/tty and stderr. Returns non-zero
+# (→ no teardown) if it can't get a safe dir. NEVER defaults to $HOME.
+_upgrade_resolve_dir() {
+    local suggested reply dir
+    suggested=$(dirname "$SCRIPT_DIR")
+    [ "$suggested" = "$HOME" ] && suggested=""
+    if ! exec 9</dev/tty 2>/dev/null; then
+        echo "No terminal to ask which directory holds old per-project copies." >&2
+        echo "Set ~/.claude/.framework-autonomy (LEGACY_PROJECTS_DIR=/path), or use ./install.sh --migrate-legacy." >&2
+        return 1
+    fi
+    if [ -n "$suggested" ]; then
+        printf 'Directory holding old per-project .claude copies [%s]: ' "$suggested" >/dev/tty 2>/dev/null
+    else
+        printf 'Absolute path of the dir holding old per-project .claude copies (blank to skip): ' >/dev/tty 2>/dev/null
+    fi
+    IFS= read -r reply <&9 || reply=""
+    exec 9<&-
+    dir="${reply:-$suggested}"
     case "$dir" in "~") dir="$HOME" ;; "~/"*) dir="$HOME/${dir#\~/}" ;; esac
+    if [ -z "$dir" ]; then
+        echo "Already on user-global — nothing to migrate." >&2
+        return 1
+    fi
+    if [ "$dir" = "$HOME" ] || [ ! -d "$dir" ]; then
+        echo "Refusing '$dir' (home directory or not a directory) — skipping teardown." >&2
+        return 1
+    fi
+    printf '%s\n' "$dir"
+}
+
+# Self-verify tail for --upgrade ONLY. Observe-only: runs validate.sh --quick WITHOUT --heal
+# (--heal reaches install --update, a deletion path, and always exits 0). Honest tri-state.
+_upgrade_self_verify() {
+    if [ -x "$SCRIPT_DIR/validate.sh" ]; then
+        local rc=0
+        if "$SCRIPT_DIR/validate.sh" --quick; then rc=0; else rc=$?; fi
+        if [ "$rc" -eq 0 ]; then
+            print_success "Upgrade verified (validate.sh --quick clean)"
+        else
+            echo -e "${YELLOW}UPGRADE VERIFY: validate.sh --quick reported issues — some may predate this upgrade. Run ./validate.sh for detail.${NC}"
+            exit "$rc"
+        fi
+    else
+        verify_installation
+        echo -e "${YELLOW}UNVERIFIED — validate.sh not found; ~/.claude structure present.${NC}"
+    fi
+}
+
+reconcile_legacy_projects() {
+    local explicit_dir="${1:-}" consent_mode="${2:-}"
+    local dir
+    if [ -z "$explicit_dir" ]; then
+        # Autonomous / no-arg path: marker-gated (unchanged behavior).
+        local marker="$HOME/.claude/.framework-autonomy"
+        [ -f "$marker" ] || return 0
+        dir=$(grep -E '^LEGACY_PROJECTS_DIR=' "$marker" 2>/dev/null | head -1)
+        dir="${dir#LEGACY_PROJECTS_DIR=}"
+        dir="${dir%\"}"; dir="${dir#\"}"
+        dir="${dir%\'}"; dir="${dir#\'}"
+        dir="$(printf '%s' "$dir" | tr -d '[:space:]')"
+        case "$dir" in "~") dir="$HOME" ;; "~/"*) dir="$HOME/${dir#\~/}" ;; esac
+    else
+        # --upgrade path: caller supplied and validated the directory (see _upgrade_resolve_dir).
+        dir="$explicit_dir"
+    fi
     [ -n "$dir" ] && [ -d "$dir" ] || return 0
 
     # Framework-owned names (from source) — we ONLY ever remove THESE, and a project
@@ -518,9 +640,21 @@ reconcile_legacy_projects() {
         fi
         candidates+=("$proj")
     done
-    [ "${#candidates[@]}" -eq 0 ] && return 0  # idempotent: nothing to migrate, no snapshot spam
+    if [ "${#candidates[@]}" -eq 0 ]; then
+        [ "$consent_mode" = confirm ] && echo "Nothing to migrate — already on user-global."
+        return 0   # EXPLICIT return (never the `&&` tail — under set -e a false test as the last
+                   # statement would make no-arg callers' update_installation reconcile exit non-zero)
+    fi
 
     echo -e "\n${BOLD}Autonomous legacy teardown:${NC} ${#candidates[@]} project(s) → user-global"
+
+    # Interactive one-shot (--upgrade, consent_mode=confirm): show the candidate LIST and require a
+    # shown-count confirmation BEFORE any snapshot/delete. No-arg (autonomous) callers pass
+    # consent_mode='' → this whole block is skipped → byte-identical to before.
+    if [ "$consent_mode" = confirm ]; then
+        for proj in "${candidates[@]}"; do echo "  - ${proj%/}"; done
+        _upgrade_confirm_teardown "${#candidates[@]}" "$dir" || return 0
+    fi
 
     # Snapshot-first (only the affected projects' .claude).
     mkdir -p "$HOME/.claude/snapshots" 2>/dev/null || true
@@ -1212,10 +1346,39 @@ main() {
             reconcile_legacy_projects
             verify_installation
             print_summary
+            echo -e "${CYAN}Migrating from old per-project .claude copies? Run ./install.sh --upgrade${NC}"
             ;;
         --update)
             echo -e "${BOLD}Running in UPDATE mode (non-interactive reconcile)${NC}"
             update_installation
+            ;;
+        --upgrade)
+            echo -e "${BOLD}Running in UPGRADE mode (reconcile + interactive legacy teardown + self-verify)${NC}"
+            check_prerequisites
+            preflight_checks
+            # Concurrency lock (extracted helper, same scheme as update_installation) so a human
+            # --upgrade can't race the hourly watchdog --update on settings.json. --update's own
+            # inline lock is left untouched.
+            _acquire_install_lock || exit 0
+            # Reconcile core — duplicated from update_installation (which is NOT called, so its
+            # protected body stays untouched). NO install_global_config / personalize_setup (same
+            # as --update; sync_hooks reseeds a deleted settings.json).
+            install_shared_set
+            sync_hooks
+            install_analytics || print_error "Analytics installation failed"
+            ensure_statusline
+            write_framework_path_marker
+            write_framework_version_marker
+            install_watchdog || true
+            # Interactive legacy teardown: marker dir if armed, else prompt for a safe dir.
+            if [ -f "$HOME/.claude/.framework-autonomy" ]; then
+                reconcile_legacy_projects "" confirm
+            else
+                local up_dir; up_dir=$(_upgrade_resolve_dir) || up_dir=""
+                [ -n "$up_dir" ] && reconcile_legacy_projects "$up_dir" confirm
+            fi
+            _upgrade_self_verify
+            print_summary
             ;;
         --migrate-legacy)
             # Opt-in autonomous legacy teardown ONLY (marker-gated, idempotent, fast).
@@ -1232,6 +1395,7 @@ main() {
             echo "Options:"
             echo "  (no option)    Install / re-install into ~/.claude (canonical)"
             echo "  --update       Non-interactive reconcile of ~/.claude (self-heal path)"
+            echo "  --upgrade [--yes]  Migrate from old per-project copies: reconcile, confirm + teardown, self-verify"
             echo "  --migrate-legacy  Opt-in teardown of old per-project copies (needs ~/.claude/.framework-autonomy)"
             echo "  --help         Show this help message"
             echo ""

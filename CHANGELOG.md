@@ -34,6 +34,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   live validation in the hot path**, caches the result for 60s (like the existing git segment), and emits nothing
   when the framework isn't installed (plain Claude Code users are unaffected). A `validate.sh` regression guard
   asserts the segment survives reconciles.
+- **`install.sh --upgrade` — one-command migration from the old per-project framework** (designed + de-risked with
+  a multi-agent workflow pre-mortem; the teardown-safety and `.attribution` fixes below came out of the same
+  review). Reconciles `~/.claude` to the latest, then detects old per-project `.claude/` copies, shows a **count +
+  the candidate list**, asks **one confirmation**, does a snapshot-first framework-scoped teardown, and
+  self-verifies (`validate.sh --quick`). Safety by construction: teardown runs ONLY past a shown-count
+  confirmation — an explicit `--yes` / `CLAUDE_UPGRADE_ASSUME_YES=1`, or a typed `y` at the **controlling
+  terminal** read via a dedicated fd bound to `/dev/tty` (never stdin, so a piped `curl|bash` stdin can't be
+  misread as consent; `[ -t 0 ]` is deliberately NOT the interactivity test — it reads false under `curl|bash`
+  even at a real terminal). No terminal + no explicit consent → **fail-closed skip** (exit 0) with the exact
+  re-run one-liner. The scan dir comes from the `.framework-autonomy` marker if armed, else a `/dev/tty` prompt
+  that **refuses `$HOME`** and non-directories. Self-verify is observe-only (never `--heal`) with an honest
+  tri-state (green / measured non-zero / UNVERIFIED). Bare install, `--update`, and the autonomous no-arg teardown
+  are **byte-identical** — the parameterized `reconcile_legacy_projects` returns 0 for no-arg callers (the `set -e`
+  exit-code contract the self-heal loop depends on). Concurrency-locked against the watchdog; bare install now
+  hints `--upgrade`. Verified: no-arg exits 0 and tears down silently; `--upgrade --yes` shows count+list, removes
+  untracked, skips committed, snapshots; non-interactive-no-consent skips with the one-liner. (This is a MANUAL,
+  checkout-local command — `curl|bash` derives its mode from checkout presence and can't pass `--upgrade`; see
+  INSTALL.md.)
 
 ### Fixed
 
