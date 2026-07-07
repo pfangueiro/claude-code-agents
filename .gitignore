@@ -18,8 +18,8 @@ Thumbs.db
 # MCP config (contains machine-specific paths - use .mcp.json.example as template)
 .mcp.json
 
-# Deployment marker — written by install.sh into deployed projects only.
-# Never belongs in the source tree (install.sh has a guard, this is defense in depth).
+# Framework version marker — install.sh writes this to ~/.claude/.framework-version,
+# never into the source tree. Ignored here as defense in depth so it can't be committed.
 .claude/.framework-version
 
 # install.sh creates these automatically during --update as local rollback snapshots.

@@ -33,6 +33,10 @@ leverage-per-effort; a single public product) and repositioned it as a public to
 - **Scrubbed personal/employer leakage** from the public repo (employer name, a private internal repo,
   `~/local-codebase` paths, project counts, two-Mac framing) across `CHANGELOG.md`/`CLAUDE.md`/
   `CONTRIBUTING.md`/`SECURITY.md`/`validate.sh`.
+- **Post-migration currency sweep**: removed the last stale per-project references (`CONTRIBUTING.md`'s
+  `--full /path` test flow + "deployed projects" wording, `global-config/README.md`'s `--team-setup`
+  framing, the `.gitignore` per-project-marker comment) and repointed `meta-agent`'s lib reads to
+  `~/.claude/lib`.
 
 ### Added
 

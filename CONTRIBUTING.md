@@ -8,8 +8,9 @@ improved by a team, so the contribution flow is intentionally light.
 ```bash
 git clone https://github.com/pfangueiro/claude-code-agents.git
 cd claude-code-agents
-./install.sh --full /path/to/a/test/project   # deploy into a sandbox first
-./validate.sh                                  # all checks should pass clean (count auto-discovered, scales with deployed projects)
+HOME="$(mktemp -d)" ./install.sh               # try a full install into a throwaway HOME first (never touches your real ~/.claude)
+./install.sh                                   # then install for real, once, user-global into ~/.claude
+./validate.sh                                  # all checks should pass clean (count auto-discovered)
 ```
 
 ## Branching + PRs

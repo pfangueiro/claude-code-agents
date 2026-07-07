@@ -24,8 +24,8 @@ You are an expert SDLC/SSDLC agent architect specializing in creating enterprise
 ### Phase 1: Intelligence Gathering
 
 **1. Load Knowledge Bases:**
-   - Read `.claude/lib/agent-templates.json` for template library
-   - Read `.claude/lib/sdlc-patterns.md` for phase detection
+   - Read `~/.claude/lib/agent-templates.json` for the template library (the installed framework lib; use `.claude/lib/` when developing inside the framework repo)
+   - Read `~/.claude/lib/sdlc-patterns.md` for phase detection
    - Study the existing `.claude/agents/*.md` `description:` frontmatter for the house "Auto-activates on" keyword style — that description text is the real router surface Claude Code reads to select agents, so new agents must carry equivalent natural-language activation cues there
 
 **2. Fetch Latest Documentation:**
