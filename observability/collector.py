@@ -23,26 +23,60 @@ from datetime import datetime, timezone
 # Cost model (USD per token)
 # ---------------------------------------------------------------------------
 MODEL_PRICES = {
-    # Opus 4.6
-    "claude-opus-4-6": {
-        "input": 15e-6,
-        "output": 75e-6,
-        "cache_read": 1.5e-6,
-        "cache_create": 18.75e-6,
+    # --- Current models (per the claude-api model table, 2026) ---
+    # Opus tier is $5/$25 input/output (Opus dropped from the old $15/$75).
+    # cache_read = 0.1x input, cache_create = 1.25x input (5-min TTL).
+    "claude-opus-4-8": {
+        "input": 5e-6,
+        "output": 25e-6,
+        "cache_read": 0.5e-6,
+        "cache_create": 6.25e-6,
     },
-    # Sonnet 4.6
+    "claude-opus-4-7": {
+        "input": 5e-6,
+        "output": 25e-6,
+        "cache_read": 0.5e-6,
+        "cache_create": 6.25e-6,
+    },
+    "claude-opus-4-6": {
+        "input": 5e-6,
+        "output": 25e-6,
+        "cache_read": 0.5e-6,
+        "cache_create": 6.25e-6,
+    },
+    # Sonnet 5 — $3/$15
+    "claude-sonnet-5": {
+        "input": 3e-6,
+        "output": 15e-6,
+        "cache_read": 0.3e-6,
+        "cache_create": 3.75e-6,
+    },
+    # Fable 5 — $10/$50
+    "claude-fable-5": {
+        "input": 10e-6,
+        "output": 50e-6,
+        "cache_read": 1e-6,
+        "cache_create": 12.5e-6,
+    },
+    # Sonnet 4.6 — $3/$15
     "claude-sonnet-4-6": {
         "input": 3e-6,
         "output": 15e-6,
         "cache_read": 0.3e-6,
         "cache_create": 3.75e-6,
     },
-    # Haiku 4.5
+    # Haiku 4.5 — $1/$5 (alias + dated ID)
+    "claude-haiku-4-5": {
+        "input": 1e-6,
+        "output": 5e-6,
+        "cache_read": 0.1e-6,
+        "cache_create": 1.25e-6,
+    },
     "claude-haiku-4-5-20251001": {
-        "input": 0.8e-6,
-        "output": 4e-6,
-        "cache_read": 0.08e-6,
-        "cache_create": 1e-6,
+        "input": 1e-6,
+        "output": 5e-6,
+        "cache_read": 0.1e-6,
+        "cache_create": 1.25e-6,
     },
     # Older model IDs (keep for backward compat with historical logs)
     "claude-sonnet-4-5-20250514": {

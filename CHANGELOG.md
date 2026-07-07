@@ -28,6 +28,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     self-kill; the next SessionStart-triggered `--update` applies it). The watchdog script already self-updated
     via launchd re-exec.
 
+### Fixed
+
+- **Autonomous legacy teardown is now framework-scoped** (`de82069`): `reconcile_legacy_projects()` removes only
+  the framework's OWN files (agents/skills/commands/rules/lib, enumerated by name from source) from an untracked
+  project — never a project's own custom agents/skills, even uncommitted ones — then `rmdir`s the emptied
+  framework subdirs. A project qualifies for teardown only if it actually holds a framework-owned agent file, so a
+  custom-only project is never a candidate (no snapshot spam, stays idempotent). Previously the whole
+  `agents/skills/...` subdirs were deleted, which could drop uncommitted custom content. Verified in a sandbox:
+  framework files removed while a custom agent + custom skill survive; committed / git-error / snapshot-fail
+  guardrails intact; custom-only untouched; re-run makes no new snapshot.
+- **`observability/collector.py` cost model refreshed**: added the current model IDs (`claude-opus-4-8`,
+  `claude-sonnet-5`, `claude-fable-5`, plus the `claude-haiku-4-5` alias) so per-session cost estimates stop
+  falling back to Sonnet pricing with an "unknown model" warning. Corrected two stale rows — the Opus tier is now
+  $5/$25 input/output (the `claude-opus-4-6` entry was 3× high at $15/$75), and Haiku 4.5 is $1/$5 (was $0.8/$4).
+  Cache read/create derived from the standard 0.1× / 1.25× (5-min TTL) multipliers.
+- **Removed the deprecated Postgres MCP server** from `.mcp.json.example` (and the `global-config/` copy) and from
+  the README: `@modelcontextprotocol/server-postgres` is marked "no longer supported" on npm (frozen at 0.6.2).
+  The MCP badge/table now read **4 servers** (context7, sequential-thinking, playwright, github), and the MCP
+  section no longer claims the servers are "auto-configured on install" — `install.sh` ships the example config
+  but does not register any MCP server (users add them manually). Added a Requirements line and an INSTALL.md link
+  to the README.
+
 ## [3.0.0] - 2026-07-07
 
 Outcome of a framework self-review (reversibility-ordered revamp). Phases 1–4 shipped the

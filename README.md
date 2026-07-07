@@ -5,11 +5,13 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://code.claude.com/docs/en/overview)
 [![Agents](https://img.shields.io/badge/Agents-13-orange.svg)](#-available-agents)
 [![Skills](https://img.shields.io/badge/Skills-28-green.svg)](#-skills-system)
-[![MCP](https://img.shields.io/badge/MCP-5%20Servers-brightgreen.svg)](#-mcp-integration)
+[![MCP](https://img.shields.io/badge/MCP-4%20Servers-brightgreen.svg)](#-mcp-integration)
 
 **13 auto-activating AI agents for every phase of software development.** Just describe what you want to build — the right specialists engage automatically.
 
 > Works with [Claude Code](https://code.claude.com/docs/en/overview) (Anthropic's CLI). No plugins, no configuration, no commands to memorize.
+
+**Requirements:** macOS or Linux with `bash` and `git`; `jq` and `npx` are optional (used for the statusline and MCP examples). See **[INSTALL.md](./INSTALL.md)** for updating, cross-machine migration, and the autonomous self-heal setup.
 
 ---
 
@@ -41,7 +43,7 @@ Agents activate automatically based on your words.
 | **Agents** | 13 | Auto-activating SDLC specialists (planning through production) |
 | **Skills** | 28 | Modular knowledge packages (git, Docker, CI/CD, K8s, SRE, IaC, observability, experiment-loop, scheduled-tasks, worktree-workflow, remote-triggers, context-escalation, diverge, etc.) |
 | **Slash Commands** | 13 | `/commit-pr`, `/review-pr`, `/security-scan`, `/compact`, `/new-feature`, `/create-jira`, `/build-fix`, `/tdd`, `/quality-gate`, `/checkpoint`, `/save-session`, `/resume-session`, `/optimize` |
-| **MCP Servers** | 5 | context7, sequential-thinking, playwright, github, postgres |
+| **MCP Servers** | 4 | context7, sequential-thinking, playwright, github |
 | **Rules** | 6 | Auto-enforced security, code quality, fix quality, verification, framework integrity, and anti-anchoring standards |
 | **Hooks** | 10 | Agent tracking, session lifecycle, permission auditing, file protection, auto-lint, debug detection, pre-compact snapshots, notifications |
 
@@ -182,7 +184,7 @@ python3 .claude/skills/skill-creator/scripts/init_skill.py my-skill --path .clau
 
 ## MCP Integration
 
-5 Model Context Protocol servers auto-configured on install:
+4 Model Context Protocol servers, provided as an example config (`.mcp.json.example`) — install does **not** register them; add the ones you want to Claude Code with the commands below:
 
 | Server | What It Does |
 |--------|-------------|
@@ -190,7 +192,6 @@ python3 .claude/skills/skill-creator/scripts/init_skill.py my-skill --path .clau
 | **sequential-thinking** | Deep structured reasoning (31,999 thinking tokens) |
 | **playwright** | Browser automation and E2E testing |
 | **github** | PR/issue management via GitHub API |
-| **postgres** | Database queries and optimization |
 
 ### Manual MCP Setup
 
@@ -199,7 +200,6 @@ claude mcp add context7 -- npx @upstash/context7-mcp@latest
 claude mcp add sequential-thinking-server -- npx @modelcontextprotocol/server-sequential-thinking
 claude mcp add playwright -- npx @executeautomation/playwright-mcp-server
 claude mcp add github -- npx -y @modelcontextprotocol/server-github
-claude mcp add postgres -- npx -y @modelcontextprotocol/server-postgres
 ```
 
 ---
