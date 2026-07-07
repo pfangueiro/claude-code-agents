@@ -6,6 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Claude Agents** — enterprise AI agent system with 13 specialized SDLC/SSDLC agents, 28 skills, and 13 slash commands that auto-activate based on natural language. Automatically selects optimal Claude model (Haiku/Sonnet/Opus) per task complexity.
 
+## Git & Commit Conventions
+
+Applies to **every machine** committing to this repo — keeps the multi-Mac setup consistent (these live here, not only in a per-machine `~/.claude/CLAUDE.md`, so both machines honor them):
+
+- **Conventional Commits**: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`; add a scope when it clarifies (`fix(install):`, `feat(validate):`).
+- **No AI-attribution trailers** — do NOT add `Co-Authored-By:` or any assistant/AI trailer. Commits are authored solely by the maintainer.
+- **Never force-push `main`; never amend or skip hooks** unless explicitly asked.
+- **CHANGELOG in the same change**: add the SHA-cited bullet when you commit the change (the recurring audit gap).
+
 ## IMPORTANT: Auto-Activation
 
 Agents activate automatically from natural language. Just describe what you want — the right specialist engages.
