@@ -1,5 +1,5 @@
 #!/bin/bash
-# Session end hook: logs session completion on Stop event
+# Session end hook: logs session completion on SessionEnd event
 # Writes to ~/.claude/analytics/session-summaries.jsonl
 
 SUMMARIES_FILE="$HOME/.claude/analytics/session-summaries.jsonl"

@@ -33,7 +33,9 @@ case "$tool_name" in
       *.aws/credentials*|*.ssh/id_*|*credentials.json|*serviceAccount.json)
         ;; # Fall through — let user decide
       *)
-        echo "allow"
+        # PermissionRequest auto-approve requires a JSON decision on stdout
+        # (a bare "allow" string is NOT parsed and silently falls through).
+        echo '{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}'
         exit 0
         ;;
     esac

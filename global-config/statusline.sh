@@ -65,8 +65,11 @@ else
     duration_display="$((duration_s / 3600))h$((duration_s % 3600 / 60))m"
 fi
 
-# [FIX 2] Cache git operations (5-second TTL) to avoid running git on every update
-GIT_CACHE="/tmp/statusline-git-cache"
+# [FIX 2] Cache git operations (5-second TTL) to avoid running git on every update.
+# Scope the cache to session_id so concurrent sessions in different repos don't
+# read each other's cached git state (stable within a session, unique across).
+session_id=$(echo "$input" | jq -r '.session_id // "nosession"' 2>/dev/null)
+GIT_CACHE="/tmp/statusline-git-cache-${session_id}"
 GIT_CACHE_TTL=5
 
 git_cache_is_stale() {
