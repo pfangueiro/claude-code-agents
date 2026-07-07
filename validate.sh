@@ -96,6 +96,18 @@ run_structural_checks() {
         fi
     fi
 
+    # Regression guard: statusline.sh must keep the framework-status segment (reads
+    # .framework-version + derives health from the framework-health.jsonl diagnostic
+    # stream). Catches a reconcile/overwrite that silently drops the "gear<version> glyph".
+    if [ -f "global-config/statusline.sh" ]; then
+        if grep -q '\.framework-version' global-config/statusline.sh \
+           && grep -q 'framework-health\.jsonl' global-config/statusline.sh; then
+            pass "Structural: statusline.sh has the framework-status segment"
+        else
+            fail "Structural: statusline.sh MISSING the framework-status segment"
+        fi
+    fi
+
     # Hook-drift check: every event in template must match user's ~/.claude/settings.json.
     # This catches the "sync_hooks add-if-missing" bug class: hook installed on disk but
     # not wired into settings.json because an older entry already existed.

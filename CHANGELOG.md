@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     a real plist change, **deferring** the reload when running under the watchdog's own `--update` (avoids a
     self-kill; the next SessionStart-triggered `--update` applies it). The watchdog script already self-updated
     via launchd re-exec.
+- **Framework status in the statusline**: `statusline.sh` now renders a compact `⚙<version> <glyph>` segment at
+  the end of line 1 — `✓` healthy, `⟳` self-healing in progress, `⚠` watchdog stalled / heal failed / recent
+  corruption (within 24h). It reads only the framework's own cheap artifacts (`.framework-version` plus the
+  watchdog/healthcheck `framework-health.jsonl` / `watchdog-alerts.jsonl` diagnostic stream) — it **never runs a
+  live validation in the hot path**, caches the result for 60s (like the existing git segment), and emits nothing
+  when the framework isn't installed (plain Claude Code users are unaffected). A `validate.sh` regression guard
+  asserts the segment survives reconciles.
 
 ### Fixed
 

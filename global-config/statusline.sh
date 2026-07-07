@@ -181,13 +181,58 @@ done
 
 ctx="${bar} ${C_GRAY}${pct}% of ${max_k}k tokens"
 
-# Build output: Model [Agent] | Dir | Branch (uncommitted) | Cost Duration Lines | Context
+# ── Framework status ────────────────────────────────────────────────────────
+# Cheap, cached (60s) health of the claude-code-agents framework itself — NEVER a
+# live validation in the hot path. Version comes from ~/.claude/.framework-version;
+# the health glyph is DERIVED from the diagnostic stream the watchdog/healthcheck
+# already write (framework-health.jsonl) plus corruption alerts. Emits nothing if
+# the framework isn't installed here, so a plain Claude Code user sees no change.
+#   ✓ healthy   ⟳ self-healing in progress   ⚠ watchdog stalled / heal failed / recent corruption
+fw_seg=""; fw_ver=""
+FW_CACHE="/tmp/statusline-fw-cache-${UID:-$(id -u 2>/dev/null || echo x)}"
+_fw_cache_stale() {
+    [[ -f "$FW_CACHE" ]] || return 0
+    local m; m=$(stat -f %m "$FW_CACHE" 2>/dev/null || stat -c %Y "$FW_CACHE" 2>/dev/null || echo 0)
+    (( $(date +%s) - m > 60 ))
+}
+_iso_epoch() { date -j -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s 2>/dev/null || date -d "$1" +%s 2>/dev/null || echo 0; }
+if _fw_cache_stale; then
+    _v=$(grep -m1 '^version=' "$HOME/.claude/.framework-version" 2>/dev/null | cut -d= -f2)
+    if [[ -n "$_v" ]]; then
+        _g="✓"; _c="$C_GREEN"; _now=$(date +%s)
+        _H="$HOME/.claude/analytics/framework-health.jsonl"
+        _A="$HOME/.claude/analytics/watchdog-alerts.jsonl"
+        if [[ -f "$_H" ]]; then
+            # freshness: the watchdog logs hourly; >90min of silence = likely stalled
+            _lts=$(tail -1 "$_H" | jq -r '.ts // empty' 2>/dev/null)
+            if [[ -n "$_lts" ]]; then _le=$(_iso_epoch "$_lts"); [[ "$_le" -gt 0 && $((_now-_le)) -gt 5400 ]] && { _g="⚠"; _c="$C_YELLOW"; }; fi
+            # heal state: most recent heal_* event in the recent tail
+            case "$(tail -40 "$_H" | grep -oE 'heal_(triggered|succeeded|failed)' | tail -1)" in
+                heal_failed)    _g="⚠"; _c="$C_RED" ;;
+                heal_triggered) _g="⟳"; _c="$C_YELLOW" ;;
+            esac
+        fi
+        # a corruption alert within the last 24h trumps everything
+        if [[ -f "$_A" ]]; then
+            _ats=$(tail -1 "$_A" | jq -r '.ts // empty' 2>/dev/null)
+            if [[ -n "$_ats" ]]; then _ae=$(_iso_epoch "$_ats"); [[ "$_ae" -gt 0 && $((_now-_ae)) -lt 86400 ]] && { _g="⚠"; _c="$C_RED"; }; fi
+        fi
+        printf '%s\n%s\n' "$_v" "${_c}${_g}${C_RESET}" > "$FW_CACHE"
+    else
+        printf '\n\n' > "$FW_CACHE"
+    fi
+fi
+{ read -r fw_ver; read -r _fw_glyph; } < "$FW_CACHE" 2>/dev/null
+[[ -n "$fw_ver" ]] && fw_seg="${C_GRAY}⚙${fw_ver} ${_fw_glyph}"
+
+# Build output: Model [Agent] | Dir | Branch (uncommitted) | Cost Duration Lines | Context [| Framework]
 output="${C_ACCENT}${model}${C_GRAY}"
 # [FIX 6] Show active agent name when running a specialized agent
 [[ -n "$agent_name" ]] && output+=" [${C_ACCENT}${agent_name}${C_GRAY}]"
 output+=" | 📁${dir}"
 [[ -n "$branch" ]] && output+=" | 🔀${branch} ${git_status}"
 output+=" | 💰${cost_display} ⏱${duration_display} ${C_ACCENT}${lines_display}${C_GRAY} | ${ctx}${C_RESET}"
+[[ -n "$fw_seg" ]] && output+=" ${C_GRAY}|${C_RESET} ${fw_seg}${C_RESET}"
 
 printf '%b\n' "$output"
 
@@ -197,6 +242,7 @@ if [[ -n "$transcript_path" && -f "$transcript_path" ]]; then
     [[ -n "$agent_name" ]] && plain_output+=" [${agent_name}]"
     [[ -n "$branch" ]] && plain_output+=" | 🔀${branch} ${git_status}"
     plain_output+=" | ${cost_display} ${duration_display} ${lines_display} | xxxxxxxxxx ${pct}% of ${max_k}k tokens"
+    [[ -n "$fw_ver" ]] && plain_output+=" | O ${fw_ver} o"
     max_len=${#plain_output}
     last_user_msg=$(jq -rs '
         def is_unhelpful:
