@@ -5,7 +5,7 @@ All notable changes to Claude Agents will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.0.0] - 2026-07-07
 
 Outcome of a framework self-review (reversibility-ordered revamp). Phases 1–4 shipped the
 low-regret cleanup; Phase 5 migrated the framework to a **user-global install** (goal resolved to

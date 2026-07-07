@@ -2,8 +2,8 @@
 
 **The Complete Guide to Extending Claude Code with Skills, MCP, Slash Commands, and Subagents**
 
-Version: 2.10.0
-Last Updated: 2026-05-29
+Version: 3.0.0
+Last Updated: 2026-07-07
 
 ---
 
@@ -1055,6 +1055,6 @@ By understanding when and how to use each mechanism, you can create powerful, ma
 
 ---
 
-**Version**: 2.10.0 - Divergence & De-Anchoring (anti-anchoring rule, /diverge skill with isolated parallel sub-agents, de-anchoring step in 7 open-ended agents, consequence×openness pre-flight self-gates, spawner-skill no-fork invariant)
+**Version**: 3.0.0 - User-Global Install (the framework installs once into ~/.claude and applies to every project automatically; per-project fan-out retired; public repositioning + personal-leak scrub)
 **License**: MIT
 **Maintainer**: Claude Agents Project

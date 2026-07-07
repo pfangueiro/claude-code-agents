@@ -1,7 +1,7 @@
 # Claude Agents - AI-Powered SDLC Agent System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-2.10.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://code.claude.com/docs/en/overview)
 [![Agents](https://img.shields.io/badge/Agents-13-orange.svg)](#-available-agents)
 [![Skills](https://img.shields.io/badge/Skills-28-green.svg)](#-skills-system)

@@ -300,7 +300,7 @@ python3 .claude/skills/skill-creator/scripts/package_skill.py \
    - Dependency management
    - Team skill repositories
 
-### Future Vision (v3.0.0)
+### Future Ideas
 - AI-assisted skill creation
 - Skill analytics and telemetry
 - Cross-project skill synchronization
