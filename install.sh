@@ -468,14 +468,19 @@ reconcile_legacy_projects() {
     local -a candidates=()
     local proj bn
     for proj in "$dir"/*/; do
+        [ -L "${proj%/}" ] && continue                 # skip symlinked project dirs
         [ -d "${proj}.claude/agents" ] || continue
         bn=$(basename "$proj")
         case "$bn" in claude-code-agents|claude-code) continue ;; esac
-        # Committed guard: never touch a repo where .claude/agents is git-tracked.
+        # Committed guard (FAIL-CLOSED): only tear down when git can DEFINITIVELY confirm
+        # .claude/agents is UNTRACKED. `git ls-files --error-unmatch` exits 0=tracked (skip),
+        # 1=untracked (eligible), anything else = git error → skip (never risk removing
+        # committed content when we cannot determine tracked-status).
         if [ -d "${proj}.git" ]; then
-            if ( cd "$proj" && git ls-files --error-unmatch .claude/agents >/dev/null 2>&1 ); then
-                continue
-            fi
+            command -v git >/dev/null 2>&1 || continue
+            local _rc=0
+            ( cd "$proj" && git ls-files --error-unmatch .claude/agents >/dev/null 2>&1 ) || _rc=$?
+            [ "$_rc" -eq 1 ] || continue
         fi
         candidates+=("$proj")
     done
@@ -489,6 +494,13 @@ reconcile_legacy_projects() {
     local -a rels=()
     for proj in "${candidates[@]}"; do rels+=("${proj#$dir/}.claude"); done
     ( cd "$dir" && tar -czf "$snap" "${rels[@]}" ) >/dev/null 2>&1 || true
+    # FAIL-CLOSED: only remove if the snapshot is a valid, non-empty, readable archive —
+    # never tear down without a recovery path.
+    if [ ! -s "$snap" ] || ! tar -tzf "$snap" >/dev/null 2>&1; then
+        _health_log "\"event\":\"legacy_teardown_aborted\",\"reason\":\"snapshot_failed\",\"snapshot\":\"$snap\""
+        print_error "Legacy teardown ABORTED — snapshot failed; nothing removed"
+        return 0
+    fi
 
     # Remove framework shared-set subdirs only (never other .claude content).
     local removed=0 sub
