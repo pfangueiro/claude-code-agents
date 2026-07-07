@@ -46,21 +46,28 @@ Everything lands under `~/.claude/` and is loaded by Claude Code in every projec
 The installer also:
 
 - Merges or installs global settings in `~/.claude/settings.json`
-- Configures 5 MCP servers (context7, sequential-thinking, playwright, github, postgres)
+- Ships an MCP reference guide (`~/.claude/lib/mcp-guide.md`); add your own MCP servers per Claude Code's docs (MCP config is machine-specific and not auto-installed)
 - Installs the observability dashboard with the `claude-obs` alias
 - Checks prerequisites (`git`, `curl` required; `jq`, `npx` optional)
 
-## Update
+## Update & migrate other machines
+
+The framework is **self-updating**: after a `git pull` on any machine, the SessionStart healthcheck and the launchd watchdog automatically fork `install.sh --update` to reconcile `~/.claude` — you don't have to run the installer by hand. `git pull` is the one deliberate trigger (there is deliberately **no auto-pull**).
 
 ```bash
-cd claude-code-agents
-git pull
-./install.sh --update
+cd claude-code-agents && git pull --ff-only    # the one manual step; the rest is autonomous
+./install.sh --update                          # optional: reconcile now instead of waiting for self-heal
 ```
 
-- Updates all components to the latest version
-- Creates a backup before updating
-- Preserves your customizations
+`--update` re-copies the framework's shared set to `~/.claude` (replacing framework files so drift heals) while preserving your own `~/.claude/CLAUDE.md`, personal skills, and settings.
+
+**Optional — autonomously migrate old per-project `.claude/` copies.** If you previously deployed the framework into individual projects, create an opt-in marker so `--update` migrates them to user-global for you:
+
+```bash
+echo 'LEGACY_PROJECTS_DIR=/absolute/path/to/your/projects' > ~/.claude/.framework-autonomy
+```
+
+With the marker set, each `--update` removes the framework's own shared-set subdirs from projects under that dir — **only when git-untracked** (never rewrites a repo's history), **framework-scoped** (your custom agents/skills are never touched), **snapshot-first** (to `~/.claude/snapshots/`), and idempotent. No marker → nothing happens.
 
 ## Safety Features
 
