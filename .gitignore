@@ -43,3 +43,9 @@ Thumbs.db
 # Python bytecode (from observability/ tooling — e.g. py_compile / running collector.py)
 __pycache__/
 *.pyc
+# Never commit audio / recordings
+*.mp3
+*.wav
+*.m4a
+*.aac
+*.ogg
