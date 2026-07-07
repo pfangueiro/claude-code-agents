@@ -5,6 +5,53 @@ All notable changes to Claude Agents will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Outcome of a framework self-review (reversibility-ordered revamp, Phases 1–4). The
+architectural user-global/plugin migration (Phase 5) is deferred pending a goal decision
+and accrued skill-usage data.
+
+### Added
+
+- **Per-skill observability** (`c262cef`): new `skill_activations` table plus a `Skill`-tool
+  branch in `observability/collector.py` (mirrors the existing Task/Agent capture, reads
+  `input.skill`). Skill usage was aggregate-only (`tool_usage` counted the `Skill` tool, not
+  which skill), so skill pruning could not be data-backed the way agent pruning is. Retroactive
+  via `collector.py --full` (backfill verified: deep-read 15, deep-analysis 8, diverge 4, …).
+- **Generalized inert-config lint** (`a21d037`): `validate.sh` now fails on any
+  `confidence_threshold` / `keyword_weights` / `activation_rules` / `priority_override` key in
+  `.claude/lib/*.json`. The framework has no scoring runtime (Claude Code routes on description
+  text only), so such keys are always dead. Scoped to structured config, never skill/rule prose;
+  gap-injection tested.
+- **Attribution invariant** (`daa2341`): `validate.sh` asserts `settings.json.template`
+  `attribution.commit` stays empty, tying the no-AI-trailer rule to config so the two surfaces
+  cannot silently diverge.
+- **lib-orphan reverse-prune** (`44c82fa`): `install.sh` now reverse-prunes retired framework
+  lib files (`RETIRED_LIB_FILES`) instead of only copying forward.
+
+### Fixed
+
+- **AI co-author trailer removed** (`daa2341`): `attribution.commit` shipped a
+  `Co-Authored-By: Claude` trailer, contradicting the maintainer's no-AI-trailer rule (and the
+  mechanism behind `44c82fa`'s stray trailer). Emptied in the template **and** jq-patched into the
+  live `~/.claude/settings.json` — `install.sh` copies the template only when the file is absent,
+  so a template edit alone is a no-op on existing machines. `attribution.pr` (PR footer) kept.
+- **Currency follow-ups** (`435cc20`, `b66c7b4`): finished the `Task`→`Agent` rename in skill
+  prose + README doc links to code.claude.com; tightened the meta-agent scaffolding lint so it no
+  longer matches its own corrective prose; corrected the expected hook event to `SessionEnd`.
+
+### Removed
+
+- **Dead `activation_rules` scoring block** (`a21d037`): removed the consumer-less
+  `confidence_threshold` / `keyword_weights` / `priority_override` block from
+  `.claude/lib/agent-templates.json` — the same dead-scoring pattern as the removed
+  `activation-keywords.json` (`0b343bb`), hiding in a file the old lint never scanned.
+
+### Notes
+
+- Agents `incident-commander` + `sre-specialist` KEPT as contingency insurance: their 0 recorded
+  spawns reflect that the incident-response/SRE domains never arose in this dev work, not a defect.
+
 ## [2.10.0] - 2026-05-29
 
 ### Added
