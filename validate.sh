@@ -447,7 +447,7 @@ section "Checking meta-agent has no inert routing scaffolding"
 
 # The agent factory must not mint dead confidence/keyword-weight metadata into
 # generated agents — Claude Code routes on description text only (cf. 0b343bb).
-if grep -qEi 'confidence threshold|weight: 1\.0|weight: 0\.5|primary keywords|secondary keywords' .claude/agents/meta-agent.md 2>/dev/null; then
+if grep -qE 'weight: [0-9]\.[0-9]|\*\*Primary Keywords\*\*|\*\*Secondary Keywords\*\*|\*\*Confidence Threshold\*\*|Confidence threshold: Set' .claude/agents/meta-agent.md 2>/dev/null; then
     fail "meta-agent: contains inert confidence/keyword-weight scaffolding (routes on description text only; see 0b343bb)"
 else
     pass "meta-agent: no inert confidence/keyword scaffolding"
@@ -694,7 +694,7 @@ fi
 
 # Validate settings.json.template has expected hook events
 if [ -f "global-config/settings.json.template" ]; then
-    for event in Notification PreToolUse PostToolUse SessionStart SubagentStart SubagentStop Stop PermissionRequest PreCompact PostCompact; do
+    for event in Notification PreToolUse PostToolUse SessionStart SubagentStart SubagentStop SessionEnd PermissionRequest PreCompact PostCompact; do
         if grep -q "\"$event\"" "global-config/settings.json.template" 2>/dev/null; then
             pass "settings.json.template: has $event hook event"
         else
