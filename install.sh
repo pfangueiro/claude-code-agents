@@ -795,6 +795,29 @@ sync_hooks() {
                 fi
             fi
 
+            # Reconcile .attribution (framework-owned — the commit trailer MUST stay empty).
+            # Same replace-on-drift policy as permissions/statusLine. A stale "Co-Authored-By"
+            # (or any AI-attribution) commit trailer left in the user's live settings.json —
+            # e.g. from an old per-project install or a CLI settings-sync payload — is healed
+            # back to the template's commit="" AND the template's .pr footer is restored, in
+            # ONE whole-block replace. Users wanting a custom PR footer edit settings.local.json
+            # (higher precedence), same as the permissions block above.
+            if jq -e '.attribution' "$template" &>/dev/null; then
+                local tmpl_attr usr_attr
+                tmpl_attr=$(jq -Sc '.attribution' "$template")
+                usr_attr=$(jq -Sc '.attribution // null' ~/.claude/settings.json)
+                if [ "$tmpl_attr" != "$usr_attr" ]; then
+                    local attr_value
+                    attr_value=$(jq '.attribution' "$template")
+                    _atomic_settings_jq ".attribution = $attr_value" || true
+                    if [ "$usr_attr" = "null" ]; then
+                        print_success "Added attribution block to settings.json"
+                    else
+                        print_success "Reconciled attribution block in settings.json (commit trailer reset)"
+                    fi
+                fi
+            fi
+
             # Reconcile .statusLine (framework-owned — points to ~/.claude/statusline.sh).
             # Same replace-on-drift policy as hooks/permissions. Without this, a CLI
             # settings-sync wholesale-replace that drops .statusLine leaves the status

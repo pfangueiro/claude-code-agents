@@ -370,6 +370,20 @@ if $QUICK_MODE; then
     # so this runtime detector must live here to reconcile automatically.
     check_memory_freshness "Quick: "
 
+    # Live-settings attribution: the template check (structural, above) only guards the
+    # SOURCE. The .attribution reconcile writes the user's LIVE ~/.claude/settings.json, so
+    # assert the deployed commit trailer is empty here too — otherwise a failed/absent heal
+    # (or a settings-sync payload re-introducing a Co-Authored-By trailer) is invisible to the
+    # watchdog's --quick path and to --upgrade's self-verify.
+    if [ -f "$HOME/.claude/settings.json" ] && command -v jq &>/dev/null; then
+        live_attr_commit=$(jq -r '.attribution.commit // ""' "$HOME/.claude/settings.json" 2>/dev/null)
+        if [ -z "$live_attr_commit" ]; then
+            pass "Quick: live settings.json attribution.commit empty (no AI co-author trailer)"
+        else
+            fail "Quick: live settings.json carries an AI-attribution commit trailer — run ./install.sh --update"
+        fi
+    fi
+
     emit_and_exit
 fi
 

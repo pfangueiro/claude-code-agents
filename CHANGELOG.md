@@ -89,6 +89,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   skipped a symlinked project *dir*). Verified: a mixed-tracking repo (agents untracked, rules committed) is
   skipped with the committed file intact; a symlinked subdir is skipped with its target intact; a clean
   fully-untracked copy still tears down; the no-arg autonomous path still exits 0.
+- **`.attribution` auto-heals on install/`--update`, and validate checks LIVE settings** (so old-framework
+  users' `Co-Authored-By` commit trailer scrubs automatically — no more hand-fixing, as the sister machine had to
+  do during its sync): `sync_hooks` now reconciles `.attribution` with the same replace-on-drift policy as
+  `.permissions`/`.statusLine` — a stale AI-attribution commit trailer in the live `~/.claude/settings.json` (from
+  an old per-project install or a CLI settings-sync payload) is healed to the template's `commit=""` and the
+  template `.pr` footer is restored, in one atomic whole-block replace. `validate.sh --quick` gained a matching
+  **live-settings** assertion (`.attribution.commit` empty) — the prior check only guarded the source template, so
+  a failed/absent heal was invisible to the watchdog and to `--upgrade`'s self-verify. Runs on the shared path
+  (bare install, `--update`, `--upgrade`); a user wanting a custom PR footer uses `settings.local.json` (higher
+  precedence), the same note the permissions block carries. Verified: an injected trailer fails `validate --quick`,
+  heals on `--update` to `commit=""` + template `.pr`, passes validate, and a 2nd back-to-back `--update` writes
+  nothing (converges to a no-op — preserving the byte-identical self-heal contract).
 
 ## [3.0.0] - 2026-07-07
 
