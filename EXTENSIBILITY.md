@@ -1055,6 +1055,6 @@ By understanding when and how to use each mechanism, you can create powerful, ma
 
 ---
 
-**Version**: 3.0.0 - User-Global Install (the framework installs once into ~/.claude and applies to every project automatically; per-project fan-out retired; public repositioning + personal-leak scrub)
+**Version**: 3.1.0 - User-Global Install + opt-in autonomous cross-system migration (the framework installs once into ~/.claude and applies to every project automatically; per-project fan-out retired; public repositioning + personal-leak scrub)
 **License**: MIT
 **Maintainer**: Claude Agents Project

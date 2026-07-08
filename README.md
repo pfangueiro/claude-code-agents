@@ -254,7 +254,7 @@ Installed once, user-global under `~/.claude/` — Claude Code loads it in every
 ├── hooks/           # 9 command hooks + 2 reference configs
 ├── daemon/          # launchd watchdog (hourly validate + snapshots)
 ├── analytics/       # Observability dashboard + ingested session logs
-├── statusline.sh    # Rich status bar
+├── statusline.sh    # Rich status bar — ends line 1 with a framework-status glyph (✓ healthy / ⟳ self-healing / ⚠ stalled-or-degraded)
 └── settings.json    # 10 hook events, permissions, model config
 ```
 

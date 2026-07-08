@@ -20,6 +20,8 @@ The install includes: agents, skills, commands, rules, hooks, statusline, output
 |---------|-------------|
 | `./install.sh` | Install everything user-global to `~/.claude` |
 | `./install.sh --update` | Reconcile an existing install to the latest version (backs up first, preserves customizations) |
+| `./install.sh --upgrade` | One-command migration from the old per-project layout: reconcile `~/.claude`, then confirm + tear down old per-project copies (snapshot-first) and self-verify. Run from inside your checkout. See [Upgrading from the old per-project framework](#upgrading-from-the-old-per-project-framework) below. |
+| `./install.sh --migrate-legacy` | Marker-gated teardown-only mode (the watchdog runs this every cycle; also runnable manually for an immediate migration). |
 | `./install.sh --help` | Show all options |
 
 ## What Gets Installed
@@ -32,13 +34,13 @@ Everything lands under `~/.claude/` and is loaded by Claude Code in every projec
 ├── commands/              # 13 slash commands
 ├── skills/                # 28 modular knowledge packages
 ├── rules/                 # 6 auto-enforced rule sets
-├── lib/                   # Activation patterns, templates, coordination protocol
+├── lib/                   # Templates, patterns, coordination protocol
 ├── hooks/                 # 9 command hooks + 2 reference configs
 ├── daemon/                # launchd watchdog (hourly validate + snapshots)
 ├── analytics/             # Observability dashboard (claude-obs alias)
 ├── output-styles/
 │   └── concise.md         # Code-first output style
-├── statusline.sh          # Rich status bar
+├── statusline.sh          # Rich status bar — line-1 framework-status glyph (⚙<version> + ✓/⟳/⚠)
 ├── settings.json          # Model, hooks, deny rules, MCP config
 └── CLAUDE.md              # Personal coding preferences (personalized with your name/email)
 ```

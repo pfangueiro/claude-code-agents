@@ -128,6 +128,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   staleness threshold 90 → 150 min (2.5× the 60-min cadence) so normal jitter / one missed cycle never trips it
   while a genuinely stalled watchdog still surfaces within ~2.5h. Verified: the real machine renders `✓`; seeded
   fresh/45-min → ✓, 3h-stale → ⚠, recent corruption → ⚠ (genuine states preserved).
+- **Docs accuracy sync (post-session multi-agent audit)**: brought CLAUDE.md, README.md, INSTALL.md, and
+  EXTENSIBILITY.md in line with this release. CLAUDE.md now documents the `--upgrade` mode, the `.attribution`
+  auto-heal, the statusline framework-status glyph, the all-five-subdir teardown committed-guard, and the
+  4-MCP-server count; INSTALL.md's Commands table gained `--upgrade` + `--migrate-legacy` rows and its `lib/`
+  line dropped the stale "Activation patterns" (activation-keywords.json was removed earlier); README + INSTALL
+  statusline lines note the framework-status glyph; EXTENSIBILITY.md's footer version was corrected 3.0.0 → 3.1.0.
+  Surfaced by a workflow that audited every doc surface against shipped reality (the confirmed-correct MCP badge,
+  README `--upgrade` row, and INSTALL `--upgrade` section were left untouched).
 
 ## [3.0.0] - 2026-07-07
 
