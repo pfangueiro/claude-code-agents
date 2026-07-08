@@ -42,6 +42,21 @@ log_jsonl() {
     echo "{\"ts\":\"$(_ts)\",$body}" >> "$target" 2>/dev/null || true
 }
 
+trim_jsonl() {
+    # $1 = jsonl file, $2 = max lines to keep. Bounds unbounded append-only diagnostic logs
+    # (framework-health.jsonl grows ~50 lines/day). Atomic: tail to temp, verify non-empty, mv.
+    local f="$1" cap="$2" n tmp
+    [ -f "$f" ] || return 0
+    n=$(wc -l < "$f" 2>/dev/null | tr -d ' ')
+    [ -n "$n" ] && [ "$n" -gt "$cap" ] 2>/dev/null || return 0
+    tmp="$f.trim.$$"
+    if tail -n "$cap" "$f" > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+        mv "$tmp" "$f" 2>/dev/null && log "watchdog: trimmed $(basename "$f") $n → $cap lines"
+    else
+        rm -f "$tmp" 2>/dev/null
+    fi
+}
+
 # -------- Resolve repo --------
 # Read framework source path from the marker written by install.sh. No
 # hardcoded user-specific paths (this script is distributed to multiple users).
@@ -314,6 +329,11 @@ elif [ ! -f "$OBS_DB" ]; then
     log_jsonl "$HEALTH_LOG" "\"event\":\"deferred_regen_skipped\",\"reason\":\"collector_or_python_missing\""
     log "watchdog: claude-obs.db missing but collector/python3 unavailable — skipped"
 fi
+
+# -------- Task 7: cap append-only diagnostic logs (the statusline only tail-reads them and
+# nothing ingests them into a DB, so old lines are disposable). Runs every cycle, atomic.
+trim_jsonl "$HEALTH_LOG" 1000
+trim_jsonl "$ALERT_LOG" 500
 
 log "watchdog: run complete"
 exit 0

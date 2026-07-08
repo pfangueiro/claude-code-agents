@@ -136,6 +136,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   statusline lines note the framework-status glyph; EXTENSIBILITY.md's footer version was corrected 3.0.0 → 3.1.0.
   Surfaced by a workflow that audited every doc surface against shipped reality (the confirmed-correct MCP badge,
   README `--upgrade` row, and INSTALL `--upgrade` section were left untouched).
+- **Watchdog now caps the append-only diagnostic logs** (`framework-health.jsonl` was unbounded — ~3.8k lines /
+  3.3 MB, growing ~50 lines/day with no rotation): a new `trim_jsonl` helper trims `framework-health.jsonl` to the
+  last 1000 lines and `watchdog-alerts.jsonl` to 500 at the end of every hourly cycle (atomic tail → temp → mv,
+  keeps the newest lines). Safe because the statusline only `tail`-reads these logs and nothing ingests them into
+  a DB. `validate.sh` gained a regression guard (`trim_jsonl` present in the watchdog source). Verified: a real
+  watchdog run capped the live log 3849 → 1000 with the newest event intact and the statusline still rendering.
 
 ## [3.0.0] - 2026-07-07
 

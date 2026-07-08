@@ -128,6 +128,16 @@ run_structural_checks() {
         fi
     fi
 
+    # Regression guard: the watchdog must cap the append-only diagnostic logs — otherwise
+    # framework-health.jsonl grows unbounded (~50 lines/day). Assert the trim exists in source.
+    if [ -f "global-config/daemon/claude-framework-watchdog.sh" ]; then
+        if grep -q 'trim_jsonl' global-config/daemon/claude-framework-watchdog.sh; then
+            pass "Structural: watchdog caps diagnostic logs (trim_jsonl)"
+        else
+            fail "Structural: watchdog missing diagnostic-log rotation (trim_jsonl) — framework-health.jsonl grows unbounded"
+        fi
+    fi
+
     # Hook-drift check: every event in template must match user's ~/.claude/settings.json.
     # This catches the "sync_hooks add-if-missing" bug class: hook installed on disk but
     # not wired into settings.json because an older entry already existed.
