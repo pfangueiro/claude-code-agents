@@ -119,6 +119,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   precedence), the same note the permissions block carries. Verified: an injected trailer fails `validate --quick`,
   heals on `--update` to `commit=""` + template `.pr`, passes validate, and a 2nd back-to-back `--update` writes
   nothing (converges to a no-op — preserving the byte-identical self-heal contract).
+- **Statusline `⚙<ver> ⚠` false positive on non-UTC machines** (reported as `⚙3.1.0 ⚠` on a UTC+1 machine, framework
+  fully healthy): the freshness check's `_iso_epoch` used macOS `date -j -f '…Z'`, which **ignores the trailing
+  `Z` and parses the UTC health timestamp as LOCAL time** — inflating every age by the local UTC offset (UTC+1 →
+  +60 min), so the glyph flipped to `⚠` for the back half of every hourly watchdog cycle even with validate at 0
+  errors and the watchdog alive. Fixed by parsing as UTC (`date -j -u -f` on macOS; `date -u -d` on GNU — epoch is
+  timezone-absolute; the corruption-window check shares `_iso_epoch` and is corrected too), and widened the
+  staleness threshold 90 → 150 min (2.5× the 60-min cadence) so normal jitter / one missed cycle never trips it
+  while a genuinely stalled watchdog still surfaces within ~2.5h. Verified: the real machine renders `✓`; seeded
+  fresh/45-min → ✓, 3h-stale → ⚠, recent corruption → ⚠ (genuine states preserved).
 
 ## [3.0.0] - 2026-07-07
 

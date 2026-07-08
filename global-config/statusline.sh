@@ -195,7 +195,11 @@ _fw_cache_stale() {
     local m; m=$(stat -f %m "$FW_CACHE" 2>/dev/null || stat -c %Y "$FW_CACHE" 2>/dev/null || echo 0)
     (( $(date +%s) - m > 60 ))
 }
-_iso_epoch() { date -j -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s 2>/dev/null || date -d "$1" +%s 2>/dev/null || echo 0; }
+# Parse an ISO-8601 Z (UTC) timestamp → epoch. macOS `date -j -f` IGNORES the trailing Z and
+# parses in LOCAL time, so `-u` is REQUIRED to read it as UTC — without it the age is off by the
+# local UTC offset (a UTC+1 machine inflates every age by 60 min → false ⚠). GNU `date -d` honors
+# the Z; `-u` is harmless there (epoch is timezone-absolute).
+_iso_epoch() { date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s 2>/dev/null || date -u -d "$1" +%s 2>/dev/null || echo 0; }
 if _fw_cache_stale; then
     _v=$(grep -m1 '^version=' "$HOME/.claude/.framework-version" 2>/dev/null | cut -d= -f2)
     if [[ -n "$_v" ]]; then
@@ -203,9 +207,12 @@ if _fw_cache_stale; then
         _H="$HOME/.claude/analytics/framework-health.jsonl"
         _A="$HOME/.claude/analytics/watchdog-alerts.jsonl"
         if [[ -f "$_H" ]]; then
-            # freshness: the watchdog logs hourly; >90min of silence = likely stalled
+            # freshness: the watchdog logs hourly; >150min of silence (≥2 missed cycles) = likely
+            # stalled. Threshold is 2.5× the 60-min cadence so normal jitter / one missed cycle
+            # never trips it; a genuinely dead watchdog still surfaces within ~2.5h. (A machine that
+            # was asleep >150min shows ⚠ until launchd fires the watchdog on wake — self-clears.)
             _lts=$(tail -1 "$_H" | jq -r '.ts // empty' 2>/dev/null)
-            if [[ -n "$_lts" ]]; then _le=$(_iso_epoch "$_lts"); [[ "$_le" -gt 0 && $((_now-_le)) -gt 5400 ]] && { _g="⚠"; _c="$C_YELLOW"; }; fi
+            if [[ -n "$_lts" ]]; then _le=$(_iso_epoch "$_lts"); [[ "$_le" -gt 0 && $((_now-_le)) -gt 9000 ]] && { _g="⚠"; _c="$C_YELLOW"; }; fi
             # heal state: most recent heal_* event in the recent tail
             case "$(tail -40 "$_H" | grep -oE 'heal_(triggered|succeeded|failed)' | tail -1)" in
                 heal_failed)    _g="⚠"; _c="$C_RED" ;;
