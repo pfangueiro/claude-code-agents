@@ -206,6 +206,17 @@ if _fw_cache_stale; then
         _g="✓"; _c="$C_GREEN"; _now=$(date +%s)
         _H="$HOME/.claude/analytics/framework-health.jsonl"
         _A="$HOME/.claude/analytics/watchdog-alerts.jsonl"
+        # Current-health anchor: epoch of the most recent CLEAN validate_quick (errors==0).
+        # Any heal_/alert event OLDER than this has been superseded by a passing validate → it is
+        # RESOLVED and must not latch the glyph. Without this, a fixed incident (e.g. a heal loop
+        # that later converged) held ⚠ for up to 24h even though the framework was healthy again.
+        _last_ok_ts=0
+        if [[ -f "$_H" ]]; then
+            _vq=$(grep '"event":"validate_quick"' "$_H" 2>/dev/null | tail -1)
+            if [[ -n "$_vq" ]] && [[ "$(printf '%s' "$_vq" | jq -r '(.output|fromjson?|.errors) // 1' 2>/dev/null)" == "0" ]]; then
+                _last_ok_ts=$(_iso_epoch "$(printf '%s' "$_vq" | jq -r '.ts // empty' 2>/dev/null)")
+            fi
+        fi
         if [[ -f "$_H" ]]; then
             # freshness: the watchdog logs hourly; >150min of silence (≥2 missed cycles) = likely
             # stalled. Threshold is 2.5× the 60-min cadence so normal jitter / one missed cycle
@@ -213,16 +224,34 @@ if _fw_cache_stale; then
             # was asleep >150min shows ⚠ until launchd fires the watchdog on wake — self-clears.)
             _lts=$(tail -1 "$_H" | jq -r '.ts // empty' 2>/dev/null)
             if [[ -n "$_lts" ]]; then _le=$(_iso_epoch "$_lts"); [[ "$_le" -gt 0 && $((_now-_le)) -gt 9000 ]] && { _g="⚠"; _c="$C_YELLOW"; }; fi
-            # heal state: most recent heal_* event in the recent tail
-            case "$(tail -40 "$_H" | grep -oE 'heal_(triggered|succeeded|failed)' | tail -1)" in
-                heal_failed)    _g="⚠"; _c="$C_RED" ;;
-                heal_triggered) _g="⟳"; _c="$C_YELLOW" ;;
-            esac
+            # heal state: most recent heal_* event — but only if a clean validate has NOT since
+            # superseded it (else a resolved heal loop latches ⟳/⚠ until it scrolls out of view).
+            _hln=$(tail -40 "$_H" | grep -E '"event":"heal_(triggered|succeeded|failed)"' | tail -1)
+            if [[ -n "$_hln" ]]; then
+                _hts=$(_iso_epoch "$(printf '%s' "$_hln" | jq -r '.ts // empty' 2>/dev/null)")
+                if [[ "$_hts" -gt "$_last_ok_ts" ]]; then
+                    case "$(printf '%s' "$_hln" | jq -r '.event' 2>/dev/null)" in
+                        heal_failed)    _g="⚠"; _c="$C_RED" ;;
+                        heal_triggered) _g="⟳"; _c="$C_YELLOW" ;;
+                    esac
+                fi
+            fi
         fi
-        # a corruption alert within the last 24h trumps everything
+        # a corruption alert within the last 24h trumps everything — EXCEPT a heal_failed that a
+        # newer clean validate has already resolved (heal_failed is transient/recoverable, not
+        # corruption; genuine git-corruption alerts still latch the full 24h regardless).
         if [[ -f "$_A" ]]; then
             _ats=$(tail -1 "$_A" | jq -r '.ts // empty' 2>/dev/null)
-            if [[ -n "$_ats" ]]; then _ae=$(_iso_epoch "$_ats"); [[ "$_ae" -gt 0 && $((_now-_ae)) -lt 86400 ]] && { _g="⚠"; _c="$C_RED"; }; fi
+            if [[ -n "$_ats" ]]; then
+                _ae=$(_iso_epoch "$_ats")
+                if [[ "$_ae" -gt 0 && $((_now-_ae)) -lt 86400 ]]; then
+                    if [[ "$(tail -1 "$_A" | jq -r '.event // empty' 2>/dev/null)" == "heal_failed" ]]; then
+                        [[ "$_ae" -gt "$_last_ok_ts" ]] && { _g="⚠"; _c="$C_RED"; }
+                    else
+                        _g="⚠"; _c="$C_RED"
+                    fi
+                fi
+            fi
         fi
         printf '%s\n%s\n' "$_v" "${_c}${_g}${C_RESET}" > "$FW_CACHE"
     else
