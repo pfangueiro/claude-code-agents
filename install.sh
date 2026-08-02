@@ -18,7 +18,7 @@
 set -e
 
 # Configuration
-SCRIPT_VERSION="3.1.0"
+SCRIPT_VERSION="3.1.1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEBUG="${DEBUG:-false}"
 

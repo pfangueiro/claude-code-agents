@@ -59,7 +59,7 @@ This framework intentionally enables several safety features by default:
 - **Pre-install backups** are written per-project before any `--update` (kept
   3 deep, rotated automatically).
 - **Snapshot restore paths** for `.git`, `~/.claude/hooks/`, and
-  `~/.claude/settings.json` documented in CLAUDE.md (Self-Healing section).
+  `~/.claude/settings.json` documented in [SELF-HEALING.md](./SELF-HEALING.md).
 
 ## Privacy
 

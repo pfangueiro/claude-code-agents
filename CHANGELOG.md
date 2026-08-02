@@ -5,6 +5,57 @@ All notable changes to Claude Agents will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1] - 2026-08-02
+
+### Changed
+
+- **Self-Healing runbook split out of the always-loaded CLAUDE.md → new top-level `SELF-HEALING.md`** (context
+  economy — surfaced by evaluating `mex-memory/mex`, whose thesis "a giant instruction file floods context, goes
+  stale, drifts from code" measured true here: the Self-Healing section alone was ~40% of CLAUDE.md, loaded every
+  session). The full runbook (watchdog cadence/retention, settings-sync-wipe recovery, `--upgrade` consent flow,
+  `.attribution` auto-heal, statusline glyph states, diagnostic-log capping, and every snapshot-restore command)
+  moved to `SELF-HEALING.md` (not on any Claude Code auto-load path); CLAUDE.md keeps a compact summary + a
+  `[SELF-HEALING.md](./SELF-HEALING.md)` pointer so a session still knows self-heal exists and where the runbook is
+  without paying for the detail every session. `validate.sh` gained guards that SELF-HEALING.md exists, retains the
+  restore commands, and is still linked from CLAUDE.md (the moved runbook can't silently vanish); SECURITY.md's
+  restore-path reference repointed. Verified: the memory-restore-path invariant + all doc-accuracy checks stay
+  green (222 checks); gap-injecting a missing SELF-HEALING.md fails as designed.
+- **Version → 3.1.1** (`SCRIPT_VERSION`, README badge, EXTENSIBILITY footer): v3.1.0 was tagged/released at
+  `b70abe4`, and the three fixes below shipped on `main` above that tag — so the `~/.claude/.framework-version`
+  marker, the README badge, and the statusline `⚙<version>` glyph were advertising 3.1.0 while the deployed
+  framework differed. This closes the tag↔HEAD gap.
+
+### Fixed
+
+- **Watchdog now caps the append-only diagnostic logs** (`framework-health.jsonl` was unbounded — ~3.8k lines /
+  3.3 MB, growing ~50 lines/day with no rotation): a new `trim_jsonl` helper trims `framework-health.jsonl` to the
+  last 1000 lines and `watchdog-alerts.jsonl` to 500 at the end of every hourly cycle (atomic tail → temp → mv,
+  keeps the newest lines). Safe because the statusline only `tail`-reads these logs and nothing ingests them into
+  a DB. `validate.sh` gained a regression guard (`trim_jsonl` present in the watchdog source). Verified: a real
+  watchdog run capped the live log 3849 → 1000 with the newest event intact and the statusline still rendering.
+- **`install.sh --update`/`--upgrade` now re-deploy a drifted `statusline.sh`** (regression exposed by the
+  f2905b9 deployed==source check): `ensure_statusline` was install-only ("never overwrites"), so once the source
+  statusline changed, the heal path (`install.sh --update`) could never satisfy the new validate assertion — the
+  watchdog looped hourly (**25 heal_failed, never converging**) while the machine was otherwise healthy.
+  `ensure_statusline` is now **replace-on-drift** (cp when absent or `diff -q` differs, skip when byte-identical),
+  using the same `diff -q` the validator uses so "skip" == "pass"; one change heals all three call sites
+  (install / `--update` / `--upgrade`). Verified: `--update` reconciles a planted drift (validate 1→0).
+- **Statusline health glyph now recovers after a resolved incident**: the `⚙<ver> <glyph>` logic latched `⚠`/`⟳`
+  on the most recent `heal_`/alert event without checking whether a newer clean `validate_quick` had superseded
+  it, so a *fixed* heal incident held the bar `⚠` red for up to 24h (a `heal_failed` in `watchdog-alerts.jsonl`
+  "trumps everything" for 24h). The glyph now anchors to the epoch of the latest **clean** `validate_quick` and
+  only latches `heal_`/alert events newer than it; a transient `heal_failed` clears once a passing validate
+  supersedes it, while genuine (non-`heal_failed`) corruption alerts still trump for 24h. Verified across 6
+  scenarios (resolved → ✓; unresolved / in-flight / failing / real-corruption still warn).
+- **validate.sh now checks doc-ACCURACY, not just file-identity** (surfaced by evaluating `mex-memory/mex`, which
+  correctly diagnosed that our drift detection guarded `deployed==source` file identity but never whether the docs'
+  stated counts match the code — the blind spot behind the self-admitted "CHANGELOG lag is THE recurring audit
+  finding"): a new **full-only** check counts actual agents/skills/hook-scripts/MCP-servers and FAILS if CLAUDE.md's
+  prose numbers disagree. Full-only by design — a count mismatch can't be auto-healed (install can't rewrite prose),
+  so running it in `--quick` would loop the watchdog; it fails on `./validate.sh` at commit time, exactly when the
+  drift is introduced. Verified: passes on current counts (13 agents / 28 skills / 9 hook scripts / 4 MCP), stays
+  absent from `--quick`, and a gap-injected 13→14 agent count fails then restores clean (219 checks full).
+
 ## [3.1.0] - 2026-07-07
 
 ### Added
@@ -136,35 +187,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   statusline lines note the framework-status glyph; EXTENSIBILITY.md's footer version was corrected 3.0.0 → 3.1.0.
   Surfaced by a workflow that audited every doc surface against shipped reality (the confirmed-correct MCP badge,
   README `--upgrade` row, and INSTALL `--upgrade` section were left untouched).
-- **Watchdog now caps the append-only diagnostic logs** (`framework-health.jsonl` was unbounded — ~3.8k lines /
-  3.3 MB, growing ~50 lines/day with no rotation): a new `trim_jsonl` helper trims `framework-health.jsonl` to the
-  last 1000 lines and `watchdog-alerts.jsonl` to 500 at the end of every hourly cycle (atomic tail → temp → mv,
-  keeps the newest lines). Safe because the statusline only `tail`-reads these logs and nothing ingests them into
-  a DB. `validate.sh` gained a regression guard (`trim_jsonl` present in the watchdog source). Verified: a real
-  watchdog run capped the live log 3849 → 1000 with the newest event intact and the statusline still rendering.
-- **`install.sh --update`/`--upgrade` now re-deploy a drifted `statusline.sh`** (regression exposed by the
-  f2905b9 deployed==source check): `ensure_statusline` was install-only ("never overwrites"), so once the source
-  statusline changed, the heal path (`install.sh --update`) could never satisfy the new validate assertion — the
-  watchdog looped hourly (**25 heal_failed, never converging**) while the machine was otherwise healthy.
-  `ensure_statusline` is now **replace-on-drift** (cp when absent or `diff -q` differs, skip when byte-identical),
-  using the same `diff -q` the validator uses so "skip" == "pass"; one change heals all three call sites
-  (install / `--update` / `--upgrade`). Verified: `--update` reconciles a planted drift (validate 1→0).
-- **Statusline health glyph now recovers after a resolved incident**: the `⚙<ver> <glyph>` logic latched `⚠`/`⟳`
-  on the most recent `heal_`/alert event without checking whether a newer clean `validate_quick` had superseded
-  it, so a *fixed* heal incident held the bar `⚠` red for up to 24h (a `heal_failed` in `watchdog-alerts.jsonl`
-  "trumps everything" for 24h). The glyph now anchors to the epoch of the latest **clean** `validate_quick` and
-  only latches `heal_`/alert events newer than it; a transient `heal_failed` clears once a passing validate
-  supersedes it, while genuine (non-`heal_failed`) corruption alerts still trump for 24h. Verified across 6
-  scenarios (resolved → ✓; unresolved / in-flight / failing / real-corruption still warn).
-- **validate.sh now checks doc-ACCURACY, not just file-identity** (surfaced by evaluating `mex-memory/mex`, which
-  correctly diagnosed that our drift detection guarded `deployed==source` file identity but never whether the docs'
-  stated counts match the code — the blind spot behind the self-admitted "CHANGELOG lag is THE recurring audit
-  finding"): a new **full-only** check counts actual agents/skills/hook-scripts/MCP-servers and FAILS if CLAUDE.md's
-  prose numbers disagree. Full-only by design — a count mismatch can't be auto-healed (install can't rewrite prose),
-  so running it in `--quick` would loop the watchdog; it fails on `./validate.sh` at commit time, exactly when the
-  drift is introduced. Verified: passes on current counts (13 agents / 28 skills / 9 hook scripts / 4 MCP), stays
-  absent from `--quick`, and a gap-injected 13→14 agent count fails then restores clean (219 checks full).
-
 ## [3.0.0] - 2026-07-07
 
 Outcome of a framework self-review (reversibility-ordered revamp). Phases 1–4 shipped the

@@ -969,6 +969,34 @@ else
     warn "Watchdog source not found — skipping memory backup source check"
 fi
 
+# ============================================================================
+# Self-Healing runbook (moved out of CLAUDE.md for context economy — FULL-ONLY)
+# ============================================================================
+# The self-heal detail lives in SELF-HEALING.md so CLAUDE.md doesn't load it every
+# session. Guard that the runbook still EXISTS, still carries the restore commands, and
+# is still LINKED from CLAUDE.md — otherwise the moved runbook could silently vanish or
+# the pointer go dead, which the CLAUDE.md-only memory-restore grep above wouldn't catch.
+section "Checking Self-Healing runbook (SELF-HEALING.md)"
+if [ -f "SELF-HEALING.md" ]; then
+    pass "SELF-HEALING.md present"
+    _sh_missing=""
+    for _tok in 'memory-latest.tgz' 'userconfig-' '.bundle'; do
+        grep -q "$_tok" SELF-HEALING.md 2>/dev/null || _sh_missing="$_sh_missing $_tok"
+    done
+    if [ -z "$_sh_missing" ]; then
+        pass "SELF-HEALING.md retains the snapshot-restore commands"
+    else
+        fail "SELF-HEALING.md missing restore command token(s):$_sh_missing"
+    fi
+    if grep -q 'SELF-HEALING.md' CLAUDE.md 2>/dev/null; then
+        pass "CLAUDE.md links to SELF-HEALING.md"
+    else
+        fail "CLAUDE.md no longer links to SELF-HEALING.md (self-heal runbook orphaned)"
+    fi
+else
+    fail "SELF-HEALING.md missing — the Self-Healing runbook was moved here from CLAUDE.md"
+fi
+
 # Runtime freshness (shared with quick mode via check_memory_freshness).
 check_memory_freshness ""
 
