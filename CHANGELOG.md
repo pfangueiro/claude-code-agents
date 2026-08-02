@@ -142,6 +142,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keeps the newest lines). Safe because the statusline only `tail`-reads these logs and nothing ingests them into
   a DB. `validate.sh` gained a regression guard (`trim_jsonl` present in the watchdog source). Verified: a real
   watchdog run capped the live log 3849 → 1000 with the newest event intact and the statusline still rendering.
+- **`install.sh --update`/`--upgrade` now re-deploy a drifted `statusline.sh`** (regression exposed by the
+  f2905b9 deployed==source check): `ensure_statusline` was install-only ("never overwrites"), so once the source
+  statusline changed, the heal path (`install.sh --update`) could never satisfy the new validate assertion — the
+  watchdog looped hourly (**25 heal_failed, never converging**) while the machine was otherwise healthy.
+  `ensure_statusline` is now **replace-on-drift** (cp when absent or `diff -q` differs, skip when byte-identical),
+  using the same `diff -q` the validator uses so "skip" == "pass"; one change heals all three call sites
+  (install / `--update` / `--upgrade`). Verified: `--update` reconciles a planted drift (validate 1→0).
+- **Statusline health glyph now recovers after a resolved incident**: the `⚙<ver> <glyph>` logic latched `⚠`/`⟳`
+  on the most recent `heal_`/alert event without checking whether a newer clean `validate_quick` had superseded
+  it, so a *fixed* heal incident held the bar `⚠` red for up to 24h (a `heal_failed` in `watchdog-alerts.jsonl`
+  "trumps everything" for 24h). The glyph now anchors to the epoch of the latest **clean** `validate_quick` and
+  only latches `heal_`/alert events newer than it; a transient `heal_failed` clears once a passing validate
+  supersedes it, while genuine (non-`heal_failed`) corruption alerts still trump for 24h. Verified across 6
+  scenarios (resolved → ✓; unresolved / in-flight / failing / real-corruption still warn).
 - **validate.sh now checks doc-ACCURACY, not just file-identity** (surfaced by evaluating `mex-memory/mex`, which
   correctly diagnosed that our drift detection guarded `deployed==source` file identity but never whether the docs'
   stated counts match the code — the blind spot behind the self-admitted "CHANGELOG lag is THE recurring audit

@@ -1197,19 +1197,24 @@ personalize_setup() {
 }
 
 ensure_statusline() {
-    # Install statusline if not already present (idempotent, never overwrites)
-    if [ -f "$HOME/.claude/statusline.sh" ]; then
-        print_skip "Statusline already installed"
+    # Reconcile the deployed statusline to source: install when absent, REPLACE on drift,
+    # skip only when byte-identical. Was install-only ("never overwrites"), which left the
+    # --update / --upgrade heal paths unable to re-deploy a changed statusline.sh — so once
+    # the source drifted, validate.sh's "deployed == source" assertion looped the watchdog
+    # (install --update ran hourly but never converged). Uses the same `diff -q` the
+    # validator uses, so "skip" here exactly matches "pass" there.
+    local src="${SCRIPT_DIR}/global-config/statusline.sh"
+    [ -f "$src" ] || return 0
+
+    if [ -f "$HOME/.claude/statusline.sh" ] && diff -q "$src" "$HOME/.claude/statusline.sh" >/dev/null 2>&1; then
+        print_skip "Statusline already up to date"
         return 0
     fi
 
-    local src="${SCRIPT_DIR}/global-config/statusline.sh"
-    if [ -f "$src" ]; then
-        mkdir -p "$HOME/.claude"
-        cp "$src" "$HOME/.claude/statusline.sh"
-        chmod +x "$HOME/.claude/statusline.sh"
-        print_success "Installed statusline.sh (first-time setup)"
-    fi
+    mkdir -p "$HOME/.claude"
+    cp "$src" "$HOME/.claude/statusline.sh"
+    chmod +x "$HOME/.claude/statusline.sh"
+    print_success "Reconciled statusline.sh (deployed == source)"
 }
 
 # ============================================================================
