@@ -142,6 +142,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keeps the newest lines). Safe because the statusline only `tail`-reads these logs and nothing ingests them into
   a DB. `validate.sh` gained a regression guard (`trim_jsonl` present in the watchdog source). Verified: a real
   watchdog run capped the live log 3849 → 1000 with the newest event intact and the statusline still rendering.
+- **validate.sh now checks doc-ACCURACY, not just file-identity** (surfaced by evaluating `mex-memory/mex`, which
+  correctly diagnosed that our drift detection guarded `deployed==source` file identity but never whether the docs'
+  stated counts match the code — the blind spot behind the self-admitted "CHANGELOG lag is THE recurring audit
+  finding"): a new **full-only** check counts actual agents/skills/hook-scripts/MCP-servers and FAILS if CLAUDE.md's
+  prose numbers disagree. Full-only by design — a count mismatch can't be auto-healed (install can't rewrite prose),
+  so running it in `--quick` would loop the watchdog; it fails on `./validate.sh` at commit time, exactly when the
+  drift is introduced. Verified: passes on current counts (13 agents / 28 skills / 9 hook scripts / 4 MCP), stays
+  absent from `--quick`, and a gap-injected 13→14 agent count fails then restores clean (219 checks full).
 
 ## [3.0.0] - 2026-07-07
 

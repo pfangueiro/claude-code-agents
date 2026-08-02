@@ -408,6 +408,41 @@ if $QUICK_MODE; then
 fi
 
 # ============================================================================
+# Documentation accuracy (FULL-ONLY — deliberately NOT in --quick)
+# ============================================================================
+# Count-drift catcher: the docs state component counts (agents/skills/hook-scripts/MCP) that
+# silently rot when a component is added/removed and the prose isn't bumped — the framework's
+# own self-admitted "CHANGELOG lag is THE recurring audit finding". validate previously checked
+# only file IDENTITY (deployed==source), never whether the DOCS match reality; this closes that
+# blind spot at OUR layer (surfaced by the mex-memory/mex eval — see the memory tool-eval log).
+# FULL-ONLY BY DESIGN: a count mismatch cannot be auto-healed (install.sh can't rewrite prose),
+# so running it in --quick would loop the watchdog. It fails on `./validate.sh` at commit time —
+# exactly when the drift is introduced and a human can fix the number.
+_doc_count_check() {  # $1=label  $2=actual  $3=stated(from CLAUDE.md, may be empty)
+    if [ -z "$3" ]; then
+        fail "Doc-accuracy: could not read the '$1' count in CLAUDE.md (phrasing changed — update this check)"
+    elif [ "$2" = "$3" ]; then
+        pass "Doc-accuracy: CLAUDE.md '$3 $1' matches code ($2)"
+    else
+        fail "Doc-accuracy: CLAUDE.md says '$3 $1' but code has $2 — bump the prose (silent count-rot)"
+    fi
+}
+if [ -f "CLAUDE.md" ]; then
+    _n_agents=$(ls .claude/agents/*.md 2>/dev/null | wc -l | tr -d ' ')
+    _n_skills=$(find .claude/skills -name SKILL.md 2>/dev/null | wc -l | tr -d ' ')
+    _n_hooks=$(ls global-config/hooks/*.sh 2>/dev/null | wc -l | tr -d ' ')
+    _n_mcp=$(jq -r '.mcpServers|keys|length' .mcp.json.example 2>/dev/null)
+    _s_agents=$(grep -oE '[0-9]+ specialized[^0-9]*agents' CLAUDE.md | head -1 | grep -oE '^[0-9]+')
+    _s_skills=$(grep -oE '[0-9]+ skills' CLAUDE.md | head -1 | grep -oE '^[0-9]+')
+    _s_hooks=$(grep -oE 'Command hooks \([0-9]+ scripts\)' CLAUDE.md | head -1 | grep -oE '[0-9]+')
+    _s_mcp=$(grep -oE '[0-9]+ MCP servers' CLAUDE.md | head -1 | grep -oE '^[0-9]+')
+    _doc_count_check "specialized SDLC/SSDLC agents" "$_n_agents" "$_s_agents"
+    _doc_count_check "skills" "$_n_skills" "$_s_skills"
+    _doc_count_check "Command hooks scripts" "$_n_hooks" "$_s_hooks"
+    _doc_count_check "MCP servers" "$_n_mcp" "$_s_mcp"
+fi
+
+# ============================================================================
 # Agent Validation
 # ============================================================================
 
