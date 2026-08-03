@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without paying for the detail every session. `validate.sh` gained guards that SELF-HEALING.md exists, retains the
   restore commands, and is still linked from CLAUDE.md (the moved runbook can't silently vanish); SECURITY.md's
   restore-path reference repointed. Verified: the memory-restore-path invariant + all doc-accuracy checks stay
-  green (222 checks); gap-injecting a missing SELF-HEALING.md fails as designed.
+  green (222 checks); gap-injecting a missing SELF-HEALING.md fails as designed. Also linked from INSTALL.md ("Update & migrate") and CONTRIBUTING.md ("Self-healing safety net") so the runbook is discoverable from the README→INSTALL chain, not only CLAUDE.md/SECURITY.md.
 - **Version → 3.1.1** (`SCRIPT_VERSION`, README badge, EXTENSIBILITY footer): v3.1.0 was tagged/released at
   `b70abe4`, and the three fixes below shipped on `main` above that tag — so the `~/.claude/.framework-version`
   marker, the README badge, and the statusline `⚙<version>` glyph were advertising 3.1.0 while the deployed

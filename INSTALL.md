@@ -56,6 +56,8 @@ The installer also:
 
 The framework is **self-updating**: after a `git pull` on any machine, the SessionStart healthcheck and the launchd watchdog automatically fork `install.sh --update` to reconcile `~/.claude` — you don't have to run the installer by hand. `git pull` is the one deliberate trigger (there is deliberately **no auto-pull**).
 
+Full operational runbook — watchdog cadence, settings-sync-wipe recovery, and snapshot restore commands: **[SELF-HEALING.md](./SELF-HEALING.md)**.
+
 ```bash
 cd claude-code-agents && git pull --ff-only    # the one manual step; the rest is autonomous
 ./install.sh --update                          # optional: reconcile now instead of waiting for self-heal

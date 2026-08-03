@@ -76,6 +76,7 @@ The framework reconciles its own deployed state via:
 
 If your change touches reconciliation logic, also verify that both still exit `0`
 on clean state and log to `~/.claude/analytics/framework-health.jsonl` correctly.
+Full runbook: **[SELF-HEALING.md](./SELF-HEALING.md)**.
 
 ## Code style
 
