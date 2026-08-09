@@ -9,7 +9,7 @@ argument-hint: "<codebase area, module, flow, or question to understand>"
 
 Systematic source-code-first analysis protocol. Reads implementations, not just interfaces. Every finding cites `file:line`.
 
-**Core principle:** Source code is the source of truth. Documentation lies, comments rot, function names mislead. Read the actual code.
+**Core principle:** Source code is the source of truth. Documentation lies, comments rot, function names mislead. Read the actual code. A code graph or index (LSP, a code-graph tool) speeds up *locating* code but is itself a possibly-stale snapshot — never ground truth. Verify every graph- or LSP-derived hit against live source before citing it.
 
 ## Protocol
 
@@ -65,6 +65,7 @@ Understand the shape of the code before reading it deeply.
    - Grep for import/require statements within scoped files
    - Build a mental model: what calls what, what depends on what
    - Identify the **core files** (most imported by others)
+   - On a large or cross-language repo, an indexed code-graph query (or LSP workspace symbols) returns module structure + centrality in one pass — faster than grepping imports and spanning languages per-language tooling silos; confirm the ranking against source before trusting it
 5. **Configuration and constants** — read files that define behavior:
    - Config files, environment schemas, constants, enums, types
    - These shape behavior as much as code does
@@ -93,8 +94,9 @@ Start from entry points and trace through the code. Read every file in the path.
 2. **Trace forward** from the entry point:
    - Read the entry point file **in full** with the Read tool
    - For every function call, class instantiation, or module import encountered:
+     - Locate the implementation: LSP `goToDefinition`/`outgoingCalls` for a precise one-hop jump, or Grep as fallback; for a whole-repo transitive or cross-language chain (which one-hop, per-language LSP cannot give in a single pass), query a code graph
      - Grep to locate the implementation (not just the type signature)
-     - Read the implementation file in full
+     - Read the implementation file in full — a graph/LSP edge only points to the file; the gate still requires reading it
    - Continue until reaching terminal operations (DB queries, API calls, file I/O, return values)
 3. **Document the path** as a chain with `file:line` citations:
    ```
@@ -181,6 +183,7 @@ Step back and reason about the system as a whole. Use sequential-thinking MCP fo
    - Coding conventions (error handling style, naming patterns, data flow patterns)
    - Implicit rules (invariants maintained by convention, not enforced by code)
    - Anti-patterns or technical debt
+   - Aggregate structural leads — dead code, all implementers of an interface, dependency cycles, fan-in/out hotspots — surface from a code graph if one is indexed; feed them into the synthesis but promote none to a finding until confirmed in live source with a `file:line` citation
 3. **Map data flows** end to end:
    - How does data enter the system?
    - What transformations does it undergo? (with `file:line` citations)
@@ -261,11 +264,13 @@ For each critical area:
 | Phase | Primary Tools | When to Use Agents |
 |-------|--------------|-------------------|
 | 1. SCOPE | Read, Glob, Grep, AskUserQuestion | -- |
-| 2. MAP | Glob, Grep, Read (configs, entry points) | Explore agents (parallel) for 20+ file codebases |
-| 3. TRACE | Read (full files), Grep (cross-refs) | Explore agent for locating implementations |
+| 2. MAP | Glob, Grep, Read (configs, entry points), LSP / code graph (structure, centrality) | Explore agents (parallel) for 20+ file codebases |
+| 3. TRACE | Read (full files), Grep (cross-refs), LSP call hierarchy, code graph (transitive / cross-language) | Explore agent for locating implementations |
 | 4. DEEP READ | Read (full files, parallel) | -- |
-| 5. CONNECT | sequential-thinking MCP | deep-analysis skill for complex reasoning |
+| 5. CONNECT | sequential-thinking MCP, code graph (aggregate / dead-code queries) | deep-analysis skill for complex reasoning |
 | 6. REPORT | Structured output | -- |
+
+**Code-graph accelerator (optional, tool-agnostic).** A per-repo indexed code graph earns its one-time setup ONLY when the repo is large/unfamiliar/cross-language AND the question is whole-repo-transitive or aggregate (full blast-radius, broad refactor, dead-code, "all implementers of X", architecture overview). Otherwise LSP (always-available, one-hop, never stale) + Grep + Read are faster. Query an existing index directly; if none exists and both gates hold, recommend building one in the report rather than bootstrapping it silently. Any code-graph tool works — e.g. CodeGraphContext / `cgc`, opt-in and per-repo, not shipped or registered by this framework (see the tool's own docs to install).
 
 ## Anti-Patterns — What This Skill Prevents
 
@@ -278,6 +283,7 @@ For each critical area:
 | Rely on function names to infer behavior | Phase 4 reads implementations, documents actual logic |
 | Produce vague "this seems to do X" | Phase 4 requires concrete formulas and conditions |
 | Read types/interfaces instead of implementations | Phase 3 Greps for implementations, not just signatures |
+| Trust a graph/index query as truth | Graphs and LSP are stale-able snapshots; every hit is confirmed in live source before citing (`file:line`) |
 | Skip error paths and edge cases | Phase 3 traces secondary paths; Phase 4 documents edge cases |
 
 ## Scope Examples

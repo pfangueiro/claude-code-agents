@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`deep-read` skill gained code-graph awareness** — merging the CodeGraphContext/mex evaluations' *principle*
+  into an existing skill instead of adding a new one (skills stay 28). Short guidance woven into the phases where
+  a code graph genuinely accelerates: **MAP** (structure + centrality in one query vs grepping imports), **TRACE**
+  (LSP one-hop + whole-repo *transitive* / *cross-language* chains that grep and per-language LSP miss), **CONNECT**
+  (aggregate queries — dead code, all-implementers-of-X, blast-radius) — plus one decision heuristic (a per-repo
+  graph earns its one-time setup only on large/unfamiliar/cross-language repos doing whole-repo/aggregate work;
+  otherwise LSP + Grep + Read). **Tool-agnostic** (CodeGraphContext/`cgc` named once as an example, not
+  shipped/registered — INVOKE an existing index, RECOMMEND building one in the report, never bootstrap silently),
+  and the "source is truth" invariant is **extended, not weakened**: a graph/LSP hit is a possibly-stale snapshot,
+  verified against live source before citing. ~7 net lines, no new H2; `mcp-guide.md` gained a one-line code-graph
+  pointer. No version bump (skill enhancement).
+
 ### Fixed
 
 - **library-docs skill referenced a nonexistent context7 tool** (found by evaluating CodeGraphContext as a

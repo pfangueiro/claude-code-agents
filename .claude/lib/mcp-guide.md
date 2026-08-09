@@ -18,6 +18,7 @@ Claude Code provides these tools natively — no MCP server needed:
 
 ### Code Intelligence
 - **LSP** — Language Server Protocol operations: `goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`, `prepareCallHierarchy`, `incomingCalls`, `outgoingCalls`. Requires LSP server configured for the file type.
+- **Code graph (optional, per-repo)** — an indexed structural-query tool (e.g. CodeGraphContext / `cgc`) answers whole-repo transitive, cross-language, and aggregate queries (blast-radius, dead code, all implementers of X) that LSP's one-hop, per-language calls cannot. Opt-in; **not shipped/registered by this framework** — see the tool's own docs. `/deep-read` uses it as an accelerator when warranted; source stays the source of truth.
 
 ### Git Isolation
 - **EnterWorktree** — Create an isolated git worktree for parallel development, experiments, or risky changes
