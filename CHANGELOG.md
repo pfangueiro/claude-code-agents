@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shipped/registered — INVOKE an existing index, RECOMMEND building one in the report, never bootstrap silently),
   and the "source is truth" invariant is **extended, not weakened**: a graph/LSP hit is a possibly-stale snapshot,
   verified against live source before citing. ~7 net lines, no new H2; `mcp-guide.md` gained a one-line code-graph
-  pointer. No version bump (skill enhancement).
+  pointer. No version bump (skill enhancement). **Behaviorally tested** (independent subagent, 4 scenarios incl. a targeted-cross-language trap): the first pass found a real over-reach path — the per-phase MAP/TRACE mentions used looser OR conditions than the governing rule — fixed by making both defer to an explicit **two-gate AND** (large-or-multi-language AND whole-repo/aggregate; one gate alone → LSP/Grep/Read). Re-test confirmed the trap routes to LSP with no over-correction on genuine blast-radius.
 
 ### Fixed
 

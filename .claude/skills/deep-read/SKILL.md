@@ -65,7 +65,7 @@ Understand the shape of the code before reading it deeply.
    - Grep for import/require statements within scoped files
    - Build a mental model: what calls what, what depends on what
    - Identify the **core files** (most imported by others)
-   - On a large or cross-language repo, an indexed code-graph query (or LSP workspace symbols) returns module structure + centrality in one pass — faster than grepping imports and spanning languages per-language tooling silos; confirm the ranking against source before trusting it
+   - When the code-graph heuristic (see Tool Usage below) holds, an indexed code-graph query (or LSP workspace symbols) returns module structure + centrality in one pass — faster than grepping imports and spanning languages per-language tooling silos; confirm the ranking against source before trusting it
 5. **Configuration and constants** — read files that define behavior:
    - Config files, environment schemas, constants, enums, types
    - These shape behavior as much as code does
@@ -94,7 +94,7 @@ Start from entry points and trace through the code. Read every file in the path.
 2. **Trace forward** from the entry point:
    - Read the entry point file **in full** with the Read tool
    - For every function call, class instantiation, or module import encountered:
-     - Locate the implementation: LSP `goToDefinition`/`outgoingCalls` for a precise one-hop jump, or Grep as fallback; for a whole-repo transitive or cross-language chain (which one-hop, per-language LSP cannot give in a single pass), query a code graph
+     - Locate the implementation: LSP `goToDefinition`/`outgoingCalls` for a precise one-hop jump, or Grep as fallback; for a whole-repo transitive or cross-language chain that one-hop, per-language LSP cannot follow, query a code graph — but only when the two-gate heuristic under Tool Usage holds (a targeted single-symbol trace, even across languages, stays on LSP/Grep)
      - Grep to locate the implementation (not just the type signature)
      - Read the implementation file in full — a graph/LSP edge only points to the file; the gate still requires reading it
    - Continue until reaching terminal operations (DB queries, API calls, file I/O, return values)
@@ -265,12 +265,12 @@ For each critical area:
 |-------|--------------|-------------------|
 | 1. SCOPE | Read, Glob, Grep, AskUserQuestion | -- |
 | 2. MAP | Glob, Grep, Read (configs, entry points), LSP / code graph (structure, centrality) | Explore agents (parallel) for 20+ file codebases |
-| 3. TRACE | Read (full files), Grep (cross-refs), LSP call hierarchy, code graph (transitive / cross-language) | Explore agent for locating implementations |
+| 3. TRACE | Read (full files), Grep (cross-refs), LSP call hierarchy, code graph (whole-repo transitive / aggregate — see heuristic) | Explore agent for locating implementations |
 | 4. DEEP READ | Read (full files, parallel) | -- |
 | 5. CONNECT | sequential-thinking MCP, code graph (aggregate / dead-code queries) | deep-analysis skill for complex reasoning |
 | 6. REPORT | Structured output | -- |
 
-**Code-graph accelerator (optional, tool-agnostic).** A per-repo indexed code graph earns its one-time setup ONLY when the repo is large/unfamiliar/cross-language AND the question is whole-repo-transitive or aggregate (full blast-radius, broad refactor, dead-code, "all implementers of X", architecture overview). Otherwise LSP (always-available, one-hop, never stale) + Grep + Read are faster. Query an existing index directly; if none exists and both gates hold, recommend building one in the report rather than bootstrapping it silently. Any code-graph tool works — e.g. CodeGraphContext / `cgc`, opt-in and per-repo, not shipped or registered by this framework (see the tool's own docs to install).
+**Code-graph accelerator (optional, tool-agnostic).** A per-repo indexed code graph earns its one-time setup ONLY when BOTH gates hold: (1) the repo is large (hundreds+ of files) or spans multiple languages, AND (2) the question is whole-repo-transitive or aggregate (full blast-radius, broad refactor, dead-code, "all implementers of X", architecture overview). One gate alone is not enough — a targeted trace, even across languages, or an aggregate question on a small single-language repo, stays on LSP/Grep/Read. Otherwise LSP (always-available, one-hop, never stale) + Grep + Read are faster. Query an existing index directly; if none exists and both gates hold, recommend building one in the report rather than bootstrapping it silently. Any code-graph tool works — e.g. CodeGraphContext / `cgc`, opt-in and per-repo, not shipped or registered by this framework (see the tool's own docs to install).
 
 ## Anti-Patterns — What This Skill Prevents
 
