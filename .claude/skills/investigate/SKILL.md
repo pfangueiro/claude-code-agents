@@ -86,7 +86,7 @@ Start from the symptom and trace backward to the origin.
 
 1. **Locate the symptom** — find the exact file and line where the error occurs:
    - Use Grep for error messages, exception types, log strings
-   - Use Explore agent for broad searches if the location is unclear
+   - Explore agent for broad searches if the location is unclear — unavailable when forked; batch parallel Grep/Glob calls inline instead
 2. **Trace the call chain** — read every file in the execution path:
    - Use LSP `goToDefinition` and `findReferences` to navigate the call chain precisely
    - Use LSP `incomingCalls`/`outgoingCalls` to map the full call hierarchy
@@ -258,10 +258,10 @@ The investigation isn't complete until recurrence is prevented.
 |-------|--------------|-------------------|
 | 1. OBSERVE | Read, Grep, Bash (git log) | — |
 | 2. REPRODUCE | Bash (test runner), Playwright MCP | — |
-| 3. TRACE | Read, Grep, Glob, Bash (git blame) | Explore agent for broad searches |
+| 3. TRACE | Read, Grep, Glob, Bash (git blame) | Explore agent for broad searches (un-forked only) |
 | 4. HYPOTHESIZE | sequential-thinking MCP | deep-analysis skill |
 | 5. PROVE | Read, Grep, Bash, WebSearch, context7 MCP | library-docs skill, GitHub MCP |
-| 6. ROOT CAUSE | Read, Grep | Explore agent for blast radius |
+| 6. ROOT CAUSE | Read, Grep | Explore agent for blast radius (un-forked only) |
 | 7. FIX | Read, Edit, Write, Bash | code-quality agent for review |
 | 8. PREVENT | Write, Edit, Bash | test-automation agent for tests |
 
@@ -285,7 +285,7 @@ The investigation isn't complete until recurrence is prevented.
 |-----------|-----|
 | Bug, crash, error, unexpected behavior | `/investigate` |
 | Build a new feature | `/execute` |
-| Quick "what does this code do?" | Explore agent directly |
+| Quick "what does this code do?" | Explore agent directly (main session only) |
 | Performance slow but unclear why | `/investigate` (treat slowness as symptom) |
 | Known fix, just need to apply it | Direct Edit — no investigation needed |
 | Security vulnerability found | `/investigate` + security-scan |

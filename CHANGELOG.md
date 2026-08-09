@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Round-2 P0: two skills that certified failure as success, plus the guards that certified themselves.**
+  A blind re-test (testers shown no prior findings) then independent reconciliation confirmed round 1 was
+  *under*-called, not inflated — one over-report in 28. Repaired, each verified by execution:
+  - **`browser-testing` was certifying a failed login as a passing E2E.** `playwright_assert_response` was
+    called with no `value`, and the server's own source shows the call then falls straight through to
+    `createSuccessResponse` — printing a 401's status without ever comparing it. Both call sites now assert a
+    success-only value; `expect_response` moved *before* its triggering click (it only waits from the moment it
+    is registered); all 59 bare `playwright_*` names prefixed to `mcp__playwright__*` (verified against the
+    installed server: every one of the 30 tools referenced exists); the phantom screenshot "comparison" now
+    names a real comparator with a threshold and treats a missing baseline or an un-run comparator as FAIL.
+  - **`ci-cd-templates`**: semgrep ran without `--error` (exit 0 with findings present) and emitted the wrong
+    report schema; the registry push used an unqualified image name; `snyk/actions@master` was unpinned;
+    codecov's `fail_ci_if_error` was unset; and both deploy webhooks used `curl` with no `--fail`, so a failing
+    deploy call returned success. The unbacked CircleCI claim was removed from the skill and from CLAUDE.md.
+  - **`health_check.py` partial runs lied**: `--check api` against a reachable endpoint printed “ALL CHECKS
+    PASSED” and exited 0 after running one of five probes. Partial runs now exit `EXIT_PARTIAL`.
+  - **`quick_validate.py`** regex-scraped frontmatter instead of parsing it, so a description containing a colon
+    was mis-read by the gate that mints every future skill; it now uses `yaml.safe_load` and fails closed on
+    malformed YAML. An unbalanced code fence used to silently abort the body scan — that now fails too. And
+    `init_skill.py` emitted an *unquoted* `[TODO: …]`, which YAML reads as a list, so scaffolded skills failed
+    with “must be text, got list” instead of naming the placeholder; it is quoted now.
+  - **`deep-read` / `investigate` were forked yet instructed fork-unavailable capabilities** (AskUserQuestion,
+    Explore agents) — their own enforcement was dead text. Scope narrowing is now deterministic in-fork, the
+    displaced instruction in `references/reading-strategies.md` is corrected, and an off-by-one (“keep the top
+    50” against a strict `< 50` gate) is reconciled.
+- **Three guards that certified themselves green — found by review, fixed before commit.** The health guard
+  asserted `main()`'s **return value**, so a `__main__` wrapper changed to `sys.exit(0)` would keep it passing;
+  it now measures the **process** exit code via subprocess, and asserts the *specific* `EXIT_PARTIAL` rather
+  than “non-zero” (a merely failed probe is also non-zero). While fixing it, a bug in the guard's own fixture
+  surfaced: it patched only the first `api_url`, and since `production` is declared before `staging` the probe
+  was hitting an unreachable host — so the guard had been passing on a **failed** run, not a partial one. The
+  fork/spawn guard had three holes: a file-wide caveat amnesty (one boilerplate sentence exempted every later
+  violation), `context: "fork"` silently unscanned, and no detection of “Task tool”. All closed — and the
+  strengthened guard immediately caught a live instance in `investigate` that the amnesty had been hiding.
+  229 checks; every guard gap-tested by reintroducing its bug.
+
 ### Added
 
 - **Fail-open regression guards — the P0 fixes are now enforced, not just applied.** A gap analysis found that

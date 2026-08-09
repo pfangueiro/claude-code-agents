@@ -16,13 +16,20 @@ Usage:
     python3 health_check.py --env production
     python3 health_check.py --env production --check api
     python3 health_check.py --env production --verbose
+
+Exit codes (a CI gate must distinguish these):
+    0   full run, every check passed — the only result that green-lights a deploy
+    1   at least one check that ran FAILED
+    2   PARTIAL run (--check): everything that ran passed, but not every check ran,
+        so nothing was gated. Never treat 2 as a pass.
+    130 interrupted
 """
 
 import argparse
 import requests
 import sys
 import time
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, List, Tuple
 
 # Configuration
 ENVIRONMENTS = {
@@ -42,6 +49,13 @@ ENVIRONMENTS = {
 MAX_RESPONSE_TIME_MS = 200
 MAX_ERROR_RATE = 0.01  # 1%
 MIN_SUCCESS_RATE = 0.999  # 99.9%
+
+# Exit codes. A partial run gets its OWN code: `--check api` verifies one probe out
+# of the full set, so reporting it as 0 would let a CI gate mistake one green probe
+# for a verified deployment.
+EXIT_OK = 0
+EXIT_FAILED = 1
+EXIT_PARTIAL = 2
 
 
 class HealthChecker:
@@ -175,9 +189,13 @@ class HealthChecker:
             "probe each dependency (payment gateway, email service, third-party APIs, CDN)",
         )
 
-    def run_all_checks(self) -> Dict[str, Tuple[bool, str]]:
-        """Run all health checks"""
-        checks = {
+    def _all_checks(self) -> Dict[str, Callable[[], Tuple[bool, str]]]:
+        """Canonical registry of every check a FULL run performs.
+
+        Single source of truth so the partial-run accounting cannot drift from
+        the set of checks that actually exists.
+        """
+        return {
             'API Health': self.check_api_health,
             'Database': self.check_database,
             'Cache': self.check_cache,
@@ -185,8 +203,15 @@ class HealthChecker:
             'External Services': self.check_external_services,
         }
 
+    @property
+    def total_checks(self) -> int:
+        """Number of checks a full run performs (the denominator of the gate)"""
+        return len(self._all_checks())
+
+    def run_all_checks(self) -> Dict[str, Tuple[bool, str]]:
+        """Run all health checks"""
         results = {}
-        for name, check_func in checks.items():
+        for name, check_func in self._all_checks().items():
             results[name] = check_func()
 
         return results
@@ -210,13 +235,20 @@ class HealthChecker:
         return check_func()
 
 
-def print_results(results: Dict[str, Tuple[bool, str]]):
-    """Print health check results"""
+def print_results(results: Dict[str, Tuple[bool, str]], total_checks: int):
+    """Print health check results and return the process exit code.
+
+    `total_checks` is how many checks a FULL run performs. When fewer than that
+    actually ran (`--check <name>`), the run verified only a slice of the system
+    and MUST NOT be reported as a pass — it gets the PARTIAL banner and its own
+    exit code so a CI gate cannot mistake it for a full green.
+    """
     print("\n" + "="*50)
     print("DEPLOYMENT HEALTH CHECK RESULTS")
     print("="*50 + "\n")
 
     all_passed = True
+    passed_count = 0
     for name, (passed, message) in results.items():
         status = "✓" if passed else "✗"
         color = "\033[92m" if passed else "\033[91m"
@@ -224,18 +256,31 @@ def print_results(results: Dict[str, Tuple[bool, str]]):
 
         print(f"{color}{status}{reset} {name}: {message}")
 
-        if not passed:
+        if passed:
+            passed_count += 1
+        else:
             all_passed = False
 
+    ran_count = len(results)
+    is_partial = ran_count < total_checks
+
     print("\n" + "="*50)
-    if all_passed:
-        print("\033[92m✓ ALL CHECKS PASSED\033[0m")
+    if not all_passed:
+        print(f"\033[91m✗ SOME CHECKS FAILED ({passed_count}/{ran_count} of the checks that ran passed)\033[0m")
+        if is_partial:
+            print(f"\033[93m⚠ PARTIAL RUN — only {ran_count}/{total_checks} checks ran, NOT A DEPLOY GATE\033[0m")
         print("="*50 + "\n")
-        return 0
-    else:
-        print("\033[91m✗ SOME CHECKS FAILED\033[0m")
+        return EXIT_FAILED
+
+    if is_partial:
+        print(f"\033[93m⚠ {passed_count}/{total_checks} CHECKS PASSED — PARTIAL RUN, NOT A DEPLOY GATE\033[0m")
+        print(f"  {total_checks - ran_count} check(s) never ran. Re-run without --check for the full gate.")
         print("="*50 + "\n")
-        return 1
+        return EXIT_PARTIAL
+
+    print(f"\033[92m✓ ALL CHECKS PASSED ({passed_count}/{total_checks})\033[0m")
+    print("="*50 + "\n")
+    return EXIT_OK
 
 
 def main():
@@ -273,11 +318,11 @@ def main():
             # Run all checks
             results = checker.run_all_checks()
 
-        return print_results(results)
+        return print_results(results, checker.total_checks)
 
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
-        return 1
+        return EXIT_FAILED
     except KeyboardInterrupt:
         print("\n\nHealth check interrupted by user")
         return 130

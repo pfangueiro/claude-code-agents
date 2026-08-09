@@ -27,9 +27,11 @@ Narrow the target to a tractable area before reading anything.
    - `Glob` for relevant file patterns (`**/*.ts`, `**/*.py`, etc.)
    - `Grep` for key terms from the target description
    - Count matching files
-4. If scope exceeds 50 source files:
-   - Use `AskUserQuestion` to narrow: which subsystem, which flow, which layer?
-   - Suggest specific narrowing options based on directory structure
+4. If scope exceeds 50 source files, narrow **deterministically** — this skill runs forked and cannot ask the user (see Fork note):
+   - Rank candidates by centrality (import fan-in within the candidate set), tie-broken by recency (`git log -1 --format=%ct -- <file>`)
+   - Keep the top 49 and drop the rest (the Phase-1 gate below is strict: under 50) — never sample arbitrarily, and never widen the gate to fit the target
+   - Record the cap (total candidates, how many kept, the ranking key) in the scope definition and restate it in the report as an explicit coverage limit
+   - If the kept set still spans unrelated subsystems, the target is too broad to read coherently: say so in the report and name the narrower sub-targets a follow-up `/deep-read` should take, rather than presenting an arbitrary slice as if it were the whole
 5. If the target is a **question** (e.g., "how are commissions calculated?"):
    - Translate to concrete search terms
    - Grep for domain terms to locate relevant modules
@@ -40,6 +42,7 @@ Narrow the target to a tractable area before reading anything.
 **Output:** A scope definition listing:
 - Target description (1-2 sentences)
 - File list (< 50 source files)
+- Applied narrowing cap, if any (total candidates → kept, ranking key)
 - Identified entry points
 - Out-of-scope areas (explicitly noted)
 
@@ -70,7 +73,7 @@ Understand the shape of the code before reading it deeply.
    - Config files, environment schemas, constants, enums, types
    - These shape behavior as much as code does
 
-**Launch parallel Explore agents** for steps 2-4 if the scope has 20+ files.
+For 20+ file scopes, run steps 2-4 **sequentially in-fork** — batch each step's independent `Glob`/`Grep`/`Read` calls into a single message so they execute in parallel (see Fork note).
 
 **Output:** Structural map including:
 - Directory layout with annotations
@@ -218,6 +221,7 @@ Produce the final report. Every claim must cite `file:line`.
 ### Scope
 - **Target:** <what was analyzed>
 - **Files analyzed:** <count> files, <count> read in full
+- **Coverage limit:** <none, or: top <N> of <total> candidates by <ranking key>; remainder out of scope>
 - **Entry points:** <list with file:line>
 
 ### Architecture Overview
@@ -261,14 +265,16 @@ For each critical area:
 
 ## Tool Usage by Phase
 
-| Phase | Primary Tools | When to Use Agents |
+| Phase | Primary Tools | Parallelism & Escalation (in-fork) |
 |-------|--------------|-------------------|
-| 1. SCOPE | Read, Glob, Grep, AskUserQuestion | -- |
-| 2. MAP | Glob, Grep, Read (configs, entry points), LSP / code graph (structure, centrality) | Explore agents (parallel) for 20+ file codebases |
-| 3. TRACE | Read (full files), Grep (cross-refs), LSP call hierarchy, code graph (whole-repo transitive / aggregate — see heuristic) | Explore agent for locating implementations |
+| 1. SCOPE | Read, Glob, Grep, Bash (`git log`, for recency ranking) | -- |
+| 2. MAP | Glob, Grep, Read (configs, entry points), LSP / code graph (structure, centrality) | Batch steps 2-4 lookups into one message (20+ files) |
+| 3. TRACE | Read (full files), Grep (cross-refs), LSP call hierarchy, code graph (whole-repo transitive / aggregate — see heuristic) | Batch independent Grep / LSP lookups |
 | 4. DEEP READ | Read (full files, parallel) | -- |
 | 5. CONNECT | sequential-thinking MCP, code graph (aggregate / dead-code queries) | deep-analysis skill for complex reasoning |
 | 6. REPORT | Structured output | -- |
+
+> **Fork note:** `/deep-read` runs forked (`context: fork`) for context isolation — the full-file reads and traces stay out of the main conversation and only the report returns. Forked subagents cannot use the `Agent` launcher or `AskUserQuestion`, so this protocol is written to need neither: every phase runs on Primary Tools (Read/Glob/Grep/Bash/LSP/sequential-thinking), Phase 1 narrows deterministically instead of asking, and "parallel" throughout means batching independent tool calls into one message — never spawning agents. Anything that genuinely needs the user's choice is surfaced as an open question in the report rather than asked mid-run.
 
 **Code-graph accelerator (optional, tool-agnostic).** A per-repo indexed code graph earns its one-time setup ONLY when BOTH gates hold: (1) the repo is large (hundreds+ of files) or spans multiple languages, AND (2) the question is whole-repo-transitive or aggregate (full blast-radius, broad refactor, dead-code, "all implementers of X", architecture overview). One gate alone is not enough — a targeted trace, even across languages, or an aggregate question on a small single-language repo, stays on LSP/Grep/Read. Otherwise LSP (always-available, one-hop, never stale) + Grep + Read are faster. Query an existing index directly; if none exists and both gates hold, recommend building one in the report rather than bootstrapping it silently. Any code-graph tool works — e.g. CodeGraphContext / `cgc`, opt-in and per-repo, not shipped or registered by this framework (see the tool's own docs to install).
 

@@ -137,9 +137,9 @@ How to trace execution paths and identify critical files for different codebase 
 
 ### Large (50+ source files)
 
-**Strategy:** Narrow scope aggressively in Phase 1. Use parallel agents. Deep-read the top 10-15 files.
+**Strategy:** Narrow scope aggressively in Phase 1. Batch independent Glob/Grep/Read calls into one message so they run in parallel in-fork (the Agent launcher is unavailable when forked). Deep-read the top 10-15 files.
 
-1. Phase 1 MUST narrow to < 50 files — use AskUserQuestion if needed
+1. Phase 1 MUST narrow to under 50 files — narrow deterministically (centrality, then recency); AskUserQuestion is unavailable when forked
 2. In Phase 2, launch parallel Explore agents:
    - Agent 1: Map directory structure and tech stack
    - Agent 2: Map entry points and exports

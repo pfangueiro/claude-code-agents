@@ -81,7 +81,7 @@ Skills provide modular knowledge packages that complement agents. See `.claude/s
 **Testing skills:** browser-testing (Playwright MCP for E2E, visual regression), api-contract-testing (OpenAPI / JSON Schema / contract-first)
 **API skills:** api-guidelines (Next.js/TypeScript secure endpoint patterns)
 **UI skills:** ui-guidelines (React/Next.js + Ant Design + shadcn patterns, spacing / typography / color system)
-**Infra skills:** docker-deployment (multi-stage builds, prod configs), ci-cd-templates (GitHub Actions / GitLab CI / CircleCI)
+**Infra skills:** docker-deployment (multi-stage builds, prod configs), ci-cd-templates (GitHub Actions / GitLab CI)
 **Session skills:** handoff (HANDOFF.md creation for session continuity before /compact), context-escalation (explicit-level policy for context management: truncate → drop-redundant-reads → fork-subagent → /compact → handoff)
 **MCP-powered skills:** library-docs (context7), deep-analysis (sequential-thinking)
 **Divergence skills:** diverge (isolated parallel ideation under cognitive frames + critic pass; the divergent complement to deep-analysis, gated by consequence × openness)

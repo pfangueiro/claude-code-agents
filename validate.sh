@@ -513,6 +513,118 @@ if [ -f "$_hc" ]; then
         else
             fail "Fail-open guard: health_check.py probe(s) report SUCCESS without verifying:$_hc_open — a deploy gate that cannot fail"
         fi
+
+        # (1b) A PARTIAL run must NOT exit 0. The loop above only probes checks that are
+        # unimplemented, so it cannot see the other fail-open shape: `--check api` against a
+        # REACHABLE endpoint runs 1 of 5 probes, and if that reports "ALL CHECKS PASSED" with
+        # exit 0 a CI gate reads one healthy endpoint as a verified deployment. Assert the
+        # invariant by RUNNING the script against a local stub, not by grepping for a banner.
+        # Two-sided: a full run with every probe green must still exit 0, otherwise the script
+        # is merely broken (always non-zero) rather than honest.
+        _hc_stub=$(python3 - "$_hc" <<'PYEOF'
+import contextlib, http.server, importlib.util, io, socketserver, sys, threading
+
+# Importing by path would drop a __pycache__/ next to the artifact, which the
+# --quick shared-set drift check then reports as untracked drift on every run.
+sys.dont_write_bytecode = True
+
+path = sys.argv[1]
+
+
+class _Stub(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-Length', '2')
+        self.end_headers()
+        self.wfile.write(b'ok')
+
+    def log_message(self, *a):
+        pass
+
+
+srv = socketserver.TCPServer(('127.0.0.1', 0), _Stub)
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+url = 'http://127.0.0.1:%d/health' % srv.server_address[1]
+
+
+def load():
+    spec = importlib.util.spec_from_file_location('hc_guard', path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    mod.ENVIRONMENTS['staging']['api_url'] = url
+    mod.MAX_RESPONSE_TIME_MS = 60000  # testing run accounting, not loopback latency
+    return mod
+
+
+def run(mod, argv):
+    sys.argv = argv
+    with contextlib.redirect_stdout(io.StringIO()):
+        return mod.main()
+
+
+# The stub must genuinely satisfy the api probe, else a non-zero exit proves nothing.
+m = load()
+probe_ok, _ = m.HealthChecker('staging').check_api_health()
+
+# PARTIAL run is measured as a SUBPROCESS, not via main()'s return value. A CI gate reads the
+# PROCESS exit code, so that is what must be asserted: an in-process check would still pass if
+# the `if __name__ == "__main__"` wrapper were changed to sys.exit(0), which is precisely the
+# fail-open this guard exists to catch.
+import re as _re, subprocess, tempfile, os as _os
+_src = open(path).read()
+# Patch EVERY api_url (not just the first — 'production' is declared before 'staging', so a
+# count=1 substitution would leave staging pointing at an unreachable host; the probe would
+# then fail and the guard would go green on a FAILED run rather than on a partial one).
+_patched = _re.sub(r"('api_url'\s*:\s*)'[^']*'", lambda mo: mo.group(1) + repr(url), _src)
+# Loopback is fast, but pin the latency ceiling so a slow runner cannot turn this into a
+# false FAIL — the invariant under test is the exit code, not the machine's timing.
+_patched = _re.sub(r'^MAX_RESPONSE_TIME_MS\s*=\s*\d+', 'MAX_RESPONSE_TIME_MS = 60000',
+                   _patched, count=1, flags=_re.M)
+_tmpdir = tempfile.mkdtemp()
+_tmp = _os.path.join(_tmpdir, 'hc_cli_probe.py')
+open(_tmp, 'w').write(_patched)
+try:
+    rc_partial = subprocess.run(
+        [sys.executable, '-B', _tmp, '--env', 'staging', '--check', 'api'],
+        capture_output=True, text=True, timeout=60).returncode
+finally:
+    _os.remove(_tmp)
+    _os.rmdir(_tmpdir)
+
+m2 = load()
+for _attr in [a for a in dir(m2.HealthChecker) if a.startswith('check_')]:
+    setattr(m2.HealthChecker, _attr, lambda self, _a=_attr: (True, 'stub'))
+rc_full = run(m2, ['health_check.py', '--env', 'staging'])
+
+srv.shutdown()
+print('API_PROBE', 'ok' if probe_ok else 'bad')
+print('RC_PARTIAL', rc_partial)
+print('RC_FULL', rc_full)
+# Report the script's own EXIT_PARTIAL so the shell asserts the SPECIFIC partial code rather
+# than "any non-zero": a probe that merely failed also exits non-zero and would otherwise let
+# this guard pass without ever exercising the partial-run path.
+print('EXIT_PARTIAL', getattr(m, 'EXIT_PARTIAL', 2))
+PYEOF
+) || _hc_stub=""
+        _hc_probe=$(printf '%s\n' "$_hc_stub" | awk '$1=="API_PROBE"{print $2}')
+        _hc_rc_partial=$(printf '%s\n' "$_hc_stub" | awk '$1=="RC_PARTIAL"{print $2}')
+        _hc_rc_full=$(printf '%s\n' "$_hc_stub" | awk '$1=="RC_FULL"{print $2}')
+        _hc_exit_partial=$(printf '%s\n' "$_hc_stub" | awk '$1=="EXIT_PARTIAL"{print $2}')
+        if [ "$_hc_probe" != "ok" ] || [ -z "$_hc_rc_partial" ] || [ -z "$_hc_rc_full" ]; then
+            # Fail closed: unable to execute the artifact (missing `requests`, blocked
+            # loopback, changed API) means the invariant is UNVERIFIED, not satisfied.
+            fail "Fail-open guard: could not run health_check.py against a local stub — partial-run invariant UNVERIFIED (probe='${_hc_probe:-none}')"
+        elif [ "$_hc_rc_partial" = "0" ]; then
+            fail "Fail-open guard: health_check.py PARTIAL run (--check api, 1 of 5 probes) exits 0 — CI cannot tell it from a full pass"
+        elif [ -n "$_hc_exit_partial" ] && [ "$_hc_rc_partial" != "$_hc_exit_partial" ]; then
+            # Non-zero is not enough: a merely FAILED probe also exits non-zero, which would let
+            # this guard pass without the partial-run path ever executing.
+            fail "Fail-open guard: health_check.py partial run exited $_hc_rc_partial, expected EXIT_PARTIAL=$_hc_exit_partial — the probe failed instead of reporting a partial run, so the invariant is untested"
+        elif [ "$_hc_rc_full" != "0" ]; then
+            fail "Fail-open guard: health_check.py FULL run with every probe green exits $_hc_rc_full — the gate can never go green"
+        else
+            pass "Fail-open guard: health_check.py partial run exits EXIT_PARTIAL=$_hc_rc_partial (subprocess), full green run exits 0"
+        fi
     else
         warn "Fail-open guard: python3 absent — cannot execute health_check.py"
     fi
@@ -694,25 +806,85 @@ for gated_skill in "${GATED_SKILLS[@]}"; do
 done
 
 # ============================================================================
-# Spawner Skills Must Not Be Forked (forked subagents cannot use the Agent tool)
+# Forked Skills Must Not Instruct Spawning
+# (a forked subagent has no Agent launcher and no AskUserQuestion)
 # ============================================================================
 
-SPAWNER_SKILLS=(
-    "diverge"
-    "execute"
-)
+# DERIVED from source, never a hardcoded allowlist. The previous version checked a
+# two-name list ("diverge" "execute") and so printed PASS while deep-read — which
+# declares `context: fork` AND documented "Launch parallel Explore agents" plus
+# AskUserQuestion steps — was a live instance of the very pattern this guard forbids.
+# Any skill can acquire `context: fork` in one line, so the set under test must come
+# from the files, not from a list a maintainer has to remember to update.
+#
+# Rule: for every skill whose FRONTMATTER declares `context: fork`, no line may instruct
+# a capability a forked subagent lacks (Agent launcher / Explore agent / sub-agent spawn /
+# AskUserQuestion) UNLESS the file carries an explicit fork caveat naming that capability
+# as unavailable (as /investigate and /deep-read do), which tells the reader the step
+# applies only to an un-forked run. Referenced-with-no-caveat is a FAIL.
 
-section "Checking Spawner Skills Are Not Forked (${#SPAWNER_SKILLS[@]})"
+section "Checking Forked Skills Do Not Instruct Spawning"
 
-for spawner in "${SPAWNER_SKILLS[@]}"; do
-    spawner_file=".claude/skills/${spawner}/SKILL.md"
-    [ -f "$spawner_file" ] || continue
-    if grep -q "^context: fork" "$spawner_file" 2>/dev/null; then
-        fail "$spawner: must NOT declare 'context: fork' — forked subagents cannot spawn the parallel sub-agents this skill needs"
-    else
-        pass "$spawner: not forked (can spawn parallel sub-agents)"
+_fork_files=()
+_skill_total=0
+for _skill_file in .claude/skills/*/SKILL.md; do
+    [ -f "$_skill_file" ] || continue
+    _skill_total=$((_skill_total + 1))
+    # Frontmatter only: everything between the first two --- fences.
+    # Accept quoted forms too: `context: "fork"` / `context: 'fork'` are the same YAML value,
+    # and a bare-word-only match would silently skip scanning such a skill entirely.
+    if awk 'NR==1 && /^---[[:space:]]*$/ {inb=1; next} inb && /^---[[:space:]]*$/ {exit} inb {print}' \
+        "$_skill_file" 2>/dev/null | grep -qE '^context:[[:space:]]*["'"'"']?fork["'"'"']?[[:space:]]*$'; then
+        _fork_files+=("$_skill_file")
     fi
 done
+
+if [ "$_skill_total" -eq 0 ]; then
+    # Fail closed: no skills readable means the guard verified nothing.
+    fail "Fork-spawn guard: no .claude/skills/*/SKILL.md found — guard could not run"
+elif [ "${#_fork_files[@]}" -eq 0 ]; then
+    pass "Fork-spawn guard: no skill declares 'context: fork' ($_skill_total skills scanned)"
+else
+    for _fork_file in "${_fork_files[@]}"; do
+        _fname=$(basename "$(dirname "$_fork_file")")
+        _fscan=$(awk '
+            {
+                low = tolower($0)
+                is_ask   = (low ~ /askuserquestion/)
+                # `task tool` is the canonical spawn mechanism in this product and was missing;
+                # `launch ... agent` catches the instruction phrasing that names no tool.
+                is_agent = (low ~ /explore agent|sub-?agent|subagent_type|spawn|`agent`|agent tool|agent launcher|task tool|launch[^.]*agent/)
+                if (!is_ask && !is_agent) next
+                # A line that states the fork LIMITATION is documentation, not an instruction.
+                # Excused only by a marker ON THIS LINE — either it states the fork limitation,
+                # or it explicitly scopes itself out of fork mode. A caveat elsewhere in the
+                # file must NOT excuse an instruction here (that was the amnesty hole).
+                if ((low ~ /fork/ && low ~ /cannot|can not|unavailable|not available|does not have|do not have|no access/) \
+                    || low ~ /un-?forked only|main session only|not in fork|unavailable when forked/) {
+                    if (is_ask)   cav_ask = 1
+                    if (is_agent) cav_agent = 1
+                    next
+                }
+                if (is_ask)   off_ask = 1
+                if (is_agent) off_agent = 1
+                printf "OFF %d: %s\n", FNR, substr($0, 1, 120)
+            }
+            END { printf "SUM %d %d %d %d\n", off_ask+0, off_agent+0, cav_ask+0, cav_agent+0 }
+        ' "$_fork_file")
+        read -r _off_ask _off_agent _cav_ask _cav_agent <<< "$(printf '%s\n' "$_fscan" | awk '$1=="SUM"{print $2, $3, $4, $5}')"
+
+        # NO file-level caveat amnesty. A line that states the limitation is already skipped
+        # above (the `next` in the caveat branch), so anything reaching the offence counters is
+        # a genuine instruction. Letting one boilerplate caveat sentence exempt every later
+        # violation in the file is exactly the "guard that certifies green" anti-pattern.
+        if [ "$_off_ask" = "0" ] && [ "$_off_agent" = "0" ]; then
+            pass "$_fname: forked and instructs no Agent-launcher/AskUserQuestion step"
+        else
+            fail "$_fname: declares 'context: fork' but instructs capabilities a forked subagent lacks (Agent launcher / AskUserQuestion) with no fork caveat naming them"
+            [ "$QUIET" = "--quiet" ] || printf '%s\n' "$_fscan" | grep '^OFF ' | sed 's/^OFF /         line /'
+        fi
+    done
+fi
 
 # ============================================================================
 # Currency Lints — guard regressions surfaced by the sub-agents/docs eval

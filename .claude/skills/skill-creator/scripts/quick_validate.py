@@ -14,12 +14,19 @@ Checks performed (the contract advertised in skill-creator/SKILL.md, Step 5):
 Fail-closed: a check that cannot verify its subject reports failure, never
 success. Unfilled template content (a '[TODO: ...]' description, an untouched
 init_skill.py example file, a body with no instructions) is a validation
-failure, not a pass.
+failure, not a pass. Frontmatter is parsed with PyYAML, never scraped, so
+YAML that Claude Code would reject is rejected here too; if PyYAML is missing
+the run fails rather than passing an unverified skill.
 """
 
 import sys
 import re
 from pathlib import Path
+
+try:
+    import yaml
+except ImportError:  # PyYAML absent — validation cannot verify, so it must fail.
+    yaml = None
 
 # Values that are unmistakably unfilled template slots rather than real content.
 # Matched case-insensitively against the frontmatter description.
@@ -51,40 +58,103 @@ TEMPLATE_RESOURCES = [
 
 RESOURCE_DIRS = ('scripts', 'references', 'assets')
 
+# A skill-relative path into one of the bundled resource directories.
+_RESOURCE_PATH = (r'(?:\./)?(?:' + '|'.join(RESOURCE_DIRS) +
+                  r')/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*')
+
+# Constructs that ASSERT a bundled file is there, as opposed to prose that merely
+# names a path. A markdown link or image is unambiguous; a bare or backticked path
+# counts only when an instruction verb introduces it. Illustrative mentions
+# ("**Example**: `scripts/rotate_pdf.py`") are deliberately out of scope: they name
+# files the skill never claims to ship, and flagging them would make this check cry
+# wolf on documentation-style skills until someone switches it off.
+REFERENCE_PATTERNS = [
+    re.compile(r'!?\[[^\]\n]*\]\(\s*(' + _RESOURCE_PATH + r')[^)\n]*\)'),
+    re.compile(r'\b(?:see|read|run|use|using|execute|refer\s+to|consult|load|open)\s+'
+               r'(?:the\s+)?`?(' + _RESOURCE_PATH + r')`?', re.IGNORECASE),
+]
+
+# Fenced blocks are sample code for the reader's own project, not claims about
+# this skill's bundle, so they are excluded from reference scanning.
+FENCE_RE = re.compile(r'^\s*(?:```|~~~)')
+
 MAX_NAME_LENGTH = 40
 MIN_DESCRIPTION_LENGTH = 20
 MIN_BODY_LENGTH = 50
 
 
-def _extract_field(frontmatter, field):
+def _parse_frontmatter(frontmatter):
     """
-    Return the value of a top-level frontmatter key.
+    Parse the frontmatter block as YAML.
 
-    Returns None when the key is absent, and '' when it is present but empty.
-    Handles plain scalars, quoted scalars, and block scalars ('|' / '>').
+    Returns (mapping, None) on success, or (None, error_message) when the block
+    is unparseable or is not a mapping. Never guesses: YAML that PyYAML rejects
+    is a validation failure, because Claude Code would reject it too.
     """
-    lines = frontmatter.split('\n')
-    for idx, line in enumerate(lines):
-        match = re.match(r'^' + re.escape(field) + r':[ \t]*(.*)$', line)
-        if not match:
+    if yaml is None:
+        return None, ("PyYAML is required to validate frontmatter but is not installed "
+                      "— run 'pip install pyyaml' and re-run; refusing to pass an "
+                      "unverified skill")
+    try:
+        data = yaml.safe_load(frontmatter)
+    except yaml.YAMLError as err:
+        detail = ' '.join(str(err).split())
+        return None, f"Frontmatter is not valid YAML: {detail}"
+
+    if data is None:
+        return None, "Frontmatter is empty"
+    if not isinstance(data, dict):
+        return None, (f"Frontmatter must be a YAML mapping of fields, "
+                      f"got {type(data).__name__}")
+    return data, None
+
+
+def _field(data, field):
+    """
+    Return (value, error_message) for a required top-level frontmatter field.
+
+    A missing key and a present-but-empty key are distinct failures, so each
+    keeps its own message. A non-string value is a failure rather than a
+    coercion — a list or a number is not a name or a description.
+    """
+    if field not in data:
+        return None, f"Missing '{field}' in frontmatter"
+    value = data[field]
+    if value is None:
+        return '', None
+    if not isinstance(value, str):
+        return None, (f"Field '{field}' must be text, got "
+                      f"{type(value).__name__}")
+    return value.strip(), None
+
+
+def _find_missing_references(body, skill_path):
+    """
+    Return the sorted skill-relative resource paths the body points at that are
+    not present on disk.
+
+    Only references outside fenced code blocks are considered — see
+    REFERENCE_PATTERNS for what counts as a reference and why.
+    """
+    missing = set()
+    in_fence = False
+    for line in body.split('\n'):
+        if FENCE_RE.match(line):
+            in_fence = not in_fence
             continue
-
-        value = match.group(1).strip()
-
-        # Block scalar: the value is the indented lines that follow.
-        if re.fullmatch(r'[|>][-+]?\d*', value):
-            block = []
-            for following in lines[idx + 1:]:
-                if following.strip() and not following[:1].isspace():
-                    break
-                block.append(following.strip())
-            value = ' '.join(part for part in block if part).strip()
-
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
-            value = value[1:-1].strip()
-
-        return value
-    return None
+        if in_fence:
+            continue
+        for pattern in REFERENCE_PATTERNS:
+            for raw in pattern.findall(line):
+                rel = raw[2:] if raw.startswith('./') else raw
+                if not (skill_path / rel).exists():
+                    missing.add(rel)
+    if in_fence:
+        # Unbalanced fences: in_fence never closed, so every line after the stray fence was
+        # skipped and this scan silently checked nothing. Fail closed — a validator that
+        # quietly stops looking is the exact fail-open class this check exists to prevent.
+        missing.add('<unbalanced code fence: body scan aborted — fix the ``` / ~~~ pairing>')
+    return sorted(missing)
 
 
 def _find_placeholder(text):
@@ -129,12 +199,15 @@ def validate_skill(skill_path):
     body = content[match.end():]
 
     # Check required fields
-    name = _extract_field(frontmatter, 'name')
-    if name is None:
-        return False, "Missing 'name' in frontmatter"
-    description = _extract_field(frontmatter, 'description')
-    if description is None:
-        return False, "Missing 'description' in frontmatter"
+    data, error = _parse_frontmatter(frontmatter)
+    if error:
+        return False, error
+    name, error = _field(data, 'name')
+    if error:
+        return False, error
+    description, error = _field(data, 'description')
+    if error:
+        return False, error
 
     # --- 2. Naming conventions and directory structure -------------------
     if not name:
@@ -183,6 +256,11 @@ def validate_skill(skill_path):
             return False, f"'{dir_name}' exists but is not a directory"
         if not any(resource_dir.iterdir()):
             return False, f"Resource directory '{dir_name}/' is empty — add files or delete it"
+
+    missing_refs = _find_missing_references(body, skill_path)
+    if missing_refs:
+        return False, ("SKILL.md references files that do not exist: "
+                       f"{', '.join(missing_refs)}")
 
     for rel_path, marker in TEMPLATE_RESOURCES:
         resource = skill_path / rel_path

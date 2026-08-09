@@ -1,18 +1,17 @@
 ---
 name: ci-cd-templates
-description: Production-ready CI/CD pipeline templates for GitHub Actions, GitLab CI, and CircleCI
+description: Production-ready CI/CD pipeline templates for GitHub Actions and GitLab CI
 ---
 
 # CI/CD Templates Skill
 
-Provides production-ready CI/CD pipeline templates for GitHub Actions, GitLab CI, and CircleCI.
+Provides production-ready CI/CD pipeline templates for GitHub Actions and GitLab CI.
 
 ## Purpose
 
 This skill provides:
 - GitHub Actions workflow templates
 - GitLab CI/CD pipeline configurations
-- CircleCI config examples
 - Best practices for automated testing, building, and deployment
 - Security scanning integration
 - Deployment strategies (blue/green, canary, rolling)
@@ -36,6 +35,15 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
+
+# An unqualified image name (`myapp`) resolves to docker.io/library/myapp —
+# the Docker official-images namespace, which you cannot push to. Always
+# fully qualify the image with a registry host and an owner/namespace.
+# Set DOCKER_REGISTRY (e.g. ghcr.io, docker.io) and DOCKER_NAMESPACE as
+# repository variables: Settings > Secrets and variables > Actions > Variables.
+env:
+  REGISTRY: ${{ vars.DOCKER_REGISTRY }}
+  IMAGE_NAME: ${{ vars.DOCKER_REGISTRY }}/${{ vars.DOCKER_NAMESPACE }}/myapp
 
 jobs:
   test:
@@ -67,6 +75,9 @@ jobs:
       if: matrix.node-version == '20.x'
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
+        # fail_ci_if_error defaults to false: without this, a failed upload
+        # is reported as a green step and coverage silently stops arriving.
+        fail_ci_if_error: true
 
   security:
     runs-on: ubuntu-latest
@@ -74,7 +85,9 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Run Snyk security scan
-      uses: snyk/actions/node@master
+      # Pinned to a release tag — @master is a mutable ref that silently
+      # changes what code runs in your pipeline.
+      uses: snyk/actions/node@v1.0.0
       env:
         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
@@ -90,19 +103,20 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Build Docker image
-      run: docker build -t myapp:${{ github.sha }} .
+      run: docker build -t "$IMAGE_NAME:${{ github.sha }}" .
 
-    - name: Log in to Docker Hub
+    - name: Log in to the container registry
       uses: docker/login-action@v3
       with:
+        registry: ${{ env.REGISTRY }}
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Push Docker image
       run: |
-        docker tag myapp:${{ github.sha }} myapp:latest
-        docker push myapp:${{ github.sha }}
-        docker push myapp:latest
+        docker tag "$IMAGE_NAME:${{ github.sha }}" "$IMAGE_NAME:latest"
+        docker push "$IMAGE_NAME:${{ github.sha }}"
+        docker push "$IMAGE_NAME:latest"
 
   deploy:
     needs: build
@@ -116,8 +130,10 @@ jobs:
         host: ${{ secrets.DEPLOY_HOST }}
         username: ${{ secrets.DEPLOY_USER }}
         key: ${{ secrets.DEPLOY_KEY }}
+        # Interpolated by the runner: $IMAGE_NAME does not exist on the
+        # remote host, so the fully qualified name must be baked in here.
         script: |
-          docker pull myapp:latest
+          docker pull ${{ env.IMAGE_NAME }}:latest
           docker-compose up -d
 ```
 
@@ -151,6 +167,10 @@ jobs:
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
+      with:
+        # Without this the upload is fail-open — an upload error still
+        # reports a green step.
+        fail_ci_if_error: true
 ```
 
 ## GitLab CI Templates
@@ -208,19 +228,34 @@ security:sast:
   stage: security
   image: returntocorp/semgrep
   script:
-    - semgrep --config=auto --json --output=semgrep.json .
+    # --error makes semgrep exit 1 on findings. Without it semgrep exits 0
+    # even when it finds something, and the gate can never fail the pipeline.
+    # --gitlab-sast emits GitLab's SAST report schema; a raw --json file
+    # fails schema validation and is silently not ingested.
+    - semgrep --config=auto --error --gitlab-sast --output=gl-sast-report.json .
   artifacts:
+    # The gate is supposed to fail, and artifacts:when defaults to on_success,
+    # so without this the report is discarded exactly when it matters.
+    when: always
     reports:
-      sast: semgrep.json
+      sast: gl-sast-report.json
 
 security:dependency:
   stage: security
   image: node:20-alpine
   script:
+    # npm audit exits non-zero when vulnerabilities are found, so this gate
+    # does fail the pipeline.
     - npm audit --json > npm-audit.json
   artifacts:
-    reports:
-      dependency_scanning: npm-audit.json
+    when: always
+    # Kept as a plain artifact, NOT declared under `reports:`. Raw npm audit
+    # JSON does not conform to GitLab's dependency-scanning report schema, and
+    # a report that fails validation is dropped — leaving a dashboard that
+    # shows a clean all-clear it never actually verified. Use GitLab's own
+    # Dependency-Scanning.gitlab-ci.yml template if you need the report.
+    paths:
+      - npm-audit.json
 
 deploy:staging:
   stage: deploy
@@ -228,7 +263,7 @@ deploy:staging:
   before_script:
     - apk add --no-cache curl
   script:
-    - curl -X POST $DEPLOY_WEBHOOK_STAGING
+    - curl --fail --show-error --silent -X POST $DEPLOY_WEBHOOK_STAGING
   only:
     - develop
 
@@ -238,7 +273,7 @@ deploy:production:
   before_script:
     - apk add --no-cache curl
   script:
-    - curl -X POST $DEPLOY_WEBHOOK_PRODUCTION
+    - curl --fail --show-error --silent -X POST $DEPLOY_WEBHOOK_PRODUCTION
   only:
     - main
   when: manual
@@ -348,4 +383,3 @@ Works best with:
 
 - [GitHub Actions Documentation](https://docs.github.com/actions)
 - [GitLab CI/CD](https://docs.gitlab.com/ee/ci/)
-- [CircleCI Documentation](https://circleci.com/docs/)
