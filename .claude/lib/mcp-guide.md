@@ -50,16 +50,17 @@ Fetches up-to-date documentation for 100+ libraries (React, Next.js, Vue, MongoD
 
 ```javascript
 // Resolve library ID
-mcp__context7__resolve-library-id({ libraryName: "react" })
+mcp__context7__resolve-library-id({ libraryName: "react", query: "hooks" })
 // Returns: "/facebook/react"
 
 // Fetch documentation
-mcp__context7__get-library-docs({
-  context7CompatibleLibraryID: "/facebook/react",
-  topic: "hooks",
-  tokens: 5000
+mcp__context7__query-docs({
+  libraryId: "/facebook/react",
+  query: "hooks"
 })
 ```
+
+Free tier: ~1,000 requests/month (each lookup ≈ resolve-library-id + query-docs ≈ 2 calls; +20 bonus calls/day once capped) — ample for on-demand use. If context7 is unavailable or rate-limited, fall back to WebFetch of the official docs, then WebSearch.
 
 ### deep-analysis (sequential-thinking MCP server)
 

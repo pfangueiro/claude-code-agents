@@ -5,6 +5,22 @@ All notable changes to Claude Agents will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **library-docs skill referenced a nonexistent context7 tool** (found by evaluating CodeGraphContext as a
+  proposed context7 replacement — a **category error**: CGC graphs *your own* code, context7 fetches *library*
+  docs, so CGC was NOT adopted). The skill, `.claude/lib/mcp-guide.md`, and `EXTENSIBILITY.md` documented
+  `mcp__context7__get-library-docs` (9 refs) with params `context7CompatibleLibraryID`/`topic`/`tokens` — but the
+  current `@upstash/context7-mcp` exposes `resolve-library-id({libraryName, query})` + `query-docs({libraryId,
+  query})`; `get-library-docs` no longer exists, so the examples would fail if followed. Fixed every reference +
+  params, corrected the wrong package name (`@context7/mcp-server` → `@upstash/context7-mcp`), added a
+  WebFetch/WebSearch **fallback** clause, and documented context7's free-tier cap (~1,000 req/mo — still ample on
+  demand; it is freemium, **not** paid, and does not bind our usage). `validate.sh` gained a doc-accuracy guard
+  that fails if the removed `get-library-docs` name reappears (the tool-name analogue of the count-drift check —
+  this slipped through because validate only checked MCP *server presence*, not tool names). 223 checks.
+
 ## [3.1.1] - 2026-08-02
 
 ### Changed

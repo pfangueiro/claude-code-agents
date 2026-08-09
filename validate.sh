@@ -442,6 +442,19 @@ if [ -f "CLAUDE.md" ]; then
     _doc_count_check "MCP servers" "$_n_mcp" "$_s_mcp"
 fi
 
+# Doc-vs-code: the library-docs skill / mcp-guide / EXTENSIBILITY must not reference a REMOVED
+# context7 tool name. `get-library-docs` was renamed to `query-docs`; a stale reference makes the
+# skill's examples call a nonexistent tool (this drift shipped undetected until the CGC eval).
+# FULL-ONLY (repo-doc grep, can't auto-heal → would loop the watchdog in --quick).
+if [ -f ".claude/skills/library-docs/SKILL.md" ]; then
+    _stale_ctx7=$(grep -rl 'get-library-docs' .claude/skills/library-docs/SKILL.md .claude/lib/mcp-guide.md EXTENSIBILITY.md 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$_stale_ctx7" = "0" ]; then
+        pass "Doc-accuracy: no removed context7 tool name (get-library-docs) referenced in skill/docs"
+    else
+        fail "Doc-accuracy: removed context7 tool 'get-library-docs' still referenced in $_stale_ctx7 file(s) — use resolve-library-id + query-docs"
+    fi
+fi
+
 # ============================================================================
 # Agent Validation
 # ============================================================================

@@ -35,14 +35,15 @@ This skill leverages the **context7 MCP server** which provides access to docume
 The context7 MCP server provides two tools:
 
 **`mcp__context7__resolve-library-id`**
-- Converts a library name to Context7-compatible ID
-- Example: "react" → "/facebook/react"
-- Handles version-specific requests
+- Resolves a library name to a Context7-compatible ID. Params (both required): `libraryName` (e.g. "Next.js") and `query` (what you're after — used to rank matches).
+- Example: `{ libraryName: "react", query: "hooks" }` → `/facebook/react`
+- Returns candidates with reputation/snippet/benchmark scores; pick the best. Skip only if the user already gave a `/org/project` ID.
 
-**`mcp__context7__get-library-docs`**
-- Fetches documentation for a library
-- Supports topic-specific queries
-- Configurable token limits
+**`mcp__context7__query-docs`**
+- Fetches documentation for a resolved library. Params (both required): `libraryId` (the `/org/project` ID) and `query` (one specific concept, e.g. "useEffect cleanup").
+- Keep each `query` to a single concept; make separate calls for separate concepts. Limit: ≤3 calls per question.
+
+**Fallback (if context7 is unavailable, errors, or is rate-limited):** context7's free tier is ~1,000 requests/month (each lookup ≈ resolve + query ≈ 2 calls; +20 bonus calls/day once capped) — ample for on-demand use, not unlimited. On failure or cap, fall back in order: (1) `WebFetch` the library's official docs site (or its `llms.txt`), (2) `WebSearch` for current docs, (3) training knowledge (flag that it may trail the library's latest release). Never block on context7.
 
 ## Common Usage Patterns
 
@@ -61,13 +62,13 @@ The context7 MCP server provides two tools:
 **Example MCP Calls:**
 ```javascript
 // Step 1: Resolve library ID
-mcp__context7__resolve-library-id({ libraryName: "react" })
+mcp__context7__resolve-library-id({ libraryName: "react", query: "hooks" })
 // Returns: "/facebook/react"
 
 // Step 2: Get docs
-mcp__context7__get-library-docs({
-  context7CompatibleLibraryID: "/facebook/react",
-  topic: "hooks"
+mcp__context7__query-docs({
+  libraryId: "/facebook/react",
+  query: "hooks"
 })
 ```
 
@@ -86,13 +87,13 @@ mcp__context7__get-library-docs({
 **Example MCP Calls:**
 ```javascript
 // Resolve with version
-mcp__context7__resolve-library-id({ libraryName: "Next.js 14" })
+mcp__context7__resolve-library-id({ libraryName: "Next.js 14", query: "routing" })
 // Returns: "/vercel/next.js/v14.x.x"
 
 // Get routing docs
-mcp__context7__get-library-docs({
-  context7CompatibleLibraryID: "/vercel/next.js/v14.x.x",
-  topic: "routing"
+mcp__context7__query-docs({
+  libraryId: "/vercel/next.js/v14.x.x",
+  query: "routing"
 })
 ```
 
@@ -111,15 +112,15 @@ mcp__context7__get-library-docs({
 **Example MCP Calls:**
 ```javascript
 // Fetch MongoDB docs
-mcp__context7__get-library-docs({
-  context7CompatibleLibraryID: "/mongodb/docs",
-  topic: "queries"
+mcp__context7__query-docs({
+  libraryId: "/mongodb/docs",
+  query: "queries"
 })
 
 // Fetch Supabase docs
-mcp__context7__get-library-docs({
-  context7CompatibleLibraryID: "/supabase/supabase",
-  topic: "queries"
+mcp__context7__query-docs({
+  libraryId: "/supabase/supabase",
+  query: "queries"
 })
 ```
 
@@ -137,10 +138,9 @@ mcp__context7__get-library-docs({
 
 **Example MCP Calls:**
 ```javascript
-mcp__context7__get-library-docs({
-  context7CompatibleLibraryID: "/facebook/react",
-  topic: "server components",
-  tokens: 10000  // More tokens for comprehensive coverage
+mcp__context7__query-docs({
+  libraryId: "/facebook/react",
+  query: "server components"  // More tokens for comprehensive coverage
 })
 ```
 
@@ -281,7 +281,7 @@ The context7 MCP server should be configured in Claude Code settings.
   "mcpServers": {
     "context7": {
       "command": "npx",
-      "args": ["-y", "@context7/mcp-server"]
+      "args": ["-y", "@upstash/context7-mcp"]
     }
   }
 }
@@ -314,14 +314,14 @@ To verify the MCP server is available, Claude Code should show context7 in the M
 ```javascript
 // Resolve library name
 mcp__context7__resolve-library-id({
-  libraryName: "library-name"
+  libraryName: "library-name",
+  query: "what you're looking for"
 })
 
 // Get documentation
-mcp__context7__get-library-docs({
-  context7CompatibleLibraryID: "/org/project",
-  topic: "optional-topic",
-  tokens: 5000
+mcp__context7__query-docs({
+  libraryId: "/org/project",
+  query: "optional-topic"
 })
 ```
 

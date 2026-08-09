@@ -234,7 +234,7 @@ Add to Claude Code settings:
   "mcpServers": {
     "context7": {
       "command": "npx",
-      "args": ["-y", "@context7/mcp-server"]
+      "args": ["-y", "@upstash/context7-mcp"]
     },
     "sequential-thinking": {
       "command": "npx",
@@ -258,10 +258,9 @@ mcp__context7__resolve-library-id({
 // Returns: "/facebook/react"
 
 // Tool 2: Get library documentation
-mcp__context7__get-library-docs({
-  context7CompatibleLibraryID: "/facebook/react",
-  topic: "hooks",
-  tokens: 5000
+mcp__context7__query-docs({
+  libraryId: "/facebook/react",
+  query: "hooks"
 })
 // Returns: React hooks documentation
 ```
