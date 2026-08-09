@@ -66,6 +66,8 @@ http_requests_in_flight       # gauge — current value
 ```yaml
 groups:
   - name: sli_rules
+    # Evaluate no faster than 1m: the 3d-range rule below is expensive to recompute.
+    interval: 1m
     rules:
       # Availability SLI: ratio of successful requests
       - record: sli:availability:ratio_rate5m

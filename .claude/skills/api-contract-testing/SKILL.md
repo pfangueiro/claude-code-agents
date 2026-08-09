@@ -177,6 +177,13 @@ components:
 
 ## Contract Testing with Vitest
 
+Install the dev dependencies these examples import — without them the block below fails with
+`Cannot find module 'express'`:
+
+```bash
+npm i -D vitest supertest express express-openapi-validator @apidevtools/swagger-parser
+```
+
 ```typescript
 // tests/api-contract.test.ts
 import { describe, it, expect } from 'vitest'

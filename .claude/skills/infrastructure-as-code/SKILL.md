@@ -286,10 +286,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
 
-      - name: Apply
+      # Apply a PLAN, never a bare `apply -auto-approve`: with no plan file Terraform
+      # re-resolves state at apply time, so what executes is not what anyone reviewed —
+      # the PR plan above is advisory only. Planning and applying in the SAME job at least
+      # makes the applied plan the one printed in this log. Stronger: upload the plan as an
+      # artifact keyed by commit SHA and download it here instead of re-planning.
+      - name: Plan and apply
         run: |
           terraform -chdir=infrastructure/environments/prod init
-          terraform -chdir=infrastructure/environments/prod apply -auto-approve
+          terraform -chdir=infrastructure/environments/prod plan -out=tfplan
+          terraform -chdir=infrastructure/environments/prod apply tfplan
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

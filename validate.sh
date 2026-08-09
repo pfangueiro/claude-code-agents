@@ -485,6 +485,113 @@ else
 fi
 
 # ============================================================================
+# Fail-open regression guards (FULL-ONLY — these EXECUTE the artifact)
+# ============================================================================
+# A 28-skill stress test found the most dangerous defect class is verification that always
+# reports success ("gates that cannot fail"): stubbed health probes returning True, a validator
+# green-lighting a literal [TODO], alerts referencing recording rules that were never defined.
+# Eight were repaired — but a fix without a guard silently regresses, and a guard that greps for
+# a magic word is a proxy that drifts (exactly how the context7 guard above once certified four
+# surviving dead params). So each guard below asserts the INVARIANT by RUNNING the artifact and
+# requiring the failure path, and each was gap-tested by reintroducing the bug.
+# FULL-ONLY by design: these detect source-content defects install.sh cannot rewrite, so running
+# them in --quick would make the watchdog heal-loop forever.
+section "Checking fail-open regression guards"
+
+# (1) deployment-runbook health_check.py — unimplemented probes MUST fail closed.
+_hc=".claude/skills/deployment-runbook/scripts/health_check.py"
+if [ -f "$_hc" ]; then
+    if command -v python3 &>/dev/null; then
+        _hc_open=""
+        for _probe in database cache external_services; do
+            if python3 "$_hc" --env staging --check "$_probe" >/dev/null 2>&1; then
+                _hc_open="$_hc_open $_probe"   # exit 0 == reported healthy without verifying
+            fi
+        done
+        if [ -z "$_hc_open" ]; then
+            pass "Fail-open guard: health_check.py unimplemented probes fail closed"
+        else
+            fail "Fail-open guard: health_check.py probe(s) report SUCCESS without verifying:$_hc_open — a deploy gate that cannot fail"
+        fi
+    else
+        warn "Fail-open guard: python3 absent — cannot execute health_check.py"
+    fi
+fi
+
+# (2) skill-creator quick_validate.py — must REJECT placeholder descriptions (and not
+# false-positive on the real corpus). Two-sided: a validator that accepts everything is
+# indistinguishable from no validator.
+_qv=".claude/skills/skill-creator/scripts/quick_validate.py"
+if [ -f "$_qv" ] && command -v python3 &>/dev/null; then
+    _qv_tmp=$(mktemp -d)
+    mkdir -p "$_qv_tmp/probe-skill"
+    printf -- '---\nname: probe-skill\ndescription: "[TODO: describe what this skill does]"\n---\n\n# Probe\n\n## Overview\nPlaceholder body used only to test the validator.\n' \
+        > "$_qv_tmp/probe-skill/SKILL.md"
+    if python3 "$_qv" "$_qv_tmp/probe-skill" >/dev/null 2>&1; then
+        fail "Fail-open guard: quick_validate.py ACCEPTS a '[TODO]' placeholder description — the validator cannot fail"
+    else
+        # Negative side: it must still accept a real skill, or it is merely broken.
+        if python3 "$_qv" ".claude/skills/git-workflow" >/dev/null 2>&1; then
+            pass "Fail-open guard: quick_validate.py rejects placeholders, accepts real skills"
+        else
+            fail "Fail-open guard: quick_validate.py REJECTS a valid skill (git-workflow) — false positive"
+        fi
+    fi
+    rm -rf "$_qv_tmp"
+fi
+
+# (3) observability-stack — every recording rule an alert references must be DEFINED in the same
+# file. An undefined rule makes the alert an empty vector: it never fires and logs no error.
+_obs=".claude/skills/observability-stack/SKILL.md"
+if [ -f "$_obs" ] && command -v python3 &>/dev/null; then
+    _dangling=$(python3 - "$_obs" <<'PYEOF'
+import re, sys
+s = open(sys.argv[1]).read()
+defined = set(re.findall(r'-\s*record:\s*([A-Za-z_][\w:]*)', s))
+referenced = set(re.findall(r'\b([a-z_]+:[a-z_]+:[A-Za-z0-9_]+)\b', s))
+print(" ".join(sorted(referenced - defined)))
+PYEOF
+)
+    if [ -z "$_dangling" ]; then
+        pass "Fail-open guard: observability-stack alerts reference no undefined recording rules"
+    else
+        fail "Fail-open guard: observability-stack alert(s) reference UNDEFINED recording rule(s):$_dangling — they can never fire"
+    fi
+fi
+
+# (4) Skill "## Resources" sections must not advertise files that do not exist — a phantom
+# resource is a dead end mid-incident (deployment-runbook cited a test_db_connection.py it never
+# shipped, one line from a script that does exist).
+if command -v python3 &>/dev/null; then
+    _phantom=$(python3 - <<'PYEOF'
+import os, re, glob
+missing = []
+for skill in sorted(glob.glob(".claude/skills/*/SKILL.md")):
+    body = open(skill).read()
+    m = re.search(r'^## Resources\s*$(.*?)(?=^## |\Z)', body, re.M | re.S)
+    if not m:
+        continue
+    sub = None
+    for line in m.group(1).splitlines():
+        h = re.match(r'^###\s+(scripts|references|assets)/\s*$', line.strip())
+        if h:
+            sub = h.group(1); continue
+        b = re.match(r'^-\s+\*\*([\w.\-]+)\*\*', line.strip())
+        if b and sub:
+            p = os.path.join(os.path.dirname(skill), sub, b.group(1))
+            if not os.path.exists(p):
+                missing.append(p)
+print(" ".join(missing))
+PYEOF
+)
+    if [ -z "$_phantom" ]; then
+        pass "Fail-open guard: no skill advertises a Resources file that does not exist"
+    else
+        fail "Fail-open guard: phantom resource file(s) advertised but absent:$_phantom"
+    fi
+fi
+
+# ============================================================================
 # Agent Validation
 # ============================================================================
 

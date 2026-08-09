@@ -199,8 +199,6 @@ mkdir -p api && touch api/.env
 ```
 
 ```yaml
-version: '3.9'
-
 services:
   # Frontend (Next.js)
   frontend:

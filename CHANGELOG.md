@@ -7,9 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Fail-open regression guards — the P0 fixes are now enforced, not just applied.** A gap analysis found that
+  **7 of the 8** repaired gates had **no** validate coverage: reverting any of them left `validate.sh` reporting a
+  clean 223/0, because it never executed a skill artifact and only checked file identity (which happily copies a
+  regression to `~/.claude` and calls it synced). Four FULL-only guards now assert the **invariant by running the
+  artifact**, not by grepping for a magic word — the proxy-guard anti-pattern that previously let four dead
+  context7 params pass:
+  - `health_check.py`'s unimplemented probes must exit non-zero (a deploy gate that cannot fail is the defect).
+  - `quick_validate.py` must reject a `[TODO]` placeholder **and** still accept a real skill — two-sided, because a
+    validator that rejects everything is as broken as one that accepts everything.
+  - every recording rule an `observability-stack` alert references must be defined in the same file (an undefined
+    rule makes the alert an empty vector: never fires, logs nothing).
+  - no skill may advertise a `## Resources` file that does not exist.
+  Each was **gap-tested by reintroducing the bug** (unconditional `return True`; a neutered placeholder check that
+  still compiles; a deleted recording rule; a phantom resource) and each fired with the correct message, then went
+  green on restore. 223 → **227 checks**.
+
 ### Fixed
 
-- **P0: eight gates that could not fail** — a 28-skill stress test (5 defect classes, trap scenarios, independent
+- **Residue from the P0 batch and the audit's B-list.** `deployment-runbook` advertised three resource files it
+  never shipped — and pointed a database-failure procedure at one of them, one line from a script that does exist
+  (a dead end mid-incident); the phantom entries are gone and the procedure now calls the real script.
+  `infrastructure-as-code`'s production job ran `apply -auto-approve` with **no plan file**, so what executed was
+  never what anyone reviewed — it now plans and applies the same plan in one job, with the stronger
+  artifact-based option documented. `api-contract-testing` imported `express`/`supertest` with no install line
+  (guaranteed `Cannot find module` on first run). `observability-stack` advised `interval: 1m` while its own rule
+  group omitted it; `docker-deployment` kept the obsolete Compose `version:` key. Also added the SHA citations
+  missing from the `[Unreleased]` entries — this repo's own self-named recurring audit gap, recurring.
+
+- **P0: eight gates that could not fail** (`77a6199`) — a 28-skill stress test (5 defect classes, trap scenarios, independent
   adversarial review) found that the two bugs fixed earlier were systemic, and that the most dangerous class was
   verification that always reports success. Repaired, each with executable evidence:
   - `deployment-runbook/scripts/health_check.py` — **four** probes (database, cache, external services, and a
@@ -44,7 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **`deep-read` skill gained code-graph awareness** — merging the CodeGraphContext/mex evaluations' *principle*
+- **`deep-read` skill gained code-graph awareness** (`dec3d9d`, hardened `ee636f5`) — merging the CodeGraphContext/mex evaluations' *principle*
   into an existing skill instead of adding a new one (skills stay 28). Short guidance woven into the phases where
   a code graph genuinely accelerates: **MAP** (structure + centrality in one query vs grepping imports), **TRACE**
   (LSP one-hop + whole-repo *transitive* / *cross-language* chains that grep and per-language LSP miss), **CONNECT**
@@ -58,7 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **library-docs skill referenced a nonexistent context7 tool** (found by evaluating CodeGraphContext as a
+- **library-docs skill referenced a nonexistent context7 tool** (`9fee8ed`; found by evaluating CodeGraphContext as a
   proposed context7 replacement — a **category error**: CGC graphs *your own* code, context7 fetches *library*
   docs, so CGC was NOT adopted). The skill, `.claude/lib/mcp-guide.md`, and `EXTENSIBILITY.md` documented
   `mcp__context7__get-library-docs` (9 refs) with params `context7CompatibleLibraryID`/`topic`/`tokens` — but the

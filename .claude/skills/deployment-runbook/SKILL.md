@@ -323,8 +323,8 @@ grep "ERROR" /var/log/app/* | awk '{print $NF}' | sort | uniq -c | sort -nr
 
 **Diagnosis:**
 ```bash
-# Test database connectivity
-python3 scripts/test_db_connection.py
+# Test database connectivity (wire up check_database first — it fails closed until you do)
+python3 scripts/health_check.py --env production --check database
 
 # Check connection pool
 psql -h db-host -U user -c "SELECT * FROM pg_stat_activity;"
@@ -396,11 +396,9 @@ Incident report: [link]
 ### scripts/
 - **health_check.py**: Deployment health-check harness. **Template — only the API check is
   implemented**; the rest fail closed with `NOT IMPLEMENTED` until you wire them up.
-- **test_db_connection.py**: Database connectivity verification
 
-### references/
-- **deployment-checklist.md**: Detailed pre/post deployment checklist
-- **monitoring-guide.md**: Metrics to monitor during deployments
+This skill ships exactly that one script — every other procedure here is inline. Do not cite a
+resource file unless it exists on disk (`validate.sh` asserts this).
 
 ## Best Practices
 
