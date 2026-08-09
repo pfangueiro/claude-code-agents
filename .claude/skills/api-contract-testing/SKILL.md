@@ -197,6 +197,9 @@ const SPEC_PATH = './openapi.yaml'
 // Mount the validator on a real app. Constructing the middleware proves nothing —
 // the spec is only enforced once a request actually flows through it.
 // Body parsers must be registered BEFORE the validated routes.
+// BASE PATH MATTERS: express-openapi-validator derives it from `servers[0].url`
+// (https://api.example.com/v1 -> /v1). Routes mounted at bare `/users` would never
+// match the spec, so NOTHING would be validated and a violating request would 201.
 function buildApp() {
   const app = express()
   app.use(express.json())
@@ -208,7 +211,7 @@ function buildApp() {
     })
   )
 
-  app.post('/users', (req, res) => {
+  app.post('/v1/users', (req, res) => {
     res.status(201).json({
       id: '3f0c1f6e-1f4a-4c2e-9c3a-6b6d1f2a7e11',
       email: req.body.email,
@@ -218,7 +221,7 @@ function buildApp() {
   })
 
   // Deliberately spec-violating handler: User requires `email`, this omits it
-  app.get('/users/:userId', (req, res) => {
+  app.get('/v1/users/:userId', (req, res) => {
     res.status(200).json({ id: req.params.userId, name: 'Test User' })
   })
 
@@ -242,7 +245,7 @@ describe('API Contract Tests', () => {
   // Control: without this, a validator that rejects everything would look healthy
   it('should accept a request that conforms to the spec', async () => {
     const res = await request(buildApp())
-      .post('/users')
+      .post('/v1/users')
       .send({ email: 'test@example.com', name: 'Test User' })
 
     expect(res.status).toBe(201)
@@ -251,7 +254,7 @@ describe('API Contract Tests', () => {
   it('should reject a request that violates the spec', async () => {
     // UserCreate requires `name` -> express-openapi-validator throws BadRequest (400)
     const res = await request(buildApp())
-      .post('/users')
+      .post('/v1/users')
       .send({ email: 'test@example.com' })
 
     expect(res.status).toBe(400)
@@ -261,7 +264,7 @@ describe('API Contract Tests', () => {
   it('should reject a response that violates the spec', async () => {
     // Handler omits the required `email` -> InternalServerError (500)
     const res = await request(buildApp()).get(
-      '/users/3f0c1f6e-1f4a-4c2e-9c3a-6b6d1f2a7e11'
+      '/v1/users/3f0c1f6e-1f4a-4c2e-9c3a-6b6d1f2a7e11'
     )
 
     expect(res.status).toBe(500)

@@ -71,7 +71,7 @@ List all active scheduled jobs in the current session.
 
 ## Constraints
 
-- **Session-only — no persistence at all**: Jobs live only in this Claude session. Nothing is written to disk, and every job is gone when Claude exits. There is no durable cron and no on-disk task store. For scheduling that survives session exit, use `RemoteTrigger` (see the `remote-triggers` skill).
+- **Session-only — treat persistence as unavailable**: as the live `CronCreate` schema reports it, jobs live only in this Claude session, nothing is written to disk, and every job is gone when Claude exits. Durable persistence is **feature-gated**: the `durable` parameter is real and the CLI ships an implementation behind it, but when the gate is off the schema states plainly that it "has no effect". **Read the `durable` description in the live schema before relying on it** — if it says "has no effect", it does. For scheduling that must survive session exit, use `RemoteTrigger` (see the `remote-triggers` skill) rather than betting on a gate.
 - **Idle-only firing**: Jobs only fire while the REPL is idle (not mid-query)
 - **7-day max**: Recurring tasks auto-expire after 7 days — they fire one final time, then are deleted. Tell the user about the 7-day limit when scheduling a recurring job.
 - **Jitter**: Recurring tasks may fire up to 10% of their period late (max 15 min); one-shot tasks landing on `:00` or `:30` may fire up to 90s *early*
@@ -115,7 +115,7 @@ The agent wakes every 10 minutes, checks status, and goes back to idle. Each wak
 
 ### Surviving a Restart
 
-Not possible with a cron. Session-only is absolute — a job is gone the moment Claude exits, and no parameter changes that. Anything that must outlive the session belongs in `RemoteTrigger` (`remote-triggers` skill).
+Not possible with a cron under the current schema — a job is gone the moment Claude exits, and `durable` reports "has no effect" while its gate is off. Do not promise the user persistence on the strength of that parameter; check the live schema text if it matters. Anything that must outlive the session belongs in `RemoteTrigger` (`remote-triggers` skill).
 
 ## Best Practices
 

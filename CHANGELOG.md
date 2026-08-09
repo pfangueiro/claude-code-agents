@@ -27,6 +27,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Two defects the independent P0 re-verification caught — including one the P0 fix itself introduced.**
+  (a) `api-contract-testing`'s validation example enforced **nothing**: the spec declares
+  `servers: https://api.example.com/v1`, so express-openapi-validator derives basePath `/v1`, while the app
+  mounted bare `/users` — no route matched, so a request missing a required field returned **201** instead of 400
+  (reproduced on express 5.2.1 / eov 5.6.2: 2 of 4 tests failed; the same app under `/v1` returns the asserted
+  400/500). Routes and requests now use `/v1`, with a comment explaining where basePath comes from.
+  (b) **The P0 `scheduled-tasks` correction over-shot.** Calling `durable` a *fabricated* API was wrong — the
+  parameter is real and the CLI ships an implementation behind the `tengu_kairos_cron_durable` gate. Replacing it
+  with the absolutes "there is no durable cron and no on-disk task store" / "session-only is absolute" swapped one
+  false claim for another. Now stated as the gate-conditional truth, anchored to what the live schema actually
+  says (`durable`: "has no effect" while the gate is off) with the practical guidance unchanged: don't promise
+  persistence — use `RemoteTrigger` if it must outlive the session. Verified against the live `CronCreate` schema.
 - **Residue from the P0 batch and the audit's B-list.** `deployment-runbook` advertised three resource files it
   never shipped — and pointed a database-failure procedure at one of them, one line from a script that does exist
   (a dead end mid-incident); the phantom entries are gone and the procedure now calls the real script.
