@@ -823,6 +823,24 @@ done
 # as unavailable (as /investigate and /deep-read do), which tells the reader the step
 # applies only to an un-forked run. Referenced-with-no-caveat is a FAIL.
 
+# A retired skill must be GONE from the live install, not merely deleted from the repo. The
+# skills orphan-prune is scoped to names the framework currently ships, so a deleted skill is
+# indistinguishable from a personal one and would linger in ~/.claude/skills — still
+# auto-activating in every project. install.sh's RETIRED_SKILLS list prunes it; assert it worked.
+section "Checking Retired Skills Are Gone From The Live Install"
+_retired_live=""
+if [ -f "install.sh" ]; then
+    for _rs in $(awk '/^RETIRED_SKILLS=\(/{f=1;next} f&&/^\)/{exit} f{gsub(/[" \t]/,"");if($0!="")print}' install.sh); do
+        [ -d "$HOME/.claude/skills/$_rs" ] && _retired_live="$_retired_live $_rs"
+        [ -d ".claude/skills/$_rs" ] && fail "Retired-skill guard: '$_rs' is in RETIRED_SKILLS but still shipped in source"
+    done
+    if [ -z "$_retired_live" ]; then
+        pass "Retired-skill guard: no retired skill remains in ~/.claude/skills"
+    else
+        fail "Retired-skill guard: retired skill(s) still live in ~/.claude/skills:$_retired_live — run ./install.sh --update"
+    fi
+fi
+
 section "Checking Forked Skills Do Not Instruct Spawning"
 
 _fork_files=()

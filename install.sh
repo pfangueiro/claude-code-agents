@@ -76,6 +76,16 @@ RETIRED_LIB_FILES=(
     "activation-keywords.json"
 )
 
+# Skills the framework once shipped and has since RETIRED. The skills orphan-prune is
+# scoped to "names the framework CURRENTLY ships" (see the prune contract below), which is
+# correct for protecting the user's own skills — but it means a DELETED framework skill
+# becomes indistinguishable from a personal one and would linger in ~/.claude/skills
+# forever, still auto-activating in every project (api-guidelines did, after its retirement).
+# Same fail-closed shape as RETIRED_LIB_FILES: an explicit list, never "anything unknown".
+RETIRED_SKILLS=(
+    "api-guidelines"
+)
+
 # Statistics
 STATS_INSTALLED=0
 STATS_SKIPPED=0
@@ -211,6 +221,26 @@ prune_retired_lib_files() {
     done
 }
 
+# Reverse-prune retired framework SKILLS from ~/.claude/skills. Only touches names in
+# RETIRED_SKILLS, so the user's own skills are never at risk. Without this, retiring a
+# skill removes it from the repo but leaves it live and auto-activating in every project.
+prune_retired_skills() {
+    [ -d "$HOME/.claude/skills" ] || return 0
+    local retired
+    for retired in "${RETIRED_SKILLS[@]}"; do
+        # Refuse to act on a name the framework still ships — that would be a bug in the
+        # retired list, and deleting a live skill is worse than leaving a stale one.
+        if [ -d "${SCRIPT_DIR}/.claude/skills/${retired}" ]; then
+            print_error "RETIRED_SKILLS lists '${retired}' but it is still shipped in source — not pruning"
+            continue
+        fi
+        if [ -d "$HOME/.claude/skills/${retired}" ]; then
+            rm -rf "$HOME/.claude/skills/${retired}" \
+                && print_skip "Pruned retired skill ${retired} (no longer shipped)"
+        fi
+    done
+}
+
 install_global_agents() {
     echo -e "\n${BOLD}Installing Agents (~/.claude/agents):${NC}"
 
@@ -280,6 +310,7 @@ install_global_lib() {
 
     # Orphan prune for lib is the explicit retired-list (fail-closed).
     prune_retired_lib_files
+    prune_retired_skills
 }
 
 install_global_rules() {

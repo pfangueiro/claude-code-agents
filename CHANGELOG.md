@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Retiring a skill left it live — a hole the retirement itself exposed.** Deleting `api-guidelines` from the
+  repo did **not** remove it from `~/.claude/skills`: the skills orphan-prune is deliberately scoped to names the
+  framework *currently* ships (so it can never touch the user's own skills), which means a **deleted** framework
+  skill becomes indistinguishable from a personal one and lingers forever — still auto-activating in every
+  project — while `validate.sh` reported 0 errors. Fixed with the same fail-closed shape `lib` already used:
+  a `RETIRED_SKILLS` allowlist plus `prune_retired_skills()`, which refuses to act on any name still shipped in
+  source (deleting a live skill is worse than leaving a stale one). A new validate guard asserts no retired skill
+  remains in the live install. Verified: the guard failed while the skill was live, the prune removed it, the
+  guard went green, and 41 of 42 live skills survived — exactly one removed, personal skills untouched. Safety
+  gap-tested by listing a still-shipped skill as retired: refused, not deleted, and validate flagged the bad list.
+
+### Removed
+
+- **`api-guidelines` retired from the framework** (maintainer decision; recoverable from git history at
+  `d0b9adf`). It was 931 lines installed **user-globally** — so it loaded for every matching repo on the
+  machine — while being welded to a single private application: 11 imports from that app's private module graph
+  (`@/lib/auth/wrappers`, `@/constants/permissions`, `@/lib/db`) and **7 references to a MariaDB MCP server this
+  framework has never shipped**, on a step the skill marked MANDATORY. Its Standard Endpoint Template also leaked
+  `error.message` at HTTP 500, contradicting the skill's own guidance and the framework's security rule. Two
+  independent audit rounds rated it BROKEN/RETIRE. Skills 28 → 27; counts updated in CLAUDE.md, README (badge,
+  table, prose), INSTALL.md and EXTENSIBILITY.md, with the doc-accuracy guard confirming 27 = 27.
+  If the host application still wants this content, it belongs in that repo — not in a user-global install.
+
+### Fixed
+
 - **Round-2 P0: two skills that certified failure as success, plus the guards that certified themselves.**
   A blind re-test (testers shown no prior findings) then independent reconciliation confirmed round 1 was
   *under*-called, not inflated — one over-report in 28. Repaired, each verified by execution:
