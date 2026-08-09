@@ -180,10 +180,50 @@ components:
 ```typescript
 // tests/api-contract.test.ts
 import { describe, it, expect } from 'vitest'
-import OpenAPIValidator from 'express-openapi-validator'
+import express from 'express'
+import request from 'supertest'
+import * as OpenApiValidator from 'express-openapi-validator'
 import SwaggerParser from '@apidevtools/swagger-parser'
 
 const SPEC_PATH = './openapi.yaml'
+
+// Mount the validator on a real app. Constructing the middleware proves nothing —
+// the spec is only enforced once a request actually flows through it.
+// Body parsers must be registered BEFORE the validated routes.
+function buildApp() {
+  const app = express()
+  app.use(express.json())
+  app.use(
+    OpenApiValidator.middleware({
+      apiSpec: SPEC_PATH,
+      validateRequests: true,
+      validateResponses: true,
+    })
+  )
+
+  app.post('/users', (req, res) => {
+    res.status(201).json({
+      id: '3f0c1f6e-1f4a-4c2e-9c3a-6b6d1f2a7e11',
+      email: req.body.email,
+      name: req.body.name,
+      createdAt: new Date().toISOString(),
+    })
+  })
+
+  // Deliberately spec-violating handler: User requires `email`, this omits it
+  app.get('/users/:userId', (req, res) => {
+    res.status(200).json({ id: req.params.userId, name: 'Test User' })
+  })
+
+  app.use((err, req, res, next) => {
+    res.status(err.status || 500).json({
+      message: err.message,
+      errors: err.errors,
+    })
+  })
+
+  return app
+}
 
 describe('API Contract Tests', () => {
   it('should have valid OpenAPI specification', async () => {
@@ -192,14 +232,33 @@ describe('API Contract Tests', () => {
     expect(api.openapi).toBe('3.0.0')
   })
 
-  it('should validate request/response against spec', async () => {
-    const validator = await OpenAPIValidator.middleware({
-      apiSpec: SPEC_PATH,
-      validateRequests: true,
-      validateResponses: true,
-    })
+  // Control: without this, a validator that rejects everything would look healthy
+  it('should accept a request that conforms to the spec', async () => {
+    const res = await request(buildApp())
+      .post('/users')
+      .send({ email: 'test@example.com', name: 'Test User' })
 
-    expect(validator).toBeDefined()
+    expect(res.status).toBe(201)
+  })
+
+  it('should reject a request that violates the spec', async () => {
+    // UserCreate requires `name` -> express-openapi-validator throws BadRequest (400)
+    const res = await request(buildApp())
+      .post('/users')
+      .send({ email: 'test@example.com' })
+
+    expect(res.status).toBe(400)
+    expect(res.body.message).toMatch(/name/)
+  })
+
+  it('should reject a response that violates the spec', async () => {
+    // Handler omits the required `email` -> InternalServerError (500)
+    const res = await request(buildApp()).get(
+      '/users/3f0c1f6e-1f4a-4c2e-9c3a-6b6d1f2a7e11'
+    )
+
+    expect(res.status).toBe(500)
+    expect(res.body.message).toMatch(/email/)
   })
 })
 ```
@@ -378,19 +437,39 @@ describe('API Contract Regression', () => {
     const previousSpec = await SwaggerParser.validate('./previous-openapi.yaml')
     const currentSpec = await SwaggerParser.validate('./openapi.yaml')
 
-    // Check that all previous endpoints still exist
-    for (const path in previousSpec.paths) {
-      expect(currentSpec.paths[path]).toBeDefined()
+    const prevPaths = previousSpec.paths ?? {}
+    const currPaths = currentSpec.paths ?? {}
 
-      for (const method in previousSpec.paths[path]) {
-        expect(currentSpec.paths[path][method]).toBeDefined()
+    // Fail closed. A loop over an empty object asserts nothing and reports green,
+    // so an unparsed or empty previous spec would silently certify "no breaking
+    // changes". Assert there is something to compare BEFORE comparing it.
+    expect(
+      Object.keys(prevPaths).length,
+      'previous spec declares no paths — nothing was compared'
+    ).toBeGreaterThan(0)
+
+    // A path item also holds non-operation keys ($ref, summary, description,
+    // servers, parameters). Iterating them blindly reports false breakages.
+    const HTTP_METHODS = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']
+
+    // Check that all previous endpoints still exist
+    for (const path of Object.keys(prevPaths)) {
+      expect(currPaths[path], `path "${path}" was removed`).toBeDefined()
+
+      const prevMethods = Object.keys(prevPaths[path]).filter((k) => HTTP_METHODS.includes(k))
+      for (const method of prevMethods) {
+        const label = `${method.toUpperCase()} ${path}`
+        expect(currPaths[path][method], `${label} was removed`).toBeDefined()
 
         // Verify response schemas are compatible
-        const prevResponses = previousSpec.paths[path][method].responses
-        const currResponses = currentSpec.paths[path][method].responses
+        const prevResponses = prevPaths[path][method].responses ?? {}
+        const currResponses = currPaths[path][method].responses ?? {}
 
-        for (const statusCode in prevResponses) {
-          expect(currResponses[statusCode]).toBeDefined()
+        for (const statusCode of Object.keys(prevResponses)) {
+          expect(
+            currResponses[statusCode],
+            `${label} no longer documents response ${statusCode}`
+          ).toBeDefined()
         }
       }
     }
@@ -400,16 +479,43 @@ describe('API Contract Regression', () => {
     const previousSpec = await SwaggerParser.validate('./previous-openapi.yaml')
     const currentSpec = await SwaggerParser.validate('./openapi.yaml')
 
-    for (const schemaName in previousSpec.components?.schemas) {
-      const prevSchema = previousSpec.components.schemas[schemaName]
-      const currSchema = currentSpec.components.schemas[schemaName]
+    const prevSchemas = previousSpec.components?.schemas ?? {}
+    const currSchemas = currentSpec.components?.schemas ?? {}
 
-      if (prevSchema.required && currSchema?.required) {
-        // New spec must include all previously required fields
-        for (const field of prevSchema.required) {
-          expect(currSchema.required).toContain(field)
-        }
+    // Fail closed: with no schemas to compare, every assertion below is vacuous
+    expect(
+      Object.keys(prevSchemas).length,
+      'previous spec exposed no schemas'
+    ).toBeGreaterThan(0)
+
+    // Never guard the comparison behind `if (prev.required && curr?.required)` —
+    // that skips (and so silently passes) the two most common breaking changes.
+    for (const schemaName of Object.keys(prevSchemas)) {
+      const prevSchema = prevSchemas[schemaName]
+      const currSchema = currSchemas[schemaName]
+
+      // Breaking: the schema was removed outright
+      expect(currSchema, `schema "${schemaName}" was removed`).toBeDefined()
+
+      const prevRequired = prevSchema.required ?? []
+      const currRequired = currSchema.required ?? []
+
+      // Breaking: a field consumers relied on is no longer guaranteed
+      for (const field of prevRequired) {
+        expect(
+          currRequired,
+          `"${schemaName}.${field}" is no longer required`
+        ).toContain(field)
       }
+
+      // Breaking: a newly required field rejects requests from existing clients.
+      // Conservative by design — whitelist a deliberate addition explicitly
+      // rather than loosening this into a conditional.
+      const addedRequired = currRequired.filter((f) => !prevRequired.includes(f))
+      expect(
+        addedRequired,
+        `"${schemaName}" added required fields`
+      ).toEqual([])
     }
   })
 })

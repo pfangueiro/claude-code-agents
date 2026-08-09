@@ -15,6 +15,20 @@ Schedule recurring or one-shot prompts using Claude Code's built-in cron tools.
 - Monitor external resources or services
 - Recurring data collection or reporting
 
+## When NOT to Use a Cron
+
+`CronCreate` re-runs a prompt at fixed wall-clock intervals. It is the wrong instrument for short waits and live watching — cron polls on a schedule and cannot fire mid-query, so it will not notice an event until its next tick. Reach for these instead:
+
+| Need | Instrument |
+|------|-----------|
+| **One** notification when a condition becomes true ("tell me when the build finishes", "when the server is ready") | `Bash` with `run_in_background`, running a command that exits once the condition holds: `until grep -q "Ready in" dev.log; do sleep 0.5; done` |
+| **One per occurrence**, as it happens ("tell me every time an ERROR line appears") | `Monitor` — each stdout line of a long-running script becomes an event, streamed in real time |
+| **One per occurrence until a known end** (emit each CI step, stop when the run completes) | `Monitor` with a command that emits lines and then exits |
+| Waiting a few seconds or minutes inside a task | `Monitor` with an until-loop — foreground `sleep` is blocked in `Bash` |
+| Anything that must outlive the session | `RemoteTrigger` (`remote-triggers` skill) |
+
+Use a cron only for genuinely periodic work on a wall-clock cadence. Note that an unbounded `Monitor` command (`tail -f`, `while true`) stays armed until its timeout, so use `Bash` + `run_in_background` when one notification is all that is wanted.
+
 ## Tools
 
 ### CronCreate
@@ -24,7 +38,7 @@ Schedule a recurring or one-shot prompt.
 - `cron` (required) — Standard 5-field cron expression: `minute hour day-of-month month day-of-week`
 - `prompt` (required) — The prompt to execute at each fire time
 - `recurring` (optional, default: true) — `false` for one-shot reminders
-- `durable` (optional, default: false) — `true` to persist across session restarts
+- `durable` — **accepted but inert.** The tool schema states it "has no effect — durable persistence is not available. All jobs are session-only (in-memory, gone when this Claude session ends)." Do not pass it and do not treat it as persistence.
 
 **Returns:** Job ID for managing the schedule.
 
@@ -57,10 +71,10 @@ List all active scheduled jobs in the current session.
 
 ## Constraints
 
-- **Session-scoped**: Jobs only fire while the REPL is idle (not mid-query)
-- **7-day max**: Recurring tasks auto-expire after 7 days
-- **No persistence by default**: Jobs are lost when Claude exits unless `durable: true`
-- **Jitter**: Recurring tasks may fire up to 10% of their period late (max 15 min)
+- **Session-only — no persistence at all**: Jobs live only in this Claude session. Nothing is written to disk, and every job is gone when Claude exits. There is no durable cron and no on-disk task store. For scheduling that survives session exit, use `RemoteTrigger` (see the `remote-triggers` skill).
+- **Idle-only firing**: Jobs only fire while the REPL is idle (not mid-query)
+- **7-day max**: Recurring tasks auto-expire after 7 days — they fire one final time, then are deleted. Tell the user about the 7-day limit when scheduling a recurring job.
+- **Jitter**: Recurring tasks may fire up to 10% of their period late (max 15 min); one-shot tasks landing on `:00` or `:30` may fire up to 90s *early*
 
 ## Patterns
 
@@ -70,6 +84,7 @@ CronCreate:
   cron: "*/3 * * * *"
   prompt: "Check the CI status of the current branch with `gh run list --branch $(git branch --show-current) --limit 1` and notify me if it completed or failed"
 ```
+For a *single* CI run that is already in flight, prefer `Monitor` with a poll loop that exits when the run reaches a terminal state — it reports each check as it lands instead of waking the agent every 3 minutes indefinitely.
 
 ### Periodic Quality Check
 ```
@@ -98,14 +113,9 @@ CronCreate:
 ```
 The agent wakes every 10 minutes, checks status, and goes back to idle. Each wake-up costs one API call.
 
-### Durable Scheduling (Survives Restart)
-```
-CronCreate:
-  cron: "0 9 * * 1-5"
-  prompt: "Run the test suite and report any failures"
-  durable: true    # persisted to ~/.claude/scheduled_tasks.json
-```
-Durable crons reload on next session start — true persistent scheduling.
+### Surviving a Restart
+
+Not possible with a cron. Session-only is absolute — a job is gone the moment Claude exits, and no parameter changes that. Anything that must outlive the session belongs in `RemoteTrigger` (`remote-triggers` skill).
 
 ## Best Practices
 

@@ -152,7 +152,13 @@ infracost diff --path=tfplan --compare-to=infracost-base.json
 
 ```bash
 # OPA (Open Policy Agent) — custom guardrails
-terraform show -json tfplan | opa eval -d policies/ -i - 'data.terraform.deny'
+terraform show -json tfplan > tfplan.json
+
+# -i/--input takes a FILE PATH, not stdin (use --stdin-input to pipe instead).
+# --fail-defined exits 1 when the query is defined, i.e. when deny has entries;
+# index with [x] so the query stays undefined (exit 0) when there are none —
+# a bare 'data.terraform.deny' is an empty set, which is always defined.
+opa eval -d policies/ -i tfplan.json --fail-defined --format pretty 'data.terraform.deny[x]'
 
 # Example policy: deny public S3 buckets
 # policies/deny-public-s3.rego
@@ -270,8 +276,10 @@ jobs:
           behavior: update
 
   apply:
-    needs: plan
-    if: github.ref == 'refs/heads/main'
+    # Depends on validate, NOT plan: plan is pull_request-only, and a skipped
+    # dependency skips its dependents — needs:plan would make apply unreachable.
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production  # Requires manual approval
     steps:

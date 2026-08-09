@@ -111,13 +111,19 @@ mcp__context7__query-docs({
 
 **Example MCP Calls:**
 ```javascript
-// Fetch MongoDB docs
+// Step 1: Resolve both library IDs
+mcp__context7__resolve-library-id({ libraryName: "MongoDB", query: "query syntax" })
+// Returns: "/mongodb/docs"
+mcp__context7__resolve-library-id({ libraryName: "Supabase", query: "query syntax" })
+// Returns: "/supabase/supabase"
+
+// Step 2: Fetch MongoDB docs
 mcp__context7__query-docs({
   libraryId: "/mongodb/docs",
   query: "queries"
 })
 
-// Fetch Supabase docs
+// Step 3: Fetch Supabase docs
 mcp__context7__query-docs({
   libraryId: "/supabase/supabase",
   query: "queries"
@@ -133,14 +139,19 @@ mcp__context7__query-docs({
 
 **Workflow:**
 1. Resolve React library ID
-2. Fetch docs with larger token limit for depth
+2. Fetch docs with a narrowly scoped `query` for depth
 3. Focus specifically on Server Components topic
 
 **Example MCP Calls:**
 ```javascript
+// Step 1: Resolve library ID
+mcp__context7__resolve-library-id({ libraryName: "react", query: "server components" })
+// Returns: "/facebook/react"
+
+// Step 2: Get docs — one concept per call; split follow-ups into separate calls
 mcp__context7__query-docs({
   libraryId: "/facebook/react",
-  query: "server components"  // More tokens for comprehensive coverage
+  query: "server components"
 })
 ```
 
@@ -214,7 +225,7 @@ User: "Create a data table with React"
 
 ### DO:
 - ✅ Specify library versions when relevant
-- ✅ Use topic parameter to narrow results
+- ✅ Keep each `query` to one concept to narrow results
 - ✅ Combine with agents for implementation
 - ✅ Reference official docs for correctness
 - ✅ Check docs when libraries update
@@ -293,10 +304,10 @@ To verify the MCP server is available, Claude Code should show context7 in the M
 
 ## Limitations & Considerations
 
-**Token Limits:**
-- Default: 5000 tokens
-- Max configurable: Higher for comprehensive topics
-- Balance depth vs context usage
+**Response Size:**
+- Not client-configurable — context7 decides how much documentation to return
+- Scope depth with the `query` instead: one concept per call
+- Budget calls, not size: no more than 3 `query-docs` calls per question
 
 **Library Coverage:**
 - Most popular libraries supported
@@ -321,7 +332,7 @@ mcp__context7__resolve-library-id({
 // Get documentation
 mcp__context7__query-docs({
   libraryId: "/org/project",
-  query: "optional-topic"
+  query: "one specific concept"
 })
 ```
 

@@ -73,6 +73,32 @@ groups:
           sum(rate(http_requests_total{status!~"5.."}[5m]))
           / sum(rate(http_requests_total[5m]))
 
+      # Long-window availability SLIs — REQUIRED by the multi-window burn-rate
+      # alerts below. Every window an alert references must be recorded here:
+      # Prometheus returns an empty vector for an unknown metric name, so an
+      # alert ANDing an undefined rule silently never fires and logs no error.
+      - record: sli:availability:ratio_rate30m
+        expr: |
+          sum(rate(http_requests_total{status!~"5.."}[30m]))
+          / sum(rate(http_requests_total[30m]))
+
+      - record: sli:availability:ratio_rate1h
+        expr: |
+          sum(rate(http_requests_total{status!~"5.."}[1h]))
+          / sum(rate(http_requests_total[1h]))
+
+      - record: sli:availability:ratio_rate6h
+        expr: |
+          sum(rate(http_requests_total{status!~"5.."}[6h]))
+          / sum(rate(http_requests_total[6h]))
+
+      # 3d window needs >= 3d retention; evaluate this group no faster than
+      # `interval: 1m` — long-range rate() is expensive to recompute.
+      - record: sli:availability:ratio_rate3d
+        expr: |
+          sum(rate(http_requests_total{status!~"5.."}[3d]))
+          / sum(rate(http_requests_total[3d]))
+
       # Latency SLI: ratio of requests faster than 300ms
       - record: sli:latency:ratio_rate5m
         expr: |

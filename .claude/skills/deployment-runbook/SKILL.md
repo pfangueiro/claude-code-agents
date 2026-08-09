@@ -146,17 +146,32 @@ git push origin v1.2.3
 
 ### Phase 3: Post-Deployment Health Checks
 
+> **`health_check.py` is a template, and it fails closed.** Only the API check is
+> implemented; database, cache, metrics and external-services report
+> `NOT IMPLEMENTED` and exit non-zero until you wire them to real probes. That is
+> deliberate — a gate that cannot verify anything must not report success. Wire up
+> the checks (and set real hosts in `ENVIRONMENTS`) before trusting it as a gate at
+> any of the invocation sites below.
+
 ```bash
-# Run comprehensive health checks
+# Run health checks
 python3 scripts/health_check.py --environment production
 
-# Expected output:
-# ✓ API health endpoint responding
-# ✓ Database connectivity OK
-# ✓ Cache layer accessible
-# ✓ External services reachable
-# ✓ Error rate within threshold
-# ✓ Response time within SLA
+# Output BEFORE you implement the checks (expected, and correct):
+# ✗ API Health: API unreachable: ... api.example.com ...   <- placeholder host
+# ✗ Database: NOT IMPLEMENTED - no verification of Database connectivity was performed...
+# ✗ Cache: NOT IMPLEMENTED - no verification of Cache layer was performed...
+# ✗ Metrics: NOT IMPLEMENTED - no verification of Application metrics was performed...
+# ✗ External Services: NOT IMPLEMENTED - no verification of External services was performed...
+# ✗ SOME CHECKS FAILED
+
+# Once implemented and pointed at real hosts, a passing run reads:
+# ✓ API Health: API healthy (HTTP 200)
+# ✓ Database: Database connectivity OK
+# ✓ Cache: Cache layer accessible
+# ✓ Metrics: Metrics within thresholds
+# ✓ External Services: External services reachable
+# ✓ ALL CHECKS PASSED
 ```
 
 ### Phase 4: Monitoring (T+30 minutes)
@@ -379,7 +394,8 @@ Incident report: [link]
 ## Resources
 
 ### scripts/
-- **health_check.py**: Comprehensive deployment health checks
+- **health_check.py**: Deployment health-check harness. **Template — only the API check is
+  implemented**; the rest fail closed with `NOT IMPLEMENTED` until you wire them up.
 - **test_db_connection.py**: Database connectivity verification
 
 ### references/

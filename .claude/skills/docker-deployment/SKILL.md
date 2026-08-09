@@ -78,6 +78,18 @@ CMD ["node", "dist/index.js"]
 
 ## Next.js Dockerfile
 
+**Prerequisite — `output: 'standalone'`.** Next.js only emits `.next/standalone` when the app
+opts into standalone output. On a default Next app that directory does not exist and the
+`COPY /app/.next/standalone` below fails the build with
+`"/app/.next/standalone": not found`. Set this in `next.config.js` **before** building:
+
+```js
+// next.config.js
+module.exports = {
+  output: 'standalone',
+}
+```
+
 ```dockerfile
 FROM node:20-alpine AS deps
 WORKDIR /app
@@ -102,6 +114,7 @@ RUN addgroup -g 1001 -S nodejs && \
     adduser -S nextjs -u 1001
 
 COPY --from=builder /app/public ./public
+# Requires `output: 'standalone'` in next.config.js — see prerequisite above
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
@@ -125,29 +138,35 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends gcc && \
     rm -rf /var/lib/apt/lists/*
 
+# Install into a virtualenv, NOT `pip install --user`.
+# `--user` installs to /root/.local, and /root is mode 0700 — after the runtime
+# stage switches to a non-root USER the interpreter cannot even traverse it, and
+# the container dies on startup with "Permission denied" on the entrypoint.
+RUN python -m venv /opt/venv
+ENV PATH=/opt/venv/bin:$PATH
+
 # Copy requirements
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --user --no-cache-dir -r requirements.txt
+# Install Python dependencies into the virtualenv
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Production stage
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy Python dependencies from builder
-COPY --from=builder /root/.local /root/.local
+# Create the non-root user first, so everything below is copied in already owned by it
+RUN useradd -m -u 1001 appuser
+
+# Copy the virtualenv from builder, owned by the user that will actually run it
+COPY --from=builder --chown=appuser:appuser /opt/venv /opt/venv
 
 # Copy application code
-COPY . .
+COPY --chown=appuser:appuser . .
 
-# Add local bin to PATH
-ENV PATH=/root/.local/bin:$PATH
-
-# Create non-root user
-RUN useradd -m -u 1001 appuser && \
-    chown -R appuser:appuser /app
+# Put the virtualenv first on PATH so `python` / `uvicorn` resolve to it
+ENV PATH=/opt/venv/bin:$PATH
 
 USER appuser
 
@@ -160,6 +179,24 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 ## Docker Compose - Full Stack Application
+
+Two things this template does deliberately, because the checklist below demands them:
+credentials are mounted as **secret files** under `/run/secrets/` rather than passed as
+environment variables, and **every service declares CPU/memory limits**
+(`deploy.resources.limits` is honoured by `docker compose up` in Compose v2, not just Swarm).
+
+Before `docker compose up`, create the secret file — keep it `chmod 0600`, gitignored, and
+never bake it into an image. Also create the non-secret env file the `api` service declares:
+Compose resolves `env_file` eagerly and **aborts the whole stack** if the path is missing, so
+an absent `api/.env` fails `docker compose config` before a single container starts.
+
+```bash
+mkdir -p secrets && openssl rand -base64 32 > secrets/postgres_password.txt
+chmod 0600 secrets/postgres_password.txt
+
+# Non-secret config for the api service. Empty is fine; the file just has to exist.
+mkdir -p api && touch api/.env
+```
 
 ```yaml
 version: '3.9'
@@ -180,6 +217,13 @@ services:
     networks:
       - app-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          memory: 256M
 
   # Backend API (Node.js)
   api:
@@ -188,10 +232,21 @@ services:
       dockerfile: Dockerfile
     ports:
       - "4000:4000"
+    # Non-secret config only. Keep this file gitignored and .dockerignore'd.
+    env_file:
+      - ./api/.env
     environment:
-      - DATABASE_URL=postgresql://postgres:password@postgres:5432/myapp
       - REDIS_URL=redis://redis:6379
       - NODE_ENV=production
+      # No credentials in the DSN. The app reads the password from the mounted
+      # secret file and assembles the connection string at startup.
+      - DATABASE_HOST=postgres
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=myapp
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD_FILE=/run/secrets/postgres_password
+    secrets:
+      - postgres_password
     depends_on:
       postgres:
         condition: service_healthy
@@ -208,14 +263,24 @@ services:
     restart: unless-stopped
     volumes:
       - ./api/uploads:/app/uploads
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          memory: 512M
 
   # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
       - POSTGRES_DB=myapp
+      # The official image reads the password from this file instead of POSTGRES_PASSWORD
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+    secrets:
+      - postgres_password
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
@@ -227,6 +292,13 @@ services:
     networks:
       - app-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          memory: 1G
 
   # Redis Cache
   redis:
@@ -242,6 +314,13 @@ services:
     networks:
       - app-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          memory: 256M
 
   # Nginx Reverse Proxy
   nginx:
@@ -258,6 +337,13 @@ services:
     networks:
       - app-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          memory: 128M
 
 networks:
   app-network:
@@ -266,6 +352,13 @@ networks:
 volumes:
   postgres-data:
   redis-data:
+
+secrets:
+  # Local/dev: a gitignored file, mounted read-only at /run/secrets/postgres_password.
+  # Swarm or a managed platform: swap for `external: true` and a real secret store
+  # (Vault, AWS Secrets Manager, SOPS) — never commit the value.
+  postgres_password:
+    file: ./secrets/postgres_password.txt
 ```
 
 ## Docker Security Best Practices
@@ -327,10 +420,11 @@ coverage
 .jest
 *.test.js
 
-# Environment
+# Environment & secrets
 .env
 .env.local
 .env.*.local
+secrets/
 
 # Git
 .git

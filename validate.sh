@@ -443,15 +443,44 @@ if [ -f "CLAUDE.md" ]; then
 fi
 
 # Doc-vs-code: the library-docs skill / mcp-guide / EXTENSIBILITY must not reference a REMOVED
-# context7 tool name. `get-library-docs` was renamed to `query-docs`; a stale reference makes the
-# skill's examples call a nonexistent tool (this drift shipped undetected until the CGC eval).
+# context7 tool name OR a REMOVED context7 parameter. The real API is exactly:
+#   mcp__context7__resolve-library-id({ libraryName, query })   -- both required
+#   mcp__context7__query-docs({ libraryId, query })             -- both required
+# `get-library-docs` was renamed to `query-docs`, and `context7CompatibleLibraryID` / `topic` /
+# `tokens` were removed outright. The first fix corrected only the TOOL NAMES and left dead
+# PARAMETER prose behind ("Use topic parameter...", "Default: 5000 tokens"), which the old
+# single-literal grep on 'get-library-docs' happily reported as PASS — a check that cannot see
+# the defect class it exists to catch. Signatures below are the unambiguous PARAMETER forms;
+# plain English "topic"/"tokens" prose (e.g. sequential-thinking's "31,999 thinking tokens",
+# EXTENSIBILITY's generic "Use token limits wisely") deliberately does NOT match.
 # FULL-ONLY (repo-doc grep, can't auto-heal → would loop the watchdog in --quick).
-if [ -f ".claude/skills/library-docs/SKILL.md" ]; then
-    _stale_ctx7=$(grep -rl 'get-library-docs' .claude/skills/library-docs/SKILL.md .claude/lib/mcp-guide.md EXTENSIBILITY.md 2>/dev/null | wc -l | tr -d ' ')
-    if [ "$_stale_ctx7" = "0" ]; then
-        pass "Doc-accuracy: no removed context7 tool name (get-library-docs) referenced in skill/docs"
+_ctx7_docs=(".claude/skills/library-docs/SKILL.md" ".claude/lib/mcp-guide.md" "EXTENSIBILITY.md")
+_ctx7_missing=""
+for _f in "${_ctx7_docs[@]}"; do
+    [ -f "$_f" ] || _ctx7_missing="$_ctx7_missing $_f"
+done
+if [ -n "$_ctx7_missing" ]; then
+    # Fail closed: the guard cannot verify what it cannot read.
+    fail "Doc-accuracy: context7 API-shape guard could not run — missing file(s):$_ctx7_missing"
+else
+    # (a) Removed tool name + removed parameter names in prose/identifier form.
+    _stale_ctx7=$(grep -nE \
+        'get-library-docs|context7CompatibleLibraryID|(topic|tokens)[[:space:]]+parameter|parameter[[:space:]]+(topic|tokens)|[Dd]efault:[[:space:]]*[0-9,]+[[:space:]]*tokens|[Tt]oken [Ll]imits:' \
+        "${_ctx7_docs[@]}" 2>/dev/null)
+    # (b) Removed parameter KEYS inside a context7 call block (`topic:` / `tokens:` between the
+    #     mcp__context7__ call and its closing `})`), which catches example code specifically.
+    _stale_ctx7_keys=$(awk '
+        /mcp__context7__/ { inblk = 1 }
+        inblk && /(^|[^[:alnum:]_])(topic|tokens)[[:space:]]*:/ { printf "%s:%d:%s\n", FILENAME, FNR, $0 }
+        /\}\)/ { inblk = 0 }
+    ' "${_ctx7_docs[@]}" 2>/dev/null)
+    _stale_ctx7_all=$(printf '%s\n%s' "$_stale_ctx7" "$_stale_ctx7_keys" | grep -v '^$' || true)
+    if [ -z "$_stale_ctx7_all" ]; then
+        pass "Doc-accuracy: no removed context7 tool name or parameter (get-library-docs / context7CompatibleLibraryID / topic / tokens) in skill/docs"
     else
-        fail "Doc-accuracy: removed context7 tool 'get-library-docs' still referenced in $_stale_ctx7 file(s) — use resolve-library-id + query-docs"
+        _stale_ctx7_n=$(printf '%s\n' "$_stale_ctx7_all" | wc -l | tr -d ' ')
+        fail "Doc-accuracy: $_stale_ctx7_n removed-context7-API reference(s) in skill/docs — real API is resolve-library-id{libraryName,query} + query-docs{libraryId,query}"
+        [ "$QUIET" = "--quiet" ] || printf '%s\n' "$_stale_ctx7_all" | sed 's/^/         /'
     fi
 fi
 

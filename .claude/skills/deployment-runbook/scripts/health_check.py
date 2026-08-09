@@ -5,6 +5,13 @@ Deployment Health Check Script
 Performs comprehensive health checks after deployment to verify system stability.
 Checks API endpoints, database connectivity, cache layer, and key metrics.
 
+TEMPLATE — READ BEFORE USING AS A DEPLOY GATE
+    Only check_api_health() performs a real check out of the box. Every other
+    check is an unimplemented template that you must wire to your own
+    infrastructure. Those checks FAIL CLOSED: until implemented they return
+    failure, so this script can never green-light a deployment it did not
+    actually verify. Each one carries the snippet showing how to implement it.
+
 Usage:
     python3 health_check.py --env production
     python3 health_check.py --env production --check api
@@ -53,6 +60,19 @@ class HealthChecker:
         if self.verbose:
             print(f"  {message}")
 
+    def _not_implemented(self, what: str, how: str) -> Tuple[bool, str]:
+        """Fail-closed result for a check that has not been wired up yet.
+
+        A check that cannot actually verify anything MUST report failure.
+        Returning success would make this script silently approve every
+        deployment it is supposed to gate.
+        """
+        self.log(f"{what} check is an unimplemented template - reporting failure")
+        return False, (
+            f"NOT IMPLEMENTED - no verification of {what} was performed. "
+            f"Implement this check before using it as a deploy gate ({how})."
+        )
+
     def check_api_health(self) -> Tuple[bool, str]:
         """Check if API health endpoint is responding"""
         self.log("Checking API health endpoint...")
@@ -80,78 +100,80 @@ class HealthChecker:
             return False, f"API unreachable: {str(e)}"
 
     def check_database(self) -> Tuple[bool, str]:
-        """Check database connectivity"""
+        """Check database connectivity — UNIMPLEMENTED TEMPLATE, fails closed"""
         self.log("Checking database connectivity...")
 
-        try:
-            # In a real implementation, you would:
-            # import psycopg2
-            # conn = psycopg2.connect(host=self.config['db_host'], ...)
-            # cursor = conn.cursor()
-            # cursor.execute("SELECT 1")
-            # conn.close()
+        # To implement, replace the fail-closed return below with a real probe:
+        #     try:
+        #         import psycopg2
+        #         conn = psycopg2.connect(host=self.config['db_host'], ...)
+        #         cursor = conn.cursor()
+        #         cursor.execute("SELECT 1")
+        #         conn.close()
+        #         return True, "Database connectivity OK"
+        #     except Exception as e:
+        #         return False, f"Database error: {str(e)}"
 
-            # For demonstration:
-            self.log(f"Connecting to {self.config['db_host']}...")
-            return True, "Database connectivity OK"
-
-        except Exception as e:
-            return False, f"Database error: {str(e)}"
+        return self._not_implemented(
+            "Database connectivity",
+            f"connect to {self.config['db_host']} and run SELECT 1 - see the psycopg2 snippet in this method",
+        )
 
     def check_cache(self) -> Tuple[bool, str]:
-        """Check cache layer accessibility"""
+        """Check cache layer accessibility — UNIMPLEMENTED TEMPLATE, fails closed"""
         self.log("Checking cache layer...")
 
-        try:
-            # In a real implementation, you would:
-            # import redis
-            # r = redis.Redis(host=self.config['cache_host'], ...)
-            # r.ping()
+        # To implement, replace the fail-closed return below with a real probe:
+        #     try:
+        #         import redis
+        #         r = redis.Redis(host=self.config['cache_host'], ...)
+        #         r.ping()
+        #         return True, "Cache layer accessible"
+        #     except Exception as e:
+        #         return False, f"Cache error: {str(e)}"
 
-            # For demonstration:
-            self.log(f"Connecting to {self.config['cache_host']}...")
-            return True, "Cache layer accessible"
-
-        except Exception as e:
-            return False, f"Cache error: {str(e)}"
+        return self._not_implemented(
+            "Cache layer",
+            f"PING {self.config['cache_host']} - see the redis snippet in this method",
+        )
 
     def check_metrics(self) -> Tuple[bool, str]:
-        """Check if key metrics are within acceptable ranges"""
+        """Check key metrics against thresholds — UNIMPLEMENTED TEMPLATE, fails closed"""
         self.log("Checking application metrics...")
 
-        try:
-            # In a real implementation, you would fetch from monitoring service
-            # metrics = fetch_from_datadog/prometheus/cloudwatch()
+        # To implement, fetch real values from your monitoring service and
+        # compare them against the thresholds at the top of this file:
+        #     try:
+        #         error_rate, success_rate = fetch_from_datadog_prometheus_cloudwatch()
+        #         if error_rate <= MAX_ERROR_RATE and success_rate >= MIN_SUCCESS_RATE:
+        #             return True, "Metrics within thresholds"
+        #         return False, f"Metrics out of range (error: {error_rate*100:.2f}%)"
+        #     except Exception as e:
+        #         return False, f"Metrics check failed: {str(e)}"
+        # Never hard-code sample values here: a constant that always satisfies
+        # the thresholds turns this gate into an unconditional pass.
 
-            # For demonstration:
-            error_rate = 0.0005  # 0.05%
-            success_rate = 0.9995  # 99.95%
-
-            if error_rate <= MAX_ERROR_RATE and success_rate >= MIN_SUCCESS_RATE:
-                self.log(f"Error rate: {error_rate*100:.2f}%")
-                self.log(f"Success rate: {success_rate*100:.2f}%")
-                return True, f"Metrics within thresholds"
-            else:
-                return False, f"Metrics out of range (error: {error_rate*100:.2f}%)"
-
-        except Exception as e:
-            return False, f"Metrics check failed: {str(e)}"
+        return self._not_implemented(
+            "Application metrics",
+            f"query your monitoring service for error rate (<= {MAX_ERROR_RATE*100:.2f}%) "
+            f"and success rate (>= {MIN_SUCCESS_RATE*100:.2f}%)",
+        )
 
     def check_external_services(self) -> Tuple[bool, str]:
-        """Check connectivity to external services"""
+        """Check connectivity to external services — UNIMPLEMENTED TEMPLATE, fails closed"""
         self.log("Checking external service connectivity...")
 
-        try:
-            # In a real implementation, you would check:
-            # - Payment gateway
-            # - Email service
-            # - Third-party APIs
-            # - CDN
+        # To implement, probe each dependency your deployment relies on and
+        # return False if any of them is unreachable:
+        # - Payment gateway
+        # - Email service
+        # - Third-party APIs
+        # - CDN
 
-            return True, "External services reachable"
-
-        except Exception as e:
-            return False, f"External services error: {str(e)}"
+        return self._not_implemented(
+            "External services",
+            "probe each dependency (payment gateway, email service, third-party APIs, CDN)",
+        )
 
     def run_all_checks(self) -> Dict[str, Tuple[bool, str]]:
         """Run all health checks"""

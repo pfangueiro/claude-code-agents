@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **P0: eight gates that could not fail** — a 28-skill stress test (5 defect classes, trap scenarios, independent
+  adversarial review) found that the two bugs fixed earlier were systemic, and that the most dangerous class was
+  verification that always reports success. Repaired, each with executable evidence:
+  - `deployment-runbook/scripts/health_check.py` — **four** probes (database, cache, external services, and a
+    metrics check comparing hard-coded constants) were unconditional passes shipped as a deploy gate. All now
+    **fail closed** with an actionable "NOT IMPLEMENTED — implement before using as a gate" message; the
+    teaching snippets are kept. Verified: `--check database` now exits 1.
+  - `skill-creator/scripts/quick_validate.py` — advertised four checks, performed two, and green-lit a literal
+    `[TODO: …]` description. Placeholder/short descriptions and body-less skills now fail; verified against a
+    placeholder fixture (exit 1) with no false positive on real skills (git-workflow / deep-read / security-scan
+    all exit 0).
+  - `observability-stack` — three multi-window burn-rate alerts referenced **four recording rules that were never
+    defined**, so PromQL's empty-vector AND made them permanently un-fireable with no error logged. All four
+    windows (30m/1h/6h/3d) are now defined; verified zero dangling `sli:*` references.
+  - `api-contract-testing` — the regression test passed when a schema was **deleted** and when a **required field
+    was added** (the two most common breaking changes), and the flagship validation test never booted an app. Both
+    fixed, plus a sibling test that the reviewer caught still passing vacuously on an empty spec.
+  - `infrastructure-as-code` — the reference CD `apply` job could never run under either trigger, and the policy
+    gate errored instead of enforcing (`opa eval -i` takes a file path, not stdin). Both corrected.
+  - `scheduled-tasks` / `remote-triggers` — **fabricated APIs removed**: a `durable: true` option and a
+    `~/.claude/scheduled_tasks.json` persistence store that do not exist, and a create body whose field names
+    meant the primary documented operation could not succeed. Both rewritten against the live tool schemas.
+  - `docker-deployment` — the Python image installed packages as root into `/root/.local` then switched to a
+    non-root user that could not read them (container could not start); the Next.js example omitted its
+    `output: 'standalone'` prerequisite; the compose template shipped a plaintext password and no resource limits,
+    violating the skill's own checklist. All three fixed and proven against a real Docker daemon.
+  - `library-docs` + `validate.sh` — the earlier context7 repair corrected tool **names** but left dead
+    `topic`/`tokens`/`context7CompatibleLibraryID` **parameter** references, and the guard added alongside it
+    grepped a single literal string, so it reported PASS over the residue. Residue removed and the guard widened
+    to the parameter names — gap-tested (re-injecting a dead param fails validate; removing it passes).
+  Independent review overrode the fixers in three places (a measured `docker compose config` regression, an
+  unswept sibling test, and a doc left contradicting its own repaired script), all closed before commit.
+
 ### Changed
 
 - **`deep-read` skill gained code-graph awareness** — merging the CodeGraphContext/mex evaluations' *principle*
