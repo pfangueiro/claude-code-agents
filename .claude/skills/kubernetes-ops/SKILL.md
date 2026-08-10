@@ -351,11 +351,14 @@ Pod status?
 │   ├── "Insufficient cpu/memory" → check resource requests, node capacity
 │   ├── "no nodes match" → check nodeSelector, tolerations, affinity
 │   └── "PVC not bound" → check storage class, PV availability
-├── CrashLoopBackOff
+├── CrashLoopBackOff  (the container keeps exiting non-zero; kubelet backs off
+│   │                  10s → 20s → 40s …, capped at 300s, and resets the timer
+│   │                  once the container has run 10 min without a problem)
 │   ├── Check logs: kubectl logs POD --previous
 │   ├── OOMKilled → increase memory limits
 │   ├── Application error → fix code, check config
-│   └── Readiness probe failing → check probe config, startup time
+│   └── Liveness or startup probe failing → kubelet killed the container; compare
+│       probe config against actual startup time (readiness CANNOT cause this)
 ├── ImagePullBackOff
 │   ├── Check image name and tag exist
 │   ├── Check imagePullSecrets for private registries
@@ -365,13 +368,28 @@ Pod status?
     └── Check node status: kubectl get nodes
 ```
 
+**Which probe can restart a container** — only two of the three can, and readiness is not
+one of them ([pod lifecycle](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/)):
+
+| Probe | kubelet action on failure | Restarts? | What you observe |
+|-------|---------------------------|-----------|------------------|
+| liveness | Kills the container; the Pod's restart policy applies | Yes | RESTARTS climbing → CrashLoopBackOff while it keeps exiting |
+| startup | Kills the container; runs before liveness/readiness begin | Yes | Same, but only during startup |
+| readiness | Kills nothing — the EndpointSlice controller removes the Pod IP from every matching Service | **No** | `Running`, `READY 0/1`, `RESTARTS 0`, endpoints empty |
+
+So `READY 0/1` with `RESTARTS 0` is a readiness failure, never CrashLoopBackOff — diagnose it
+under "Service Not Reachable" below, not here. The backoff numbers above are the defaults; the
+`ReduceDefaultCrashLoopBackOffDecay` (1s start, 60s cap) and `KubeletCrashLoopBackOffMax`
+feature gates change them, so confirm against your cluster before quoting a timing to anyone.
+
 ### Service Not Reachable
 
 ```
 1. Verify pod is Running: kubectl get pods -l app=APP_NAME
 2. Verify service exists: kubectl get svc APP_NAME
 3. Check endpoints: kubectl get endpoints APP_NAME
-   └── Empty? Labels don't match between Service and Pod selectors
+   └── Empty? Either the Service and Pod selectors don't match, or every Pod is
+       failing its readiness probe (kubectl get pods → READY 0/1, RESTARTS 0)
 4. Test from within cluster: kubectl run debug --rm -it --image=busybox -- wget -qO- http://APP_NAME:PORT
 5. Check network policies: kubectl get networkpolicy -n NAMESPACE
 6. Check ingress/load balancer: kubectl describe ingress APP_NAME

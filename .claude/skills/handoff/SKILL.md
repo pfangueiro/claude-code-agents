@@ -22,6 +22,10 @@ Preserve context across Claude Code sessions by writing a structured HANDOFF.md 
 
 ## HANDOFF.md Format
 
+**This is the canonical definition of the HANDOFF.md format.** `/compact` reproduces this
+template inline for convenience; if the two ever disagree, this file is correct. See
+**Related — who owns what** at the end.
+
 ```markdown
 # Handoff — [Project Name]
 
@@ -89,3 +93,24 @@ Implement Stripe checkout flow with webhook verification.
 3. Write integration tests for the full checkout -> webhook -> order flow
 4. Add error handling for failed payments (update order status)
 ```
+
+## Related — who owns what
+
+Three entry points produce a session record, and they duplicate easily. **This skill owns the
+HANDOFF.md format**; the commands own their surrounding workflow.
+
+| Entry point | Owns | Writes to | Use when |
+|---|---|---|---|
+| **`handoff` skill** (this file) | **The HANDOFF.md format — canonical** | `HANDOFF.md` at project root | You want the file and nothing else |
+| **`/compact`** | The compact *workflow*: write the handoff, then compress the conversation | `HANDOFF.md` at project root, using this template | You are out of context and continuing in the **same** session |
+| **`/save-session`** | A different, richer format with a **mandatory** "What Did NOT Work" section carrying exact error messages | `~/.claude/sessions/<id>.md` — global, keeps the working tree clean | You want a resumable record across sessions, reloaded with `/resume-session` |
+
+**Ownership rule:** if the HANDOFF.md format changes, change it *here*. `/compact` restates this
+template inline, so any divergence means `/compact` is stale — update `/compact` to match rather
+than forking a second format.
+
+`/save-session` is deliberately **not** this template. It is a superset with a stricter failure
+record and a global location, so the two are not interchangeable and must not be merged.
+
+For choosing between truncating, forking a subagent, `/compact`, and a full handoff, see the
+`context-escalation` skill.

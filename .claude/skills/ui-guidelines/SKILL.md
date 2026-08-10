@@ -7,17 +7,26 @@ description: Ant Design house style for one specific React/Next.js application �
 
 ## Overview
 
-This skill provides comprehensive UI/UX guidelines for building components in a React/Next.js application using Ant Design, shadcn/ui, and consistent design tokens. It ensures all new components match the existing design system with proper colors, spacing, typography, and interaction patterns.
+This skill provides UI/UX guidelines for building components in a React/Next.js application using Ant Design and consistent design tokens. It ensures all new components match the existing design system with proper colors, spacing, typography, and interaction patterns.
 
 ## When to Use This Skill
 
 Trigger this skill when:
 - **Creating UI components**: forms, tables, modals, cards, lists
 - **Adding new features** that require UI elements
-- **Building data visualizations** or dashboards
 - **Implementing loading states** or animations
 - **Styling components** to match the design system
 - **User asks to build/create/add** any visual component
+
+## Out of Scope — Stop and Do Something Else
+
+If the work you are about to do is any of the following, **stop using this skill** and take the redirect instead. Nothing below applies:
+
+- **Charts, graphs, plots, or data-visualization palettes** (categorical / sequential / diverging series colors, sparklines, heatmaps, stat tiles, dashboard chart layout). This skill carries **no** chart guidance, and its brand palette is not a series palette — do not extrapolate one from it. Use a dedicated data-visualization skill or reference (`dataviz`, where available) instead.
+- **A codebase that is not standardized on Ant Design** — Tailwind-only, Material UI, Chakra, or plain CSS. None of the patterns below transfer; follow that stack's own conventions.
+- **A general accessibility or UX audit.** This is one application's house style, not an a11y reference.
+
+Charts are out of scope regardless of what a reference file says — see the note on `styling-layout.md` under [Reference Files](#reference-files).
 
 ## Quick Start
 
@@ -33,20 +42,25 @@ Determine what you're building:
 
 ### Step 2: Follow the Component Checklist
 
+This is the **only** checklist in this skill — use it both before you start and before you call the component done.
+
 Every component must:
 - [ ] Use Ant Design components as the base
 - [ ] Apply consistent spacing (8px, 12px, 16px, 24px)
 - [ ] Use theme tokens (`token.colorText`, `token.colorBgContainer`)
+- [ ] Use `fontSize: 12` for tables (MANDATORY — see `references/component-patterns.md`)
 - [ ] Include proper TypeScript types
 - [ ] Handle loading states (Skeleton, Spin, or loading prop)
 - [ ] Show feedback with `message.success()` / `message.error()`
-- [ ] Support responsive design
+- [ ] Include validation rules with clear messages on every form input
 - [ ] Include proper error handling
+- [ ] Support responsive design
+- [ ] Match the existing patterns below
 
 ### Step 3: Apply Core Design Tokens
 
-**Colors:**
-- Brand Orange: `#F79402` (primary brand color)
+**Colors** (canonical source: `references/design-tokens.md` — if these ever disagree, that file wins):
+- Brand Orange: `#F79400` (primary brand color)
 - Product Owner: `#7C4DFF` (purple)
 - Tech Owner: `#52c41a` (green)
 - Error/Overdue: `#ff4d4f` (red)
@@ -263,7 +277,7 @@ Always show loading feedback:
 ### DON'Ts ❌
 - Don't use CSS-in-JS libraries
 - Don't create custom CSS files
-- Don't hardcode colors (use tokens)
+- Don't hardcode a color that has a theme token (`token.colorText`, `token.colorBorder`, `token.colorBgContainer`) — the brand palette in Step 3 is the documented exception and is written literally, as the patterns above show
 - Don't skip error handling
 - Don't ignore responsive design
 - Don't use excessive shadows
@@ -311,28 +325,11 @@ Always show loading feedback:
 
 Read these files for detailed information:
 
-1. **[design-tokens.md](references/design-tokens.md)** - Colors, spacing, typography system
+1. **[design-tokens.md](references/design-tokens.md)** - Colors, spacing, typography system. **Canonical for every color value.**
 2. **[codebase-patterns.md](references/codebase-patterns.md)** - Real patterns from existing code
 3. **[component-patterns.md](references/component-patterns.md)** - Ant Design component standards
-4. **[styling-layout.md](references/styling-layout.md)** - Layout patterns and responsive design
+4. **[styling-layout.md](references/styling-layout.md)** - Layout patterns and responsive design. **Stale in three places — do not follow them:** its `Charts: shadcn/ui` tech-stack line (charts are out of scope, see above), its `Avoid: Inline styles` rule (this house style uses inline styles for layout and spacing — see Styling Approach), and its `colorPrimary: '#1890ff'` example (the brand primary is `#F79400`).
 5. **[animations.md](references/animations.md)** - Loading indicators and transitions
-
-## Decision Tree
-
-**Building something new?**
-
-1. **Is it a table?** → Read `codebase-patterns.md` Tables section
-2. **Is it a form?** → Read `codebase-patterns.md` Modal Patterns section
-3. **Is it a card grid?** → Read `codebase-patterns.md` Card Patterns section
-4. **Need specific colors?** → Read `design-tokens.md`
-5. **Need loading animation?** → Read `animations.md`
-
-**For ANY component:**
-- Use TypeScript
-- Handle loading states
-- Show error messages
-- Use theme tokens
-- Test responsiveness
 
 ## Typography Scale
 
@@ -388,16 +385,6 @@ const { data, error, isLoading, mutate } = useSWR(
 );
 ```
 
-## Final Checklist
+## Before You Finish
 
-Before completing any component:
-- [ ] Uses Ant Design as base
-- [ ] Applies theme tokens for colors
-- [ ] Has consistent spacing
-- [ ] Includes loading states
-- [ ] Shows error feedback
-- [ ] Has TypeScript types
-- [ ] Works responsively
-- [ ] Matches existing patterns
-- [ ] Uses `fontSize: 12` for tables
-- [ ] Includes proper validation
+Re-run the checklist in [Step 2](#step-2-follow-the-component-checklist). That is the single copy — there is no separate finishing list to diverge from it.

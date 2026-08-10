@@ -20,19 +20,31 @@ Apply the **cheapest** intervention that still preserves what matters. Escalate 
 | **L1 — Truncate** | A single tool output is large (find dump, long log, multi-file diff) but the rest of context is fine | Re-run with stricter filters: `head -50`, `grep ... | head`, `wc -l` first to size, `--limit` flags. Or summarize the output verbally before the next turn. | Near zero — the raw blob wasn't load-bearing |
 | **L2 — Drop redundant reads** | You've Read the same file twice, or have multiple iterations of the same diff visible | Acknowledge: "I have what I need from X.py, the line numbers above are authoritative" — implicit hint that the older read can be forgotten | Low — the latest copy survives |
 | **L3 — Fork to subagent** | A subtask (research a library, audit a single file, run a benchmark) can be self-contained | Delegate via the Agent tool. The subagent's context is separate and its tool output never lands in the main thread. You receive a short summary back. | Low — explicit boundary; sub-agent transcript stays accessible if needed |
-| **L4 — `/compact`** | The conversation has many turns, but the current task is still in flight | Summarize the existing context into HANDOFF.md and compact. The session continues; some earlier verbatim turns are replaced by their summary. | Medium — verbatim detail is gone, structured summary remains |
-| **L5 — `handoff` + `/save-session`** | You're approaching a real boundary (context almost full, task naturally pausing, need to come back next session) | Use the `handoff` skill to write a structured HANDOFF.md, then `/save-session` to persist. Next session resumes via `/resume-session`. | High — but only if the next session reads the handoff |
+| **L4 — `/compact`** | Many turns and the task is still in flight, AND this is the session's first compact AND enough headroom remains that the work left plausibly fits after it | Summarize the existing context into HANDOFF.md and compact. The session continues; some earlier verbatim turns are replaced by their summary. | Medium — verbatim detail is gone, structured summary remains |
+| **L5 — `handoff` + `/save-session`** | Any one of: context is nearly exhausted, so compacting would not buy enough runway to finish; you already compacted this session and pressure is back; or the task is at a natural pause and will resume next session | Use the `handoff` skill to write a structured HANDOFF.md, then `/save-session` to persist. Next session resumes via `/resume-session`. | High — but only if the next session reads the handoff |
 
 ## Decision flow
+
+Arms are checked TOP-DOWN; the first match wins. "Task still in flight" is true in nearly every
+context-pressure moment, so it cannot be an arm on its own — it would swallow every case and make L5
+unreachable exactly at the boundary L5 exists for. The boundary test is therefore checked BEFORE
+L4, and L4 carries the bounded condition.
 
 ```
 context pressure detected
   ├── is it ONE giant tool output? → L1 (truncate / re-query)
   ├── are there duplicate reads / repeated diffs? → L2 (acknowledge canonical version)
   ├── is the next subtask self-contained? → L3 (fork to subagent)
-  ├── is current task still in flight? → L4 (/compact)
-  └── crossing a natural session boundary? → L5 (handoff + /save-session)
+  ├── is this a real boundary — context nearly exhausted (a compact would not
+  │     leave enough runway to finish), already compacted once this session,
+  │     or the task is pausing here? → L5 (handoff + /save-session)
+  └── otherwise, task in flight, first compact, and the work left plausibly
+        fits the post-compact budget → L4 (/compact)
 ```
+
+If the L5 test and the L4 condition disagree — you want to keep going but the runway is gone —
+L5 wins. Compacting into a budget too small to finish loses the verbatim detail AND still ends the
+session, which is the worst of both.
 
 ## What this skill does NOT do
 

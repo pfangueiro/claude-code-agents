@@ -13,11 +13,17 @@ Advanced patterns for coordinating multiple Claude agents using Claude Code's bu
 One Claude (the coordinator) orchestrates multiple worker Claudes:
 
 ```
-Coordinator (restricted tools: Agent, SendMessage, TaskStop)
+Coordinator (restricted tools: Read, Agent, SendMessage, TaskStop)
   ├── Worker A (background, restricted tools)
   ├── Worker B (background, restricted tools)
   └── Worker C (background, restricted tools)
 ```
+
+**Why `Read` is in the coordinator's set:** the coordinator's whole job is the Synthesis phase,
+and synthesis is a read operation — it consumes worker findings and any files those workers
+wrote. A coordinator without `Read` cannot perform the step that justifies its existence.
+Restrict the coordinator's *write* tools (no Edit/Write/Bash — delegate those to workers), not
+its ability to read.
 
 **Workflow phases:**
 1. **Research** — Launch parallel workers to explore and gather information
@@ -43,14 +49,22 @@ Agent:
 **Synchronous (foreground):** Coordinator waits for result. Use for quick lookups.
 **Asynchronous (background):** Coordinator gets `<task-notification>` when done. Use for parallel work.
 
-### Fork Subagent (Cheap Context Sharing)
-Omit `subagent_type` to fork the coordinator:
+### Subagent context — read this before assuming a fork
+**Omitting `subagent_type` does NOT fork the coordinator.** Verified against the shipped
+`sdk-tools.d.ts`: `subagent_type?: string` is optional and selects *"the type of specialized
+agent to use for this task"*; when it is omitted the **general-purpose** agent runs with a
+**fresh context**. This never errors — you silently lose the context sharing you assumed.
+
+To share context, put it in the `prompt` (an agent knows only what its prompt contains), or
+continue an already-spawned agent with `SendMessage`, which resumes it *with its context
+intact* — that is the real cheap-context-sharing mechanism.
+
 ```
 Agent:
   description: "analyze test results"
-  prompt: "..."
+  prompt: "<include the context the agent needs — it does NOT inherit yours>"
+  subagent_type: "general-purpose"   # be explicit; omitting selects this anyway
   run_in_background: true
-  # no subagent_type = fork (inherits full context, shares prompt cache)
 ```
 
 **When to fork vs fresh agent:**
@@ -109,7 +123,12 @@ Phase 4: Launch verification agent:
 1. Agent(run_in_background: true, prompt: "implement feature X")
 2. Continue other work while agent runs
 3. Receive <task-notification> when agent completes
-4. Read agent's output file for results
+4. Collect the result:
+   - The agent's final message arrives WITH the notification — that is the primary channel.
+   - A file exists only if you instructed the worker to write one. If you need a durable
+     artifact, say so in the prompt ("write your findings to <path>"), then Read that path.
+   - Do NOT assume an output file exists by default. Reading one requires `Read` in the
+     coordinator's toolset (see Coordinator Pattern above).
 5. Launch follow-up agent if needed
 ```
 

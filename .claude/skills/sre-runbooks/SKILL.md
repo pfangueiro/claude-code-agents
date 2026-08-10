@@ -53,12 +53,21 @@ error_budget_policy:
     - "Freeze non-critical deployments"
     - "Mandatory postmortem for any new incident"
     - "Dedicated reliability sprint next cycle"
-  budget_exhausted:  # 0% remaining
-    - "Complete change freeze for this service"
-    - "All engineering effort on reliability"
+  budget_exhausted:  # 0% remaining — everything in budget_critical, plus:
     - "Escalate to engineering leadership"
-    - "Resume normal operations only when budget recovers"
+    - "All engineering effort on reliability until the burn is explained"
+    - "Freeze feature releases ONLY while the root cause is unexplained or recurring"
+    - "Root cause understood and mitigated: resume releases even at zero budget"
 ```
+
+**The freeze trigger is an unexplained root cause, not `budget == 0`.** Google's CRE team is
+explicit that "blocking releases solely because the 30-day error budget is exhausted" works
+against the policy's deliberate bias toward development velocity
+([Applying the escalation policy](https://cloud.google.com/blog/products/gcp/applying-the-escalation-policy-cre-life-lessons)).
+Their escalation ladder pauses feature releases when the cause continues to evade understanding,
+and holds that pause until the cause is understood or the incident ages out of the 30-day SLO
+window. A one-off burn that is understood and mitigated brings the service back into policy
+without a freeze; a burn that recurs — or that nobody can explain — is what escalates.
 
 ## On-Call Handbook
 
@@ -78,7 +87,7 @@ Rotation:   Weekly, handoff every Monday 10:00 AM
 | Acknowledge page | Within 5 minutes |
 | Begin triage | Within 15 minutes |
 | Update status page | Within 20 minutes (P1/P2) |
-| Escalate if stuck | After 30 minutes without progress |
+| Escalate if stuck | On the Escalation Matrix clock below — P1: eng manager at 15 min, VP at 30 min; P2: eng manager at 30 min; P3: team lead at 48h. The matrix is the only escalation clock |
 | Max incidents/shift | 2 per 12-hour shift (exceeding = process problem) |
 | Compensation | On-call stipend + per-incident for off-hours |
 
@@ -157,14 +166,17 @@ Diagnosis:
    - OOMKilled → check: kubectl get pod POD -o jsonpath='{.status.containerStatuses[0].lastState}'
    - Application error → check logs for stack trace
    - Missing config/secret → check: kubectl get pod POD -o yaml | grep -A5 envFrom
-   - Failed health probe → check probe config vs actual startup time
+   - Failed liveness/startup probe → kubelet killed the container; compare probe
+     config vs actual startup time (readiness failure cannot restart a container —
+     it only pulls the Pod IP out of the Service's EndpointSlices)
    - Permission denied → check securityContext, serviceAccount
 
 Mitigation:
 - OOMKilled: Increase memory limits (check actual usage first)
 - App error: Fix code, rollback deployment if recent change
 - Missing config: Create/fix ConfigMap or Secret
-- Probe failure: Increase initialDelaySeconds, adjust thresholds
+- Liveness/startup probe failure: Increase initialDelaySeconds or add a startupProbe,
+  adjust failureThreshold
 - Permission: Fix RBAC, adjust securityContext
 
 Verification:
@@ -383,7 +395,10 @@ Verification:
 
 ### Pre-Requisites
 - SLOs defined and monitored
-- Error budget available (>20%)
+- Error budget gate — the same thresholds as the `error_budget_policy` above:
+  - **>50% remaining** → run experiments normally
+  - **20–50% remaining** → only with explicit team approval
+  - **<20% remaining** → do not run chaos experiments; the budget is already burning
 - Runbooks exist for expected failure modes
 - Team has agreed to the experiment scope
 

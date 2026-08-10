@@ -59,7 +59,7 @@ ActiveForm: <present continuous — "Adding retry logic to Bedrock calls">
 - File creation is separate from file modification
 - Each task targets ≤ 3 files
 - For monitoring/polling tasks, use CronCreate instead of manual loops
-- For risky or experimental tasks, consider EnterWorktree for isolation
+- For risky or experimental tasks, record the isolation mechanism in the **Tool:** field as the `Agent` tool's `isolation: "worktree"` parameter. Do NOT plan an `EnterWorktree` step: that tool is explicit-instruction-only and switches the whole session's working directory, so it cannot isolate one task among many
 
 **Gate:** All tasks created via TaskCreate. Minimum 3 tasks for any non-trivial goal.
 
@@ -111,7 +111,7 @@ Process batches in order. Within each batch, maximize parallelism.
 - For direct edits (Write/Edit), execute sequentially if they touch the same file
 - **Fork subagents** (omit `subagent_type`) when workers need your conversation context — shares prompt cache, much cheaper
 - **Coordinator synthesis**: After research agents complete, READ and SYNTHESIZE all findings before launching implementation agents — never pass raw research output
-- Use `isolation: "worktree"` for risky/experimental implementation tasks — auto-cleaned if no changes
+- For risky/experimental implementation tasks, pass the `Agent` tool's own `isolation: "worktree"` parameter — it gives that agent a temporary git worktree so it works on an isolated copy of the repo. This is a parameter of the `Agent` launcher, **not** `EnterWorktree`: `EnterWorktree` is explicit-instruction-only, session-scoped, and cannot be entered twice, so it is never the isolation mechanism for a batch
 - For long-running monitoring, use CronCreate instead of manual polling loops
 - Always read a file before editing it
 - After code changes, run relevant tests if a test suite exists

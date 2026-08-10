@@ -12,23 +12,28 @@ Break premature convergence. Autoregressive reasoning commits to the first plaus
 
 ## Pre-Flight Gate
 
-Decide whether to run BEFORE doing anything else.
+Activation is decided by the frontmatter description alone — this file is read only AFTER the skill
+has been selected. Nothing here can prevent over-triggering, so this gate is a **post-selection
+redirect**, not a filter.
 
-**Unconditional trigger — run immediately, no self-judging:**
-- The user typed `/diverge` or explicitly asked to brainstorm, explore options, de-anchor, or "give me alternatives"
+**Before proceeding, check the ABORT conditions below. If any holds, STOP, say in one line which one
+fired, and take the redirect instead of fanning out any agents.** Being invoked — including a literal
+`/diverge`, "brainstorm options", "explore alternatives", or "give me alternatives" — does NOT
+override an ABORT: the phrasing that selected this skill is not evidence the problem is open.
 
-**Conditional trigger — self-judge on consequence × openness:**
-- Run ONLY when the problem is BOTH **consequential** (hard to reverse, wide blast radius, or high cost of being wrong) AND **open-ended** (several viable, structurally different approaches plausibly exist)
-- The gate is consequence × openness, NOT token cost
+| ABORT when the ask is… | Redirect |
+|---|---|
+| Syntax, a definition, a factual lookup, arithmetic, a deterministic transform | Answer directly |
+| A bug with a single known root cause | `/investigate` |
+| A decision the user has already made | `/execute` — just build it |
+| Following an explicit step-by-step instruction | Do the steps |
+| Low-stakes or adjacent — naming, wording, two known libraries | Answer directly with the inline obvious/alternative/trap (`anti-anchoring` rule) |
+| Consequential but CLOSED — one approach is clearly right | State it, plus a one-line trap check |
+| Open but cheaply reversible — trying one costs less than exploring | Pick the obvious one and try it |
 
-**ABORT — Do NOT use for (it manufactures noise on closed problems):**
-- Syntax, definitions, factual lookups, arithmetic, deterministic transforms
-- A bug with a single known root cause (use `/investigate`)
-- A decision the user has already made (just execute it via `/execute`)
-- Following an explicit step-by-step instruction
-- Low-stakes choices where the inline obvious+alternative+trap habit (see `anti-anchoring` rule) already suffices
-
-**Gate:** Either the unconditional trigger fired, or consequence AND openness are both true. If neither, STOP — state the single best answer directly (with a one-line obvious/alternative/trap) and do not spawn agents.
+**PROCEED only when no ABORT fired AND consequence × openness both hold** — hard to reverse, wide
+blast radius, or high cost of being wrong, AND several viable, structurally different approaches
+plausibly exist. The gate is consequence × openness, NOT token cost.
 
 ## Phase 1: DIVERGE — Isolated Parallel Generation
 

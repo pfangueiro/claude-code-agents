@@ -703,6 +703,108 @@ PYEOF
     fi
 fi
 
+# (5) browser-testing — two repairs that decide whether an "E2E pass" means anything:
+#   (a) every assert_response EXAMPLE must pass `value`. With only an `id` the MCP server
+#       reports success for ANY response it received — a 401 or 500 comes back as
+#       "assertion successful" — so a failed login reads as a green test.
+#   (b) every tool name must carry the mcp__playwright__ prefix. A bare `playwright_navigate`
+#       is not a callable tool name; an agent copying it gets a tool-not-found error mid-run.
+# Both anchors are fail-closed: if the detector finds ZERO invocation examples or ZERO
+# prefixed mentions it FAILS, because a restructured file would otherwise let a guard that
+# now matches nothing keep reporting green.
+_bt=".claude/skills/browser-testing/SKILL.md"
+if [ -f "$_bt" ] && command -v python3 &>/dev/null; then
+    _bt_err=$(python3 - "$_bt" <<'PYEOF'
+import re, sys
+s = open(sys.argv[1]).read()
+errs = []
+
+# (a) A line naming assert_response AND carrying an `id` argument is an invocation example;
+# prose that merely mentions the tool writes `id` in backticks with no colon, so it is not
+# swept up here.
+inv = [l.strip() for l in s.splitlines()
+       if "assert_response" in l and re.search(r'(\bid\s*[:=]|"id")', l)]
+if not inv:
+    errs.append("no assert_response invocation example found - the guard verifies nothing")
+for l in inv:
+    if not re.search(r'(\bvalue\s*[:=]|"value")', l):
+        errs.append("assert_response example with no 'value' argument: " + l[:90])
+
+# (b) Compare MAXIMAL identifier tokens, so mcp__playwright__playwright_navigate is a single
+# token that is skipped wholesale. The deliberate counter-example written as
+# `..._playwright_start_codegen_session` tokenizes with a leading underscore and so is not a
+# bare name either - the negative teaching example survives this check.
+prefixed = 0
+for m in re.finditer(r'[A-Za-z0-9_]+', s):
+    t = m.group(0)
+    if t.startswith("mcp__playwright__"):
+        prefixed += 1
+        continue
+    if re.fullmatch(r'playwright_[a-z_]+', t) or \
+       re.fullmatch(r'(start|end|get|clear)_codegen_session', t):
+        errs.append("tool name missing mcp__playwright__ prefix (line %d): %s"
+                    % (s[:m.start()].count("\n") + 1, t))
+if prefixed == 0:
+    errs.append("no mcp__playwright__ tool mention found - the guard verifies nothing")
+print("; ".join(errs))
+PYEOF
+)
+    if [ -z "$_bt_err" ]; then
+        pass "Fail-open guard: browser-testing assert_response examples pass 'value'; tool names are mcp__playwright__-prefixed"
+    else
+        fail "Fail-open guard: browser-testing — $_bt_err"
+    fi
+fi
+
+# (6) ci-cd-templates — the same fail-open defect expressed as pipeline YAML: a step that
+# reports success no matter what it found or what the server answered.
+#   (a) semgrep exits 0 even WITH findings unless `--error` is passed, so a SAST job without
+#       it is a decorative gate. The only other honest shape is report-mode, which must be
+#       declared machine-readably in a comment within 3 lines above the invocation.
+#   (b) curl exits 0 on HTTP 4xx/5xx unless `--fail`/`--fail-with-body` (or a short flag
+#       bundling -f) is passed, so a deploy webhook returning 500 marks the deploy green.
+# `apk add ... curl` and friends install the binary rather than invoke it, so the detector
+# requires curl in command position with at least one argument. Fail-closed on zero matches.
+_cicd=".claude/skills/ci-cd-templates/SKILL.md"
+if [ -f "$_cicd" ] && command -v python3 &>/dev/null; then
+    _cicd_err=$(python3 - "$_cicd" <<'PYEOF'
+import re, sys
+lines = open(sys.argv[1]).read().splitlines()
+errs = []
+# `^` alone anchors at position 0, so a command INDENTED inside a `run: |` block — the
+# normal YAML shape — was invisible to this guard. `^\s*` is required.
+CMD = r'(?:^\s*|[-|;&]\s*|\brun:\s*|&&\s*|\|\s*)'
+
+sem = [(i + 1, l) for i, l in enumerate(lines) if re.search(CMD + r'semgrep\s', l)]
+if not sem:
+    errs.append("no semgrep invocation found - the guard verifies nothing")
+for n, l in sem:
+    if "--error" in l:
+        continue
+    # Explicit opt-out: the three lines above must declare the job is report-only.
+    if any("report-mode" in c for c in lines[max(0, n - 4):n - 1]):
+        continue
+    errs.append("semgrep invocation (line %d) has no --error and no 'report-mode' "
+                "declaration above it - it exits 0 on findings" % n)
+
+cur = [(i + 1, l) for i, l in enumerate(lines) if re.search(CMD + r'curl\s+\S', l)]
+if not cur:
+    errs.append("no curl invocation found - the guard verifies nothing")
+for n, l in cur:
+    if re.search(r'(--fail-with-body|--fail\b|(?<![\w-])-[a-zA-Z]*f[a-zA-Z]*(?![\w-]))', l):
+        continue
+    errs.append("curl invocation (line %d) has no --fail/--fail-with-body - "
+                "an HTTP 4xx/5xx exits 0 and the step reports success" % n)
+print("; ".join(errs))
+PYEOF
+)
+    if [ -z "$_cicd_err" ]; then
+        pass "Fail-open guard: ci-cd-templates semgrep carries --error; every curl carries --fail"
+    else
+        fail "Fail-open guard: ci-cd-templates — $_cicd_err"
+    fi
+fi
+
 # ============================================================================
 # Agent Validation
 # ============================================================================

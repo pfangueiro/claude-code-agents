@@ -197,6 +197,7 @@ groups:
           severity: warning
         annotations:
           summary: "Elevated error budget burn rate (slow burn) for service {{ $labels.service }}"
+          runbook_url: "https://wiki/runbooks/slo-burn-rate"
 
       # Gradual burn: 10% budget consumed in 3 days → ticket
       - alert: SLOBurnRateTicket
@@ -209,7 +210,93 @@ groups:
         for: 1h
         labels:
           severity: ticket
+        # A ticket-severity alert reaches someone with no pager context and no
+        # incident channel, so it needs MORE explanation than the page, not less.
+        # Annotations are what turns a row in a queue into something actionable.
+        annotations:
+          summary: "Gradual error budget burn for service {{ $labels.service }} — 10% of the 30d budget in 3 days"
+          description: >-
+            3d error ratio for {{ $labels.service }} is {{ $value | humanizePercentage }},
+            above the 1x sustainable burn for a 99.9% SLO. Not urgent, but at this pace the
+            30d budget is exhausted before the window closes. Triage in business hours.
+          runbook_url: "https://wiki/runbooks/slo-burn-rate"
+
+      # Companion to all three burn-rate alerts: catches the outage a RATIO cannot
+      # see (see "Zero Traffic Is the Blind Spot" below). Self-inventorying — the
+      # long left-hand window is the list of services that are supposed to be serving.
+      #   left  = served traffic at some point in the last day
+      #   right = serving traffic now
+      # `unless` keeps left-hand elements with no exactly-matching label set on the
+      # right, so a service that went flat (rate 0, filtered out by `> 0`) OR vanished
+      # (no series at all in the 10m window) survives the filter and fires.
+      - alert: ServiceTrafficAbsent
+        expr: |
+          (
+            sum by (service) (rate(http_requests_total[1d])) > 0
+            unless
+            sum by (service) (rate(http_requests_total[10m])) > 0
+          )
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.service }} is serving no traffic — its SLO alerts are blind, not green"
+          description: >-
+            No requests in 10m for a service that served traffic within the last day.
+            The burn-rate alerts above divide by zero here and cannot fire, so treat a
+            quiet SLO dashboard for {{ $labels.service }} as unverified, not healthy.
+          runbook_url: "https://wiki/runbooks/traffic-absent"
 ```
+
+### Zero Traffic Is the Blind Spot in Every Ratio SLI
+
+A burn-rate alert divides errors by requests, so it has nothing to say when there are
+no requests. Two shapes of **total** outage therefore read as perfectly healthy:
+
+| Failure | What the SLI evaluates to | Why the alert stays silent |
+|---|---|---|
+| Process up, receiving nothing (load balancer misroute, upstream dead, consumer stopped) | numerator and denominator are both `rate() == 0`, so the ratio is `0 / 0` | Prometheus arithmetic follows [IEEE 754](https://prometheus.io/docs/prometheus/latest/querying/operators/), so `0/0` is `NaN` and `1 - NaN` is `NaN`. Every ordered comparison against `NaN` is false, so `> threshold` never matches and the alert has no series to fire on |
+| Target gone entirely (pod deleted, job dropped from discovery) | selectors match nothing, so the recording rule emits **no series at all** | An alert over an empty vector never fires and logs nothing; the panel renders "No data" |
+
+The `or 0 * sum(...)` guard in the recording rules above does **not** cover this. It
+supplies a `0` numerator when a service served no *non-5xx* requests. It cannot supply
+a denominator when the service served no requests at all.
+
+That is why `ServiceTrafficAbsent` is in the group above rather than described here as
+an optional extra — copying the burn-rate rules without it ships the blind spot. Know
+its edges:
+
+- **The self-inventory expires.** The `[1d]` left-hand window is the alert's entire
+  memory of which services exist. Once a service has been silent longer than that
+  window it drops off the left-hand side, the alert **resolves itself**, and the
+  outage carries on unwatched. Set that window to the longest outage you must still
+  be paged for, and pay the retention cost.
+- **A service that has never served traffic is invisible** — there is no left-hand
+  element to keep. For a service you must never lose, name it explicitly:
+
+  ```promql
+  absent(http_requests_total{service="checkout"})
+  ```
+
+  `absent()` returns a 1-element vector only when its argument matches nothing, and it
+  derives the output labels from **equality matchers only** — `absent(sum(...))`
+  returns a label-less `{}`, and a `=~` matcher is dropped. Keep it a plain selector,
+  and add one rule per service you refuse to lose silently.
+- **`up == 0` is not a substitute.** That reports a target Prometheus cannot scrape;
+  this reports a healthy, scraped process that nothing is talking to. They fail
+  independently — alert on both.
+- **Low traffic breaks the ratio too, in the opposite direction.** At 5 requests in a
+  window a single error is a 20% error rate, and fast burn trips on statistical noise.
+  Either add a minimum-volume term to the burn-rate `and` chain —
+  `and sum by (service) (rate(http_requests_total[5m])) > 0.1` (≈30 requests per 5m) —
+  or move low-volume services off ratio alerting onto an absolute error-count alert.
+  Adding the volume term makes the alert *more* dependent on `ServiceTrafficAbsent`,
+  since it explicitly excludes the quiet case.
+
+Like every other alert here, this one is only real once a unit test proves it fires
+(next section). Drive it with a series that stops mid-test — `values: '0+100x30 _x60'`,
+where [`_` is a missing sample](https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/) —
+and assert `ServiceTrafficAbsent` in `exp_alerts` after the gap.
 
 ### Verify the Rules Actually Fire
 

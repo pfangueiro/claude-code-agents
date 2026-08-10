@@ -22,11 +22,28 @@ Multi-step reasoning through the sequential-thinking MCP server. Decomposes comp
 
 ## Pre-Flight Gate
 
-- Unconditional: user typed `/deep-analysis` or asked for deep/structured analysis.
-- Conditional self-judge: run only for a genuinely hard problem — architectural decision, non-obvious trade-off, ambiguous design space, or complex debugging needing hypothesis testing.
-- ABORT: simple lookups, well-established patterns, straightforward implementations, obvious answers.
+Activation is decided by the frontmatter description alone — this file is read only AFTER the skill
+has been selected. Nothing here can prevent over-triggering, so this gate is a **post-selection
+redirect**, not a filter.
 
-**Gate:** Explicit invocation, or a genuinely hard reasoning problem. Otherwise answer directly.
+**Before proceeding, check the ABORT conditions below. If any holds, STOP, say in one line which one
+fired, and take the redirect instead of starting the chain.** Being invoked — including a literal
+`/deep-analysis` or "give me a deep analysis" — does NOT override an ABORT: the phrasing that
+selected this skill is not evidence the problem is hard.
+
+| ABORT when the ask is… | Redirect |
+|---|---|
+| A factual, syntax, or definition lookup — anything with one correct answer | Answer directly |
+| Summarizing or explaining existing code | Read the code and answer (`/deep-read` if it is large) |
+| A well-established pattern or a straightforward implementation | Implement it directly |
+| A defect with an obvious cause, or a fix the user already chose | Apply the fix directly |
+| A reproducible defect whose cause is genuinely unknown | `/investigate` — 8-phase root cause |
+| A wide option space rather than one reasoned conclusion | `/diverge` first, then return here to converge |
+| Answerable by reading the code or running one command | Do that instead |
+
+**PROCEED only when no ABORT fired AND the problem is genuinely open** — several defensible answers,
+an architectural or trade-off decision, an unexplained bottleneck, or a design space that must be
+reasoned through rather than looked up.
 
 ## Protocol
 

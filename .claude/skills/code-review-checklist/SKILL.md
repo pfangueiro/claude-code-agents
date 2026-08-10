@@ -114,17 +114,22 @@ const MAX_RETRY_ATTEMPTS = 3;
 - [ ] Input sanitization in place
 - [ ] Rate limiting for APIs
 
-**OWASP Top 10 Considerations:**
-1. Injection flaws
-2. Broken authentication
-3. Sensitive data exposure
-4. XML external entities (XXE)
-5. Broken access control
-6. Security misconfiguration
-7. Cross-site scripting (XSS)
-8. Insecure deserialization
-9. Using components with known vulnerabilities
-10. Insufficient logging & monitoring
+**OWASP Top 10:2025 Considerations:**
+
+1. **A01 Broken Access Control** — missing or incorrect authorization, IDOR, CSRF, path traversal (CWE-22), and SSRF (CWE-918, folded into this category in 2025)
+2. **A02 Security Misconfiguration** — debug mode on in production, default credentials, permissive CORS, verbose errors, XXE (CWE-611 lives here now)
+3. **A03 Software Supply Chain Failures** — vulnerable, unpinned, or unmaintained dependencies, and compromise anywhere in the build/publish chain
+4. **A04 Cryptographic Failures** — missing or weak encryption, homegrown crypto, hardcoded keys, cleartext storage or transport
+5. **A05 Injection** — SQL, NoSQL, command, LDAP, and template injection; **XSS (CWE-79) is part of this category**
+6. **A06 Insecure Design** — missing threat model, no rate limiting, insecure-by-default flows
+7. **A07 Authentication Failures** — weak credential handling, session fixation, hardcoded passwords, missing MFA on sensitive actions
+8. **A08 Software or Data Integrity Failures** — insecure deserialization (CWE-502), unsigned updates, untrusted CI/CD plugins
+9. **A09 Security Logging & Alerting Failures** — security events unlogged, no alerting path, secrets or PII written to logs
+10. **A10 Mishandling of Exceptional Conditions** — failing open, swallowed exceptions, error messages leaking internals
+
+Edition: **OWASP Top 10:2025** — <https://owasp.org/Top10/2025/>. Check the edition year above
+against the current list before relying on it; the entry this replaced sat two editions stale
+(it was the 2017 list, still naming XXE as its own category and omitting supply chain entirely).
 
 ### 6. Performance
 

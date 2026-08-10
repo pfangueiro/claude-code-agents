@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Final remediation sweep: the last 13 skills, plus three holes the repairs themselves left.**
+  A 15-agent run repaired every remaining defect, verified each independently, then re-tested all 27 skills.
+  Result: **0 broken, 22 of 27 ready to rely on**, and every assigned repair confirmed by execution.
+  - **Gate logic** (deep-analysis, diverge, context-escalation): the OR-disjunction gates whose unconditional
+    arm made their own ABORT lists unreachable are now abort-dominant post-selection redirects — each abort
+    condition names where to go instead, and being invoked (even by literal slash command) no longer overrides
+    an abort. context-escalation's L5 is reachable again: its L4 arm ("task still in flight") was true in
+    essentially every context-pressure case, so the level that exists for exactly that case could never run.
+  - **Tool-contract violations** (execute, worktree-workflow): `EnterWorktree` is explicit-request-only,
+    session-scoped and single-instance, so it cannot isolate one task among many — both skills prescribed it as
+    a per-task mechanism. Corrected against the live schema. Note the fixer's own correction to the brief:
+    `isolation: "worktree"` **is** real — it is a parameter of the **Agent** tool, not EnterWorktree — so the
+    verified mechanism was kept and only the unverifiable part removed.
+  - **kubernetes-ops** blamed CrashLoopBackOff on the readiness probe, the one probe that provably cannot
+    restart a pod (readiness failure → Running, READY 0/1, RESTARTS 0). **sre-runbooks**' chaos gate was looser
+    than its own budget policy, and its freeze condition is now *root cause not understood*, not budget == 0.
+  - **OWASP 2017 → 2025** in code-review-checklist (two editions stale: no SSRF, no supply chain, still listing
+    XXE), and **security-scan** no longer reports *unchecked* as clean.
+  - **experiment-loop** scored a perfect metric when the toolchain was deleted (`tsc … | grep error | wc -l`
+    returns 0 when `tsc` is absent) — now gated on the build actually succeeding.
+  - **multi-agent-orchestration**: the fork instruction was **inverted and silent**. Verified against the
+    shipped `sdk-tools.d.ts`: omitting `subagent_type` does not fork the coordinator — it starts a
+    general-purpose agent with a **fresh context**, losing the context sharing the section exists for, without
+    ever erroring. Corrected, with `SendMessage` named as the real context-preserving mechanism.
+  - **Two guards were reporting green on live defects.** The ci-cd guard anchored command detection at `^`, so
+    a `curl` **indented inside a `run: |` block** — the normal YAML shape — was invisible to it; widened to
+    `^\s*` and gap-tested. New guards now cover the browser-testing and ci-cd-templates repairs, which had none.
+  230 checks, 0 errors.
+
+### Fixed
+
 - **Round-3 P0: a git recipe that destroyed user work, three gates that passed on failure, and over-triggering
   fixed at the only layer that can fix it.** Each repair was proven by running the real tool against the doc's own
   text, with a negative control reproducing the original failure:
