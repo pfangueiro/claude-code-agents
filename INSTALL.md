@@ -32,7 +32,7 @@ Everything lands under `~/.claude/` and is loaded by Claude Code in every projec
 ~/.claude/
 ├── agents/                # 13 specialized agents
 ├── commands/              # 13 slash commands
-├── skills/                # 28 modular knowledge packages
+├── skills/                # 27 modular knowledge packages
 ├── rules/                 # 6 auto-enforced rule sets
 ├── lib/                   # Templates, patterns, coordination protocol
 ├── hooks/                 # 9 command hooks + 2 reference configs

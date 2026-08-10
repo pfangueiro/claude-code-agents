@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Claude Agents** — enterprise AI agent system with 13 specialized SDLC/SSDLC agents, 28 skills, and 13 slash commands that auto-activate based on natural language. Automatically selects optimal Claude model (Haiku/Sonnet/Opus) per task complexity.
+**Claude Agents** — enterprise AI agent system with 13 specialized SDLC/SSDLC agents, 27 skills, and 13 slash commands that auto-activate based on natural language. Automatically selects optimal Claude model (Haiku/Sonnet/Opus) per task complexity.
 
 ## Git & Commit Conventions
 
@@ -79,7 +79,6 @@ Skills provide modular knowledge packages that complement agents. See `.claude/s
 **Experimentation skills:** experiment-loop (autonomous optimization patterns)
 **Automation skills:** scheduled-tasks (CronCreate), worktree-workflow (EnterWorktree), remote-triggers (RemoteTrigger), multi-agent-orchestration (SendMessage/agent teams)
 **Testing skills:** browser-testing (Playwright MCP for E2E, visual regression), api-contract-testing (OpenAPI / JSON Schema / contract-first)
-**API skills:** api-guidelines (Next.js/TypeScript secure endpoint patterns)
 **UI skills:** ui-guidelines (React/Next.js + Ant Design + shadcn patterns, spacing / typography / color system)
 **Infra skills:** docker-deployment (multi-stage builds, prod configs), ci-cd-templates (GitHub Actions / GitLab CI)
 **Session skills:** handoff (HANDOFF.md creation for session continuity before /compact), context-escalation (explicit-level policy for context management: truncate → drop-redundant-reads → fork-subagent → /compact → handoff)

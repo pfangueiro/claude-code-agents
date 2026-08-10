@@ -4,7 +4,7 @@
 [![Version](https://img.shields.io/badge/version-3.1.1-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://code.claude.com/docs/en/overview)
 [![Agents](https://img.shields.io/badge/Agents-13-orange.svg)](#-available-agents)
-[![Skills](https://img.shields.io/badge/Skills-28-green.svg)](#-skills-system)
+[![Skills](https://img.shields.io/badge/Skills-27-green.svg)](#-skills-system)
 [![MCP](https://img.shields.io/badge/MCP-4%20Servers-brightgreen.svg)](#-mcp-integration)
 
 **13 auto-activating AI agents for every phase of software development.** Just describe what you want to build — the right specialists engage automatically.
@@ -41,7 +41,7 @@ Agents activate automatically based on your words.
 | Component | Count | What It Does |
 |-----------|-------|--------------|
 | **Agents** | 13 | Auto-activating SDLC specialists (planning through production) |
-| **Skills** | 28 | Modular knowledge packages (git, Docker, CI/CD, K8s, SRE, IaC, observability, experiment-loop, scheduled-tasks, worktree-workflow, remote-triggers, context-escalation, diverge, etc.) |
+| **Skills** | 27 | Modular knowledge packages (git, Docker, CI/CD, K8s, SRE, IaC, observability, experiment-loop, scheduled-tasks, worktree-workflow, remote-triggers, context-escalation, diverge, etc.) |
 | **Slash Commands** | 13 | `/commit-pr`, `/review-pr`, `/security-scan`, `/compact`, `/new-feature`, `/create-jira`, `/build-fix`, `/tdd`, `/quality-gate`, `/checkpoint`, `/save-session`, `/resume-session`, `/optimize` |
 | **MCP Servers** | 4 | context7, sequential-thinking, playwright, github |
 | **Rules** | 6 | Auto-enforced security, code quality, fix quality, verification, framework integrity, and anti-anchoring standards |
@@ -142,14 +142,13 @@ Installed components live under `~/.claude/` — verify with `ls ~/.claude/agent
 
 ## Skills System
 
-Skills provide domain knowledge that agents apply. 28 included:
+Skills provide domain knowledge that agents apply. 27 included:
 
 | Skill | What It Provides |
 |-------|-----------------|
 | **git-workflow** | Branching strategies, conventional commits, PR workflows |
 | **code-review-checklist** | 10-category review framework, security checklist |
 | **deployment-runbook** | Blue-green deployment, rollback procedures, health checks |
-| **api-guidelines** | REST/GraphQL patterns, input validation, error handling |
 | **api-contract-testing** | OpenAPI validation, PACT testing, mock servers |
 | **ui-guidelines** | React/Next.js patterns, Ant Design, responsive design |
 | **ci-cd-templates** | GitHub Actions, GitLab CI, deployment strategies |
@@ -248,7 +247,7 @@ Installed once, user-global under `~/.claude/` — Claude Code loads it in every
 ~/.claude/
 ├── agents/          # 13 auto-activating SDLC agents
 ├── commands/        # 13 slash commands
-├── skills/          # 28 modular knowledge packages
+├── skills/          # 27 modular knowledge packages
 ├── rules/           # 6 auto-enforced rule sets
 ├── lib/             # Templates, patterns, coordination protocol
 ├── hooks/           # 9 command hooks + 2 reference configs

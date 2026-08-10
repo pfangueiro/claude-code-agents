@@ -898,13 +898,12 @@ If you have existing documentation or workflows:
 ```
 claude-code-agents/
 ├── .claude/
-│   ├── skills/                    # Skills (Blue) — 28 total
+│   ├── skills/                    # Skills (Blue) — 27 total
 │   │   ├── skill-creator/
 │   │   ├── git-workflow/
 │   │   ├── code-review-checklist/
 │   │   ├── deployment-runbook/
 │   │   ├── security-scan/
-│   │   ├── api-guidelines/
 │   │   ├── api-contract-testing/
 │   │   ├── ui-guidelines/
 │   │   ├── ci-cd-templates/
@@ -988,12 +987,11 @@ claude-code-agents/
 - [Claude Code Documentation](https://docs.claude.com/claude-code)
 - [MCP Documentation](https://modelcontextprotocol.io)
 
-### Skills in This Project (28)
+### Skills in This Project (27)
 - `skill-creator`: Create new skills from templates
 - `git-workflow`: Git best practices and conventions
 - `code-review-checklist`: Systematic code review framework
 - `deployment-runbook`: Deployment strategies and automation
-- `api-guidelines`: REST/GraphQL patterns, input validation, error handling
 - `api-contract-testing`: OpenAPI validation, PACT testing, mock servers
 - `ui-guidelines`: React/Next.js patterns, Ant Design, responsive design
 - `ci-cd-templates`: GitHub Actions, GitLab CI, deployment strategies
