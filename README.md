@@ -1,7 +1,7 @@
 # Claude Agents - AI-Powered SDLC Agent System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-3.1.1-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
+[![Version](https://img.shields.io/badge/version-3.2.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://code.claude.com/docs/en/overview)
 [![Agents](https://img.shields.io/badge/Agents-13-orange.svg)](#-available-agents)
 [![Skills](https://img.shields.io/badge/Skills-27-green.svg)](#-skills-system)
@@ -33,6 +33,10 @@ Installs once, user-global to `~/.claude`. Now **every project on your machine h
 ```
 
 Agents activate automatically based on your words.
+
+> **Before you run it:** see [What the install does to your machine](#what-the-install-does-to-your-machine) for the exact
+> paths written, the background daemon, and how to reverse it. `./install.sh --dry-run` prints every
+> path it would touch without touching any of them.
 
 ---
 
@@ -97,9 +101,11 @@ One install, user-global. Claude Code natively loads `~/.claude/{agents,skills,c
 
 | Command | What It Does |
 |---------|-------------|
-| `./install.sh` | Install everything to `~/.claude`: agents, skills, commands, rules, hooks, MCP, global config |
+| `./install.sh` | Install everything to `~/.claude`: agents, skills, commands, rules, hooks, statusline, analytics, global config |
+| `./install.sh --dry-run` | Print every path the install would touch — changes nothing |
 | `./install.sh --update` | Reconcile an existing install to the latest version |
 | `./install.sh --upgrade` | Migrate from an old per-project install: reconcile, confirm + tear down old copies, then self-verify ([details](./INSTALL.md#upgrading-from-the-old-per-project-framework)) |
+| `./install.sh --uninstall` | Remove the framework from `~/.claude` — snapshots first, asks first ([details](./INSTALL.md#uninstallation)) |
 | `./install.sh --help` | Show all options |
 
 ### Verify Installation
@@ -110,6 +116,114 @@ One install, user-global. Claude Code natively loads `~/.claude/{agents,skills,c
 ```
 
 Installed components live under `~/.claude/` — verify with `ls ~/.claude/agents ~/.claude/skills ~/.claude/commands ~/.claude/rules`.
+
+---
+
+## What the install does to your machine
+
+`./install.sh` writes to your home directory and installs a background daemon. Here is all of it.
+Run `./install.sh --dry-run` first to see the same list resolved against your actual `$HOME`.
+
+### Paths written
+
+| Path | What lands there | On re-install |
+|---|---|---|
+| `~/.claude/agents/` | 13 agent `.md` files | Replaced (heals drift) |
+| `~/.claude/skills/` | 27 skill directories | Replaced per-skill (`rm -rf` then copy) |
+| `~/.claude/commands/` | 13 slash-command `.md` files | Replaced |
+| `~/.claude/rules/` | 6 rule `.md` files | Replaced |
+| `~/.claude/lib/` | 4 reference files (templates, patterns, coordination, MCP guide) | Replaced |
+| `~/.claude/hooks/` | 9 hook `.sh` scripts (+`chmod +x`) and 2 reference `.json` configs | Replaced; orphans pruned |
+| `~/.claude/output-styles/concise.md` | Code-first output style | Written on first install |
+| `~/.claude/statusline.sh` | Status bar script | Replaced only when it differs from source |
+| `~/.claude/analytics/` | `collector.py`, `server.py`, `dashboard.html`, `schema.sql` | Replaced |
+| `~/.claude/daemon/` | Watchdog script (**macOS only**) | Replaced |
+| `~/.claude/settings.json` | Seeded from template if absent; otherwise only framework-owned keys are reconciled — see below | Merged, never wholesale-replaced |
+| `~/.claude/CLAUDE.md` | Personal preferences, from template, with your name/email from `git config` | **Only if absent.** Never touched again, including by `--update` |
+| `~/.claude/.framework-path`<br>`~/.claude/.framework-version`<br>`~/.claude/.watchdog-plist.sha` | Markers the self-heal paths read | Rewritten |
+
+Written **outside** `~/.claude`:
+
+| Path | Why | Notes |
+|---|---|---|
+| `~/Library/LaunchAgents/com.claude-code-agents.framework-watchdog.plist` | The hourly self-heal daemon | **macOS only** |
+| `~/.zshrc` or `~/.bashrc` | Appends a `claude-obs` alias for the dashboard (3 lines) | Idempotent — guarded by a `grep`, added once |
+
+Created later at runtime, not by the installer: `~/.claude/analytics/*.jsonl` and `claude-obs.db`
+(hooks and the collector), `~/.claude/snapshots/` (the daemon), `~/.claude/sessions/`
+(pre-compact auto-snapshots, 10 kept per project).
+
+**In `settings.json`, only these keys are framework-owned:** `.hooks` (replaced per event on drift),
+`.permissions`, `.attribution`, and `.statusLine` (replaced on drift), plus `.env` (**add-only** —
+your values are never overwritten). Every other key you set is left alone. Want different
+permissions or attribution? Put them in `settings.local.json`, which takes precedence.
+
+### It is framework-scoped — your own content survives
+
+The install **never** deletes or overwrites a name the framework does not ship. Personal skills,
+agents, commands, and rules in `~/.claude` are preserved on every install and every `--update`; the
+orphan-prune is only ever *eligible* to remove names the framework itself ships or has explicitly
+retired, so a personal entry is not merely spared — it is never a candidate.
+
+Measured, not assumed: with a personal skill, agent, command and rule planted in a throwaway
+`HOME`, two consecutive `--update` runs left all four **byte-identical** and the skills directory at
+27 framework + 1 personal. A working machine here carries 14 personal skills alongside the
+framework's 27; all 41 are present.
+
+### The background daemon
+
+On **macOS**, the install registers an hourly `launchd` agent
+(`com.claude-code-agents.framework-watchdog`, `StartInterval 3600`). Each cycle it runs
+`validate.sh --quick`, forks `install.sh --update` if it finds drift, `git fsck`s the repo, and
+writes daily snapshots to `~/.claude/snapshots/` with 7-day retention. It makes **no network
+requests**.
+
+```bash
+launchctl list | grep claude-code-agents            # is it running?
+tail -f ~/.claude/analytics/watchdog.log            # what did it do?
+launchctl bootout gui/$(id -u)/com.claude-code-agents.framework-watchdog   # stop it
+```
+
+Full operational detail: **[SELF-HEALING.md](./SELF-HEALING.md)**.
+
+### Platform contract
+
+| | macOS | Linux / WSL |
+|---|---|---|
+| Agents, skills, commands, rules, lib | Yes | Yes |
+| Hooks, statusline, settings reconcile | Yes | Yes |
+| Observability dashboard | Yes | Yes |
+| SessionStart self-heal hook | Yes | Yes |
+| **Hourly watchdog daemon** | **Yes** | **No** — the daemon is Darwin-gated and silently skipped |
+| Daily snapshots + retention | Yes | **No** — produced by the watchdog |
+
+On Linux and WSL, drift is still detected and healed, but **only at session start**. There is no
+out-of-band recovery, so the one failure the watchdog exists to catch — an external wholesale
+rewrite of `~/.claude/settings.json` that drops the `.hooks` block, which disables the SessionStart
+hook itself — is not self-recoverable there. Run `./install.sh --update` by hand if the statusline
+or hooks disappear.
+
+### Reversing it
+
+```bash
+./install.sh --dry-run     # preview every path, change nothing
+./install.sh --uninstall   # remove the framework (asks first, snapshots first)
+```
+
+`--dry-run` and `--uninstall` read the **same source-derived enumeration** of framework-owned paths,
+so the preview cannot drift from the removal.
+
+`--uninstall` asks for confirmation at your terminal, writes a full `~/.claude` tarball to
+`~/.claude/snapshots/preuninstall-<UTC>.tgz` and **aborts if that snapshot fails**, unloads and
+removes the launchd plist, deletes the framework's own files, and surgically strips the framework's
+hook bindings and `statusLine` out of `settings.json` — leaving `settings.json.pre-uninstall.bak`
+beside it. It keeps your own skills, agents and commands, your `CLAUDE.md`, `projects/`, `todos/`,
+telemetry, and snapshots. It prints the restore command on the way out.
+
+Do **not** `rm -rf ~/.claude`: that directory also holds your own Claude Code data. Snapshot restore
+commands: [SELF-HEALING.md](./SELF-HEALING.md#snapshot-restore-claudesnapshots).
+
+Threat model, reporting, and the repo's security posture: **[SECURITY.md](./SECURITY.md)**.
 
 ---
 
@@ -251,11 +365,17 @@ Installed once, user-global under `~/.claude/` — Claude Code loads it in every
 ├── rules/           # 6 auto-enforced rule sets
 ├── lib/             # Templates, patterns, coordination protocol
 ├── hooks/           # 9 command hooks + 2 reference configs
-├── daemon/          # launchd watchdog (hourly validate + snapshots)
+├── daemon/          # launchd watchdog (hourly validate + snapshots) — macOS only
 ├── analytics/       # Observability dashboard + ingested session logs
+├── snapshots/       # Daily repo/config/memory snapshots (written by the daemon)
+├── sessions/        # Pre-compact auto-snapshots (written by the PreCompact hook)
 ├── statusline.sh    # Rich status bar — ends line 1 with a framework-status glyph (✓ healthy / ⟳ self-healing / ⚠ stalled-or-degraded)
 └── settings.json    # 10 hook events, permissions, model config
 ```
+
+Plus one file outside `~/.claude` on macOS —
+`~/Library/LaunchAgents/com.claude-code-agents.framework-watchdog.plist` — and a `claude-obs` alias
+appended once to your shell rc. See [What the install does to your machine](#what-the-install-does-to-your-machine).
 
 See [EXTENSIBILITY.md](./EXTENSIBILITY.md) for the complete guide on Skills, MCP, Slash Commands, and Subagents.
 
@@ -321,6 +441,17 @@ python3 ~/.claude/analytics/server.py --open # Serve dashboard at localhost:3141
 - **Server** (`server.py`): 6 JSON API endpoints + static file server on `localhost:3141`
 - **Dashboard** (`dashboard.html`): single-file dark-themed UI with Chart.js
 
+**What it reads, and where the data goes.** The collector reads Claude Code's own session
+transcripts — `~/.claude/projects/**/*.jsonl`, **across every project on the machine**, not just this
+one — plus the three JSONL streams the framework's hooks write (`agent-events.jsonl`,
+`session-summaries.jsonl`, `permission-audit.jsonl`). Those transcripts contain your prompts and
+Claude's responses, so the SQLite database derived from them is as sensitive as your session history.
+
+It **stays local**. `collector.py` makes no network calls of any kind; `server.py` binds
+`127.0.0.1:3141` — loopback only, not reachable from your network — and nothing is uploaded,
+phoned home, or shared. Both are Python stdlib only, with no third-party dependencies. Delete
+`~/.claude/analytics/claude-obs.db` at any time; the next `claude-obs` run rebuilds it.
+
 **CLI options:**
 ```bash
 python3 collector.py --full          # Re-ingest everything (ignore watermarks)
@@ -340,6 +471,10 @@ Installed automatically by `./install.sh`. Data stays entirely local.
 3. Run `./validate.sh` to verify everything passes
 4. Commit your changes (`git commit -m 'feat: add my feature'`)
 5. Push and open a Pull Request
+
+Read **[docs/FAILURE-MODES.md](./docs/FAILURE-MODES.md)** before adding any check, guard, or fix —
+it is the taxonomy of the nine defect classes that actually shipped here, with the real examples.
+Full flow and the two hard rules: **[CONTRIBUTING.md](./CONTRIBUTING.md)**.
 
 ---
 

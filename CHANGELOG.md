@@ -7,6 +7,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`--dry-run` and `--uninstall` — the two flags that make this installable on someone else's
+  machine.** A teammate will not run an installer that writes into their `~/.claude` and loads an
+  hourly background daemon unless they can see what it will do and undo it afterwards.
+  - `--dry-run` prints every path that would be written (create vs overwrite), what is *merged*
+    rather than replaced (`settings.json`), whether the launchd daemon applies on this platform, and
+    an explicit list of what is never touched. It writes nothing.
+  - `--uninstall` snapshots `~/.claude` first and aborts if the snapshot fails, unloads and removes
+    the launchd agent *before* deleting what it heals, removes the framework's paths, then strips the
+    framework's hook and `statusLine` bindings out of `settings.json` rather than deleting the file —
+    leaving them would point every hook at a script that no longer exists. It prints the one-line
+    restore command.
+  - Both read ONE source-derived enumeration (`_framework_owned_paths`), so the preview and the
+    removal cannot drift apart, and a name the source does not ship can never be selected. Verified
+    against a full copy of a real install: 83 framework paths removed, **all 14 personal skills
+    survived**, along with `CLAUDE.md`, `projects/`, `todos/` and 39 telemetry files. Restore from the
+    snapshot brought back all 27 framework skills and all 10 hook bindings.
+  - Consent is fail-closed, reusing the `--upgrade` pattern: an explicit `--yes`, or a typed `y` read
+    from a dedicated fd bound to the controlling terminal. Verified that `echo y |` does **not** count
+    as consent — it aborts with nothing removed — so `curl … | bash` can never uninstall anything.
+  - Guarded: `validate.sh` now EXECUTES `--dry-run` against a throwaway `HOME` and asserts it writes
+    nothing and that the owned-path set never names user data (a stray entry there is a command that
+    deletes someone's session history). Gap-tested three ways: emit `settings.json` from the owned set
+    → FAIL; make `--dry-run` touch a file → FAIL; remove the `--uninstall` arm → FAIL.
+
+### Fixed
+
+- **A live heal-loop: an invalid `CLAUDE_CODE_EFFORT_LEVEL` was convicted hourly and never healed.**
+  `validate.sh --quick` FAILS on a value outside `low|medium|high|xhigh`, and that failure is exactly
+  what the watchdog reacts to by running `install.sh --update` — whose `.env` merge was add-only, so
+  the value was never corrected and the next check failed identically. Forever, every hour.
+  Reproduced with `max`, a documented session-only tier a user would plausibly try to persist.
+  The merge now heals a value outside the known-valid set while still preserving a deliberate user
+  choice: verified `max`/`ultracode`/`bogus` → `xhigh` with errors dropping to 0, and
+  `high`/`medium`/`low` left untouched. This is the repo's own rule from `docs/FAILURE-MODES.md` — a
+  check that convicts must be paired with a heal that can actually fix it.
+
+- **`install.sh` could hijack the real launchd watchdog when run against a sandboxed `HOME`.**
+  A launchd label is machine-global, not per-`HOME`, so loading the plist from a temporary `HOME`
+  silently REPLACES the live registration — and when that temp directory is removed, the job points
+  at a plist that no longer exists and the watchdog stops healing with nothing to announce it. This
+  is not hypothetical: it happened on the maintainer's machine during sandbox testing of `--update`
+  and had to be repaired by hand. `install_watchdog` now refuses to touch launchd when `HOME` is not
+  the invoking user's real home. Verified both ways: a sandbox install leaves the real registration
+  byte-identical and creates no plist, while the normal path still installs it.
+
+- **`--dry-run` under-reported three real writes**, which undercut the whole point of a preview.
+  `~/.claude/output-styles/concise.md` was missing from the owned set (so `--uninstall` also left it
+  behind), and `~/.claude/CLAUDE.md` plus the `claude-obs` alias appended to `~/.zshrc`/`~/.bashrc`
+  were not mentioned at all. All three are now disclosed, with the two that are *written but never
+  removed* listed separately — a preview that hides a write is not a preview.
+
+- **`output-styles/` had no reconciliation path.** It was copied only by `install_global_config`,
+  which runs on the bare-install path, so a changed output style never reached an existing install.
+  Extracted `sync_output_styles` (replace-on-drift, idempotent) and wired it into `--update` and
+  `--upgrade`. Gap-tested: drifted file → restored; second run → no-op.
+
+- **SECURITY.md asserted a safety net that did not exist.** It claimed "pre-install backups are
+  written per-project before any `--update` (kept 3 deep, rotated automatically)". There was no
+  backup code in `install.sh` at all, and "per-project" predated the user-global model. Replaced with
+  the snapshots that genuinely exist, and the correction is recorded inline. Supported-versions table
+  updated from `2.9.x` to the shipping line.
+
+### Changed
+
+- **Stray `v5.0` tag archived as `archive/v5.0-ultraminimal-2025-09`.** It pointed at an abandoned
+  September 2025 direction 189 commits off `main`, and its version number sorted *above* the real
+  latest release, so it read as newest to anyone browsing. Renamed rather than deleted: the commit was
+  reachable from zero branches, so removing the tag alone would have orphaned it.
+
 ### Fixed
 
 - **CI had never passed. 20 of 20 runs red, no green run since 2026-07-08 — over a month.** Every

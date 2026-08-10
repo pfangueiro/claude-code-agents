@@ -202,6 +202,14 @@ _fw_cache_stale() {
 _iso_epoch() { date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s 2>/dev/null || date -u -d "$1" +%s 2>/dev/null || echo 0; }
 if _fw_cache_stale; then
     _v=$(grep -m1 '^version=' "$HOME/.claude/.framework-version" 2>/dev/null | cut -d= -f2)
+    # Distinguish "on the release" from "N commits past it". Without this, everyone on a team
+    # sees the same ⚙<version> no matter which commit they actually run — two people could be
+    # 18 commits apart and compare glyphs that agree. `ahead` is computed by install.sh at
+    # install time and read from the marker, so this stays out of the hot path (no git call).
+    _ahead=$(grep -m1 '^ahead=' "$HOME/.claude/.framework-version" 2>/dev/null | cut -d= -f2)
+    if [[ -n "$_v" && "${_ahead:-0}" =~ ^[0-9]+$ && "${_ahead:-0}" -gt 0 ]]; then
+        _v="${_v}+${_ahead}"
+    fi
     if [[ -n "$_v" ]]; then
         _g="✓"; _c="$C_GREEN"; _now=$(date +%s)
         _H="$HOME/.claude/analytics/framework-health.jsonl"

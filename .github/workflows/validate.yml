@@ -33,6 +33,25 @@ jobs:
       - name: run validate.sh
         run: ./validate.sh
 
+  gap-tests:
+    # Mutation tests: prove validate.sh's guards actually detect the defects
+    # their prose comments claim they detect. Runs AFTER validate, because a
+    # tree that already fails validate.sh makes every mutation verdict
+    # meaningless (run.sh aborts on a red baseline for the same reason).
+    name: tests/gap (mutation tests for validate.sh guards)
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v5
+      - name: install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: run mutation suite
+        # --prove re-runs every mutation with the defect removed and requires the
+        # assertion to fall silent. Without it a mutation whose assertion fires
+        # either way would report green forever — the defect this suite exists
+        # to stop, reproduced inside the suite.
+        run: bash tests/gap/run.sh --prove --jobs 4
+
   yaml-lint:
     name: yaml syntax
     runs-on: ubuntu-latest

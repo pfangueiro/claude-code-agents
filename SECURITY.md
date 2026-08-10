@@ -7,8 +7,9 @@ not receive backports.
 
 | Version | Supported |
 |---------|-----------|
-| 2.9.x   | Yes |
-| < 2.9   | No |
+| 3.2.x   | Yes |
+| 3.1.x   | Security fixes only |
+| < 3.1   | No |
 
 ## Reporting a Vulnerability
 
@@ -56,8 +57,19 @@ This framework intentionally enables several safety features by default:
   the audit history.)
 - **Hooks log to JSONL audit streams** under `~/.claude/analytics/` for
   postmortem analysis.
-- **Pre-install backups** are written per-project before any `--update` (kept
-  3 deep, rotated automatically).
+- **Snapshots before destructive operations.** `install.sh --uninstall` tars
+  `~/.claude` to `~/.claude/snapshots/preuninstall-<timestamp>.tgz` and aborts
+  if that snapshot cannot be written, and it backs `settings.json` up to
+  `settings.json.pre-uninstall.bak` before editing it. The legacy-teardown path
+  snapshots to `snapshots/preteardown-auto-*` before removing anything. The
+  hourly watchdog maintains repo bundles and config/memory snapshots there too.
+  `install.sh --dry-run` prints every path a run would touch, and writes nothing.
+
+  *Corrected 2026-08-10:* this section previously claimed "pre-install backups are
+  written per-project before any `--update` (kept 3 deep, rotated automatically)".
+  No such code existed — `install.sh` contained no backup logic at all, and
+  "per-project" predated the user-global model. A security policy asserting a
+  safety net that does not exist is worse than one that admits the gap.
 - **Snapshot restore paths** for `.git`, `~/.claude/hooks/`, and
   `~/.claude/settings.json` documented in [SELF-HEALING.md](./SELF-HEALING.md).
 

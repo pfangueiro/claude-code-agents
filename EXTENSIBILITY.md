@@ -2,7 +2,7 @@
 
 **The Complete Guide to Extending Claude Code with Skills, MCP, Slash Commands, and Subagents**
 
-Version: 3.1.1
+Version: 3.2.0
 Last Updated: 2026-08-02
 
 ---
@@ -1052,6 +1052,6 @@ By understanding when and how to use each mechanism, you can create powerful, ma
 
 ---
 
-**Version**: 3.1.1 - User-Global Install + opt-in autonomous cross-system migration; Self-Healing runbook split to SELF-HEALING.md; validate doc-accuracy check (the framework installs once into ~/.claude and applies to every project automatically; per-project fan-out retired; public repositioning + personal-leak scrub)
+**Version**: 3.2.0 - Team-ready: --dry-run/--uninstall, executable gap tests, CI green after 20 red runs, failure-mode docs; User-Global Install + opt-in autonomous cross-system migration; Self-Healing runbook split to SELF-HEALING.md; validate doc-accuracy check (the framework installs once into ~/.claude and applies to every project automatically; per-project fan-out retired; public repositioning + personal-leak scrub)
 **License**: MIT
 **Maintainer**: Claude Agents Project

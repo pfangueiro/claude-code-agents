@@ -18,7 +18,7 @@
 set -e
 
 # Configuration
-SCRIPT_VERSION="3.1.1"
+SCRIPT_VERSION="3.2.0"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEBUG="${DEBUG:-false}"
 
@@ -757,14 +757,7 @@ install_global_config() {
         print_success "Installed hook config $name"
     done
 
-    # Copy output styles
-    for style in "$src_dir"/output-styles/*; do
-        [ -f "$style" ] || continue
-        local name
-        name=$(basename "$style")
-        cp "$style" ~/.claude/output-styles/"$name"
-        print_success "Installed output style $name"
-    done
+    sync_output_styles
 
     # Copy statusline
     if [ -f "$src_dir/statusline.sh" ]; then
@@ -929,7 +922,19 @@ sync_hooks() {
                 fi
             done
 
-            # Merge new env vars into existing settings.json (add-only: user values preserved)
+            # Merge new env vars into existing settings.json. Add-only, so a deliberate user
+            # value is preserved — EXCEPT for a key whose valid set the framework knows and
+            # whose current value is outside it.
+            #
+            # Why the exception exists: validate.sh --quick FAILS on an invalid
+            # CLAUDE_CODE_EFFORT_LEVEL, and that failure is what the watchdog reacts to by
+            # running `install.sh --update`. With a purely add-only merge the value was never
+            # corrected, so the very next check failed identically — an hourly heal that heals
+            # nothing, forever. Reproduced with `max` (a real, documented session-only tier a
+            # user would plausibly try to persist): errors before heal, same error after.
+            # This is the repo's own rule from docs/FAILURE-MODES.md — a check that convicts
+            # must be paired with a heal that can actually fix it, or it must not run in the
+            # automated path at all.
             local new_env_keys
             new_env_keys=$(jq -r '.env | keys[]' "$template" 2>/dev/null)
             for key in $new_env_keys; do
@@ -938,6 +943,18 @@ sync_hooks() {
                     val=$(jq ".env[\"$key\"]" "$template")
                     _atomic_settings_jq ".env[\"$key\"] = $val" || true
                     print_success "Added env var $key to settings.json"
+                elif [ "$key" = "CLAUDE_CODE_EFFORT_LEVEL" ]; then
+                    local cur_eff
+                    cur_eff=$(jq -r '.env["CLAUDE_CODE_EFFORT_LEVEL"] // ""' ~/.claude/settings.json 2>/dev/null)
+                    case "$cur_eff" in
+                        low|medium|high|xhigh) : ;;   # a valid choice — never overwrite it
+                        *)
+                            local eff_val
+                            eff_val=$(jq '.env["CLAUDE_CODE_EFFORT_LEVEL"]' "$template")
+                            _atomic_settings_jq ".env[\"CLAUDE_CODE_EFFORT_LEVEL\"] = $eff_val" || true
+                            print_success "Healed invalid CLAUDE_CODE_EFFORT_LEVEL ('$cur_eff' → $eff_val); persistent tiers are low|medium|high|xhigh"
+                            ;;
+                    esac
                 fi
             done
 
@@ -1066,15 +1083,23 @@ write_framework_version_marker() {
     # Records the installed framework version and source SHA under ~/.claude so
     # downstream tooling can tell what's deployed.
     mkdir -p "$HOME/.claude"
-    local sha="unknown"
+    local sha="unknown" ahead=0
     if command -v git >/dev/null 2>&1; then
         sha=$(git -C "$SCRIPT_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+        # Commits between the newest reachable tag and HEAD. Recorded HERE, at install time,
+        # so the statusline never has to shell out to git in its hot path.
+        local _tag
+        _tag=$(git -C "$SCRIPT_DIR" describe --tags --abbrev=0 2>/dev/null || echo "")
+        if [ -n "$_tag" ]; then
+            ahead=$(git -C "$SCRIPT_DIR" rev-list "${_tag}..HEAD" --count 2>/dev/null || echo 0)
+        fi
     fi
     local ts
     ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     {
         echo "version=${SCRIPT_VERSION}"
         echo "sha=${sha}"
+        echo "ahead=${ahead}"
         echo "installed_at=${ts}"
     } > "$HOME/.claude/.framework-version"
     print_success "Wrote framework version marker (v${SCRIPT_VERSION} @ ${sha})"
@@ -1084,6 +1109,28 @@ install_watchdog() {
     # macOS-only launchd watchdog
     if [[ "$(uname -s)" != "Darwin" ]]; then
         print_info "Not macOS — skipping watchdog daemon"
+        return 0
+    fi
+
+    # REFUSE to touch launchd when running against a HOME that is not this user's real home
+    # (a sandbox, a test fixture, a CI runner with HOME overridden).
+    #
+    # A launchd label is MACHINE-GLOBAL, not per-HOME. Loading a plist from a temporary HOME
+    # under the same label silently REPLACES the user's live registration, and when that temp
+    # directory is deleted the job points at a plist that no longer exists — the watchdog stops
+    # healing and nothing announces it. This was not theoretical: it happened on this machine
+    # while sandbox-testing `--update`, and the registration had to be repaired by hand.
+    local _rh _u
+    _u=$(id -un 2>/dev/null || echo "")
+    if [ -n "$_u" ]; then
+        if command -v dscl >/dev/null 2>&1; then
+            _rh=$(dscl . -read "/Users/$_u" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
+        elif command -v getent >/dev/null 2>&1; then
+            _rh=$(getent passwd "$_u" 2>/dev/null | cut -d: -f6)
+        fi
+    fi
+    if [ -n "${_rh:-}" ] && [ "$HOME" != "$_rh" ]; then
+        print_skip "Watchdog skipped — HOME ($HOME) is not $_u's home ($_rh); a launchd label is machine-global, so loading from a sandbox would hijack the real registration"
         return 0
     fi
 
@@ -1293,6 +1340,7 @@ update_installation() {
     sync_hooks
     install_analytics || print_error "Analytics installation failed"
     ensure_statusline
+    sync_output_styles
     write_framework_path_marker
     write_framework_version_marker
     install_watchdog || true
@@ -1362,6 +1410,259 @@ print_summary() {
 # Main
 # ============================================================================
 
+# Copy framework output styles, replacing on drift. Extracted from install_global_config so the
+# RECONCILE paths can call it too: install_global_config runs only on a bare install (--update
+# deliberately skips it, because it also rewrites settings.json), which meant a changed
+# output-style never reached an existing install — deployed content with no reconciliation path.
+sync_output_styles() {
+    local src_dir="${SCRIPT_DIR}/global-config" style name
+    [ -d "$src_dir/output-styles" ] || return 0
+    mkdir -p ~/.claude/output-styles 2>/dev/null || true
+    for style in "$src_dir"/output-styles/*; do
+        [ -f "$style" ] || continue
+        name=$(basename "$style")
+        case "$name" in ._*) continue ;; esac
+        if [ -f ~/.claude/output-styles/"$name" ] && diff -q "$style" ~/.claude/output-styles/"$name" >/dev/null 2>&1; then
+            continue
+        fi
+        cp "$style" ~/.claude/output-styles/"$name"
+        print_success "Installed output style $name"
+    done
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# --dry-run / --uninstall  (added for team distribution)
+#
+# A teammate will not run an installer that writes into their ~/.claude and
+# installs a background daemon unless they can (a) see exactly what it will do
+# and (b) undo it. Both commands below read from ONE source-derived enumeration,
+# so "what the framework owns" can never drift between the preview and the removal.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Emit, one path per line, every ~/.claude path this framework OWNS.
+# DERIVED FROM SOURCE, never a hardcoded list — the same fail-closed property that
+# _prune_framework_orphan_* relies on: a name the source does not ship is not
+# emitted, therefore a personal skill/agent/command can never be selected for
+# removal. Directories are emitted with a trailing slash.
+# Deliberately NOT emitted (user data, never framework-owned):
+#   settings.json (merged in place — see _uninstall_clean_settings), CLAUDE.md,
+#   analytics/*.jsonl telemetry, snapshots/, projects/, todos/.
+_framework_owned_paths() {
+    local d f base
+    for d in agents rules commands; do
+        [ -d "$SCRIPT_DIR/.claude/$d" ] || continue
+        for f in "$SCRIPT_DIR/.claude/$d"/*.md; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f"); case "$base" in ._*) continue ;; esac
+            echo "$HOME/.claude/$d/$base"
+        done
+    done
+    if [ -d "$SCRIPT_DIR/.claude/lib" ]; then
+        for f in "$SCRIPT_DIR/.claude/lib"/*; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f"); case "$base" in ._*) continue ;; esac
+            echo "$HOME/.claude/lib/$base"
+        done
+    fi
+    if [ -d "$SCRIPT_DIR/.claude/skills" ]; then
+        for f in "$SCRIPT_DIR/.claude/skills"/*/; do
+            [ -d "$f" ] || continue
+            base=$(basename "$f"); case "$base" in ._*) continue ;; esac
+            echo "$HOME/.claude/skills/$base/"
+        done
+    fi
+    if [ -d "$SCRIPT_DIR/global-config/hooks" ]; then
+        for f in "$SCRIPT_DIR/global-config/hooks"/*; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f"); case "$base" in ._*) continue ;; esac
+            echo "$HOME/.claude/hooks/$base"
+        done
+    fi
+    if [ -d "$SCRIPT_DIR/global-config/output-styles" ]; then
+        for f in "$SCRIPT_DIR/global-config/output-styles"/*; do
+            [ -f "$f" ] || continue
+            base=$(basename "$f"); case "$base" in ._*) continue ;; esac
+            echo "$HOME/.claude/output-styles/$base"
+        done
+    fi
+    for base in collector.py server.py dashboard.html schema.sql; do
+        [ -f "$SCRIPT_DIR/observability/$base" ] && echo "$HOME/.claude/analytics/$base"
+    done
+    echo "$HOME/.claude/statusline.sh"
+    echo "$HOME/.claude/daemon/claude-framework-watchdog.sh"
+    echo "$HOME/.claude/.framework-path"
+    echo "$HOME/.claude/.framework-version"
+    echo "$HOME/.claude/.watchdog-plist.sha"
+}
+
+_WATCHDOG_PLIST="$HOME/Library/LaunchAgents/com.claude-code-agents.framework-watchdog.plist"
+
+cmd_dry_run() {
+    local p target n_create=0 n_over=0
+    echo -e "${BOLD}DRY RUN — nothing is written.${NC}"
+    echo "Source: $SCRIPT_DIR"
+    echo "Target: $HOME/.claude"
+    echo ""
+    while IFS= read -r p; do
+        target="${p%/}"
+        if [ -e "$target" ]; then
+            printf '  %boverwrite%b  %s\n' "$YELLOW" "$NC" "$p"; n_over=$((n_over + 1))
+        else
+            printf '  %bcreate%b     %s\n' "$GREEN" "$NC" "$p"; n_create=$((n_create + 1))
+        fi
+    done < <(_framework_owned_paths)
+    echo ""
+    echo -e "${BOLD}Merged in place (never replaced wholesale):${NC}"
+    echo "  $HOME/.claude/settings.json   — hook bindings, statusLine, env"
+    echo ""
+    # Written by a BARE install but deliberately NOT in the owned set above, because --uninstall
+    # must not delete them: CLAUDE.md becomes the user's own file the moment it exists, and a
+    # shell rc belongs to the user entirely. Listing them anyway — a preview that hides a write
+    # is not a preview, and both of these were missing until a review caught them.
+    echo -e "${BOLD}Also written by a bare install (NOT removed by --uninstall):${NC}"
+    if [ -f "$HOME/.claude/CLAUDE.md" ]; then
+        echo "  $HOME/.claude/CLAUDE.md   — already exists, left untouched"
+    else
+        echo "  $HOME/.claude/CLAUDE.md   — created from template (prompts for name/email); never overwritten once it exists"
+    fi
+    local _rc="(none found)"
+    [ -f "$HOME/.zshrc" ] && _rc="$HOME/.zshrc" || { [ -f "$HOME/.bashrc" ] && _rc="$HOME/.bashrc"; }
+    echo "  $_rc   — one 'claude-obs' alias line appended (idempotent)"
+    if [ "$(uname -s)" = "Darwin" ]; then
+        echo -e "${BOLD}Background daemon (macOS):${NC}"
+        echo "  $_WATCHDOG_PLIST"
+        echo "  loaded via launchctl; runs hourly to self-heal drift under ~/.claude"
+    else
+        echo -e "${BOLD}Background daemon:${NC} skipped — not macOS (no launchd; SessionStart hook only)"
+    fi
+    echo ""
+    echo -e "${BOLD}NOT touched:${NC}"
+    echo "  your own skills/agents/commands in ~/.claude (anything this framework does not ship)"
+    echo "  ~/.claude/CLAUDE.md · projects/ · todos/ · snapshots/ · analytics/*.jsonl telemetry"
+    echo ""
+    printf '%s path(s): %s new, %s overwritten.\n' "$((n_create + n_over))" "$n_create" "$n_over"
+    echo "Run without --dry-run to apply, or ./install.sh --uninstall to remove."
+}
+
+# Fail-closed consent, mirroring _upgrade_confirm_teardown: an explicit --yes, or a
+# typed y/yes read from a dedicated fd bound to the CONTROLLING TERMINAL. Never stdin,
+# so `curl … | bash` can never have its piped stdin misread as consent. No tty → abort.
+_uninstall_confirm() {
+    local _count="$1" reply
+    if [ "${CLAUDE_UNINSTALL_ASSUME_YES:-0}" = "1" ] || [ "${UNINSTALL_ASSUME_YES:-0}" = "1" ]; then
+        _health_log "\"event\":\"uninstall_consent\",\"mode\":\"explicit_yes\",\"count\":$_count"
+        return 0
+    fi
+    if exec 9</dev/tty 2>/dev/null; then
+        {
+            printf '\nRemove %s framework path(s) from %s/.claude?\n' "$_count" "$HOME"
+            printf 'A snapshot is written first. Your own skills, CLAUDE.md, session data and\n'
+            printf 'telemetry are NOT removed. [y/N] '
+        } >/dev/tty 2>/dev/null
+        IFS= read -r -t 30 reply <&9 || reply=""
+        exec 9<&-
+        case "$reply" in
+            y|Y|yes|YES) _health_log "\"event\":\"uninstall_consent\",\"mode\":\"tty_yes\",\"count\":$_count"; return 0 ;;
+            *) _health_log "\"event\":\"uninstall_consent\",\"mode\":\"tty_no\",\"count\":$_count"
+               echo "Declined — nothing removed."; return 1 ;;
+        esac
+    fi
+    _health_log "\"event\":\"uninstall_consent\",\"mode\":\"noninteractive_abort\",\"count\":$_count"
+    echo "No terminal for confirmation — uninstall aborted (nothing removed)."
+    echo "  To proceed non-interactively: CLAUDE_UNINSTALL_ASSUME_YES=1 $SCRIPT_DIR/install.sh --uninstall"
+    return 1
+}
+
+# Strip the framework's own bindings out of settings.json rather than deleting the
+# file — it is the user's. Leaving them behind would be worse than doing nothing:
+# every hook would point at a script we just removed, and Claude Code would try to
+# execute a missing file on every matching event.
+_uninstall_clean_settings() {
+    local s="$HOME/.claude/settings.json" tmp
+    [ -f "$s" ] || return 0
+    if ! command -v jq >/dev/null 2>&1; then
+        print_error "jq not found — settings.json left as-is; remove ~/.claude/hooks bindings by hand"
+        return 0
+    fi
+    cp "$s" "$s.pre-uninstall.bak" 2>/dev/null || true
+    tmp=$(mktemp) || return 0
+    if jq '
+        (if (.hooks | type) == "object" then
+            .hooks |= ( with_entries(
+                .value |= ( map( .hooks = ((.hooks // []) | map(select(((.command // "") | tostring) | test("\\.claude/hooks/") | not))) )
+                          | map(select(((.hooks // []) | length) > 0)) )
+            ) | with_entries(select((.value | length) > 0)) )
+         else . end)
+        | (if ((.statusLine.command // "") | tostring | test("\\.claude/statusline\\.sh")) then del(.statusLine) else . end)
+    ' "$s" > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+        mv "$tmp" "$s"
+        print_success "Removed framework hook/statusLine bindings from settings.json (backup: settings.json.pre-uninstall.bak)"
+    else
+        rm -f "$tmp"
+        print_error "Could not rewrite settings.json — left untouched (backup written)"
+    fi
+}
+
+cmd_uninstall() {
+    local p target n=0 removed=0 snap
+    echo -e "${BOLD}Uninstall — removing the framework from ~/.claude${NC}"
+
+    if [ ! -d "$HOME/.claude" ]; then
+        print_info "No ~/.claude directory — nothing to uninstall."
+        return 0
+    fi
+
+    while IFS= read -r p; do
+        [ -e "${p%/}" ] && n=$((n + 1))
+    done < <(_framework_owned_paths)
+
+    if [ "$n" -eq 0 ]; then
+        print_info "No framework files found under ~/.claude — nothing to remove."
+        return 0
+    fi
+
+    _uninstall_confirm "$n" || return 0
+
+    # Snapshot BEFORE any removal, same convention as the teardown path.
+    mkdir -p "$HOME/.claude/snapshots" 2>/dev/null || true
+    snap="$HOME/.claude/snapshots/preuninstall-$(date -u +%Y%m%dT%H%M%SZ).tgz"
+    if tar -czf "$snap" -C "$HOME" .claude 2>/dev/null; then
+        print_success "Snapshot: $snap"
+    else
+        print_error "Snapshot FAILED — aborting so nothing is removed without a backup"
+        return 1
+    fi
+
+    # Daemon first: stop it before deleting what it heals, or it may reinstall mid-uninstall.
+    if [ -f "$_WATCHDOG_PLIST" ]; then
+        launchctl unload "$_WATCHDOG_PLIST" 2>/dev/null || true
+        rm -f "$_WATCHDOG_PLIST"
+        print_success "Unloaded and removed the launchd watchdog"
+    fi
+
+    while IFS= read -r p; do
+        target="${p%/}"
+        [ -e "$target" ] || continue
+        if [ -d "$target" ]; then rm -rf "$target"; else rm -f "$target"; fi
+        removed=$((removed + 1))
+    done < <(_framework_owned_paths)
+
+    _uninstall_clean_settings
+
+    # Remove now-empty framework dirs, but never a dir that still holds user content.
+    for p in agents rules commands lib skills hooks daemon analytics; do
+        [ -d "$HOME/.claude/$p" ] || continue
+        rmdir "$HOME/.claude/$p" 2>/dev/null && print_skip "Removed empty $HOME/.claude/$p"
+    done
+
+    _health_log "\"event\":\"uninstall\",\"removed\":$removed"
+    echo ""
+    print_success "Removed $removed framework path(s)."
+    echo "  Kept: your own skills/agents/commands, CLAUDE.md, projects/, todos/, telemetry, snapshots/"
+    echo "  Restore everything:  tar -xzf $snap -C \"\$HOME\""
+    echo "  Reinstall:           $SCRIPT_DIR/install.sh"
+}
+
 main() {
     print_header
 
@@ -1403,6 +1704,7 @@ main() {
             sync_hooks
             install_analytics || print_error "Analytics installation failed"
             ensure_statusline
+            sync_output_styles
             write_framework_path_marker
             write_framework_version_marker
             install_watchdog || true
@@ -1422,6 +1724,14 @@ main() {
             # marker triggers the teardown within the hour — independent of shared-set drift.
             reconcile_legacy_projects
             ;;
+        --dry-run|-n)
+            cmd_dry_run
+            exit 0
+            ;;
+        --uninstall)
+            cmd_uninstall
+            exit $?
+            ;;
         --help|-h)
             echo "Usage: ./install.sh [OPTION]"
             echo ""
@@ -1430,6 +1740,8 @@ main() {
             echo ""
             echo "Options:"
             echo "  (no option)    Install / re-install into ~/.claude (canonical)"
+            echo "  --dry-run      Print every path that would be written; changes nothing"
+            echo "  --uninstall    Remove the framework from ~/.claude (snapshot first, asks first)"
             echo "  --update       Non-interactive reconcile of ~/.claude (self-heal path)"
             echo "  --upgrade [--yes]  Migrate from old per-project copies: reconcile, confirm + teardown, self-verify"
             echo "  --migrate-legacy  Opt-in teardown of old per-project copies (needs ~/.claude/.framework-autonomy)"

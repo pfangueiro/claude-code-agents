@@ -143,6 +143,81 @@ run_structural_checks() {
         fi
     fi
 
+    # Version consistency: install.sh's SCRIPT_VERSION is the single source of truth, and it is
+    # what lands in ~/.claude/.framework-version and therefore in the statusline glyph. A doc
+    # claiming a different number is how a teammate ends up certain they are on a release they are
+    # not on. Caught in practice: the framework ran a whole remediation effort at "3.1.1" while
+    # 18 commits past that tag, with the README badge, EXTENSIBILITY.md and the marker all agreeing
+    # on a number none of them had verified.
+    # Gap-tested by mutation: bump SCRIPT_VERSION alone -> FAIL naming each stale doc; align -> PASS.
+    if [ -f "install.sh" ]; then
+        _sv=$(grep -m1 '^SCRIPT_VERSION=' install.sh | cut -d'"' -f2)
+        if [ -z "$_sv" ]; then
+            fail "Version: could not read SCRIPT_VERSION from install.sh"
+        else
+            _ver_stale=""
+            if [ -f README.md ] && ! grep -q "badge/version-${_sv}-" README.md; then
+                _ver_stale="$_ver_stale README.md"
+            fi
+            if [ -f EXTENSIBILITY.md ] && ! grep -q "^Version: ${_sv}$" EXTENSIBILITY.md; then
+                _ver_stale="$_ver_stale EXTENSIBILITY.md"
+            fi
+            if [ -n "$_ver_stale" ]; then
+                fail "Version: install.sh says $_sv but these disagree:$_ver_stale"
+            else
+                pass "Version: $_sv consistent across install.sh, README badge, EXTENSIBILITY.md"
+            fi
+        fi
+    fi
+
+    # The two reversibility flags a teammate needs before running an installer that writes into
+    # their ~/.claude and loads a background daemon. Implemented AND advertised, same as --upgrade.
+    if [ -f "install.sh" ]; then
+        _rev_missing=""
+        grep -qE '^[[:space:]]*--dry-run\|-n\)' install.sh   || _rev_missing="$_rev_missing --dry-run(arm)"
+        grep -qE 'echo "  --dry-run'          install.sh     || _rev_missing="$_rev_missing --dry-run(help)"
+        grep -qE '^[[:space:]]*--uninstall\)' install.sh     || _rev_missing="$_rev_missing --uninstall(arm)"
+        grep -qE 'echo "  --uninstall'        install.sh     || _rev_missing="$_rev_missing --uninstall(help)"
+        if [ -n "$_rev_missing" ]; then
+            fail "Structural: install.sh missing reversibility mode(s):$_rev_missing"
+        else
+            pass "Structural: install.sh implements + advertises --dry-run and --uninstall"
+        fi
+    fi
+
+    # EXECUTES --dry-run against a throwaway HOME and asserts two invariants that protect a
+    # teammate's machine. Greps cannot establish either one:
+    #   (a) it writes NOTHING — a "preview" that mutates is worse than no preview;
+    #   (b) the owned-path enumeration never names user data. Uninstall removes exactly what this
+    #       enumeration emits, so a single stray entry here is a command that deletes someone's
+    #       session history, personal CLAUDE.md, or telemetry.
+    # Gap-tested by mutation: emit "$HOME/.claude/settings.json" from _framework_owned_paths -> FAIL;
+    # make cmd_dry_run touch a file -> FAIL; unmodified -> PASS.
+    if [ -f "install.sh" ]; then
+        _dr_home=$(mktemp -d 2>/dev/null)
+        if [ -n "$_dr_home" ] && [ -d "$_dr_home" ]; then
+            _dr_out=$(HOME="$_dr_home" bash install.sh --dry-run 2>&1)
+            _dr_rc=$?
+            _dr_wrote=$(find "$_dr_home" -mindepth 1 2>/dev/null | wc -l | tr -d ' ')
+            # Any owned path naming user data is a deletion candidate that must never exist.
+            _dr_bad=$(printf '%s\n' "$_dr_out" \
+                | grep -oE '/(settings\.json|CLAUDE\.md)$|/(projects|todos|snapshots)/|\.jsonl$' \
+                | sort -u | tr '\n' ' ')
+            if [ "$_dr_rc" -ne 0 ]; then
+                fail "install.sh --dry-run exited $_dr_rc"
+            elif [ "$_dr_wrote" -ne 0 ]; then
+                fail "install.sh --dry-run WROTE $_dr_wrote path(s) into a clean HOME — a preview must not mutate"
+            elif [ -n "${_dr_bad// /}" ]; then
+                fail "install.sh owned-path set names user data (uninstall would delete it): ${_dr_bad% }"
+            else
+                pass "install.sh --dry-run writes nothing and never claims ownership of user data"
+            fi
+            rm -rf "$_dr_home"
+        else
+            fail "install.sh --dry-run guard: could not create a temp HOME — invariant unverified"
+        fi
+    fi
+
     # Regression guard: the watchdog must cap the append-only diagnostic logs — otherwise
     # framework-health.jsonl grows unbounded (~50 lines/day). Assert the trim exists in source.
     if [ -f "global-config/daemon/claude-framework-watchdog.sh" ]; then
