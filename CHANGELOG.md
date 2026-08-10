@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **CI had never passed. 20 of 20 runs red, no green run since 2026-07-08 — over a month.** Every
+  commit in this remediation effort was pushed onto a red pipeline, including ones whose message
+  reported "0 errors" from a local run. Single root cause: `run_structural_checks` asserted
+  `~/.claude/settings.json` exists *unconditionally*, but that is a property of an **installed
+  machine**, not of the repository — on a CI runner or a fresh clone "missing" means *never
+  installed*, not *deleted*. It now degrades to a warning when no install marker
+  (`.framework-version` / `~/.claude/agents`) is present, matching the sibling `~/.claude/hooks` and
+  analytics checks that already skipped gracefully. Verified in all three states: CI-clean → green
+  (225 checks), installed → green (242), installed with `settings.json` genuinely deleted → still
+  FAILS, so the self-heal invariant is intact.
+  A gate that can never PASS is read exactly as often as one that can never FAIL — this was the
+  process-level twin of the fail-open class the guards in this file exist to catch.
+
 - **Round-6 verification: two recipes that destroyed committed work, a dead guard, and a watchdog
   heal-loop.** A final execution-based stress test of all 27 skills (every `references/` and
   `scripts/` file, not just SKILL.md). 0 broken. Everything below was reproduced before it was fixed.

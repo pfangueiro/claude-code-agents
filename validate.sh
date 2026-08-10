@@ -81,8 +81,23 @@ run_structural_checks() {
     # be an ERROR, not a silent skip — every hook/statusLine/env check below is
     # gated on the file existing, so without this a deleted file yields 0 errors
     # and the watchdog never heals it. Fail -> errors>0 -> watchdog runs install --update.
-    if [ ! -f "$HOME/.claude/settings.json" ]; then
-        fail "Structural: ~/.claude/settings.json is MISSING (deleted) — self-heal must recreate it"
+    #
+    # ...but ONLY on a machine where the framework is actually installed. This check asserts a
+    # property of the INSTALLED ENVIRONMENT, not of the repository, and on a CI runner or a fresh
+    # clone "missing" means "never installed", not "deleted". Unconditional, it made `./validate.sh`
+    # fail on every CI run: 20 of 20 red, no green run in over a month. A gate that can never PASS
+    # is read exactly as often as one that can never FAIL — nobody looks at either — so this was the
+    # process-level twin of the fail-open class the guards below exist to catch.
+    # The install markers are the discriminator (install.sh writes .framework-version/.framework-path),
+    # and the degrade-to-warn behaviour now matches the sibling ~/.claude/hooks and analytics checks.
+    if [ -f "$HOME/.claude/.framework-version" ] || [ -d "$HOME/.claude/agents" ]; then
+        if [ ! -f "$HOME/.claude/settings.json" ]; then
+            fail "Structural: ~/.claude/settings.json is MISSING (deleted) — self-heal must recreate it"
+        else
+            pass "Structural: ~/.claude/settings.json exists"
+        fi
+    else
+        warn "Framework not installed at ~/.claude — skipping installed-environment structural checks (CI or fresh clone)"
     fi
 
     # Regression guard: SessionStart hook in TEMPLATE must NOT be a decorative echo
