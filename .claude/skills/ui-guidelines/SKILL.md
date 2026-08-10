@@ -42,7 +42,7 @@ Determine what you're building:
 
 ### Step 2: Follow the Component Checklist
 
-This is the **only** checklist in this skill — use it both before you start and before you call the component done.
+This is the **authoritative** checklist — use it both before you start and before you call the component done. Two reference files carry narrower, topic-scoped checklists (`styling-layout.md` for layout, `animations.md` for animation). They supplement this one; where either disagrees with this list, **this list wins**.
 
 Every component must:
 - [ ] Use Ant Design components as the base
@@ -51,7 +51,7 @@ Every component must:
 - [ ] Use `fontSize: 12` for tables (MANDATORY — see `references/component-patterns.md`)
 - [ ] Include proper TypeScript types
 - [ ] Handle loading states (Skeleton, Spin, or loading prop)
-- [ ] Show feedback with `message.success()` / `message.error()`
+- [ ] Show feedback via `App.useApp()` — never the static `message` / `notification` / `Modal` imports (see [Feedback APIs](#feedback-apis))
 - [ ] Include validation rules with clear messages on every form input
 - [ ] Include proper error handling
 - [ ] Support responsive design
@@ -77,6 +77,79 @@ Every component must:
 - Secondary text: `fontSize: '11px'`
 - Strong text: `<Text strong>`
 - Secondary: `<Text type="secondary">`
+
+## Feedback APIs
+
+**MANDATORY: get `message`, `notification` and `modal` from `App.useApp()`. Never call the static `message.*` / `notification.*` / `Modal.confirm()` imports.**
+
+This is not a style preference — it is forced by the `ConfigProvider` theming that the rest of this skill mandates. Ant Design's own docs state it plainly:
+
+> Static methods like message, notification, and Modal.confirm do not inherit context from `ConfigProvider` because they are rendered to independent DOM nodes. To resolve style issues, use hooks like `message.useMessage`, `notification.useNotification`, `Modal.useModal`, or the `App.useApp` hook.
+> — [antd FAQ](https://ant.design/docs/react/faq)
+
+> we recommend to use top level registration instead of `notification` static method, because static method cannot consume context, and ConfigProvider data will not work.
+> — [antd notification docs](https://ant.design/components/notification)
+
+Measured on antd 5.29.3: inside `<ConfigProvider prefixCls="zzz" theme={{ token: { colorPrimary: '#F79400' } }}>`, a static `message.success()` rendered its holder with the **`ant-`** prefix and the **default** theme hash, while `App.useApp().message.success()` rendered it with the configured **`zzz-`** prefix and a *different*, configured hash. The static call silently ignored both the prefix and the brand token. (Reproduce it by diffing the two holders' class names — the exact hash strings are build-specific, so compare them against each other rather than against any literal quoted here.)
+
+### Setup (once, at the app root)
+
+`App` must sit **inside** `ConfigProvider` so it inherits the theme:
+
+```tsx
+import { ConfigProvider, App } from "antd";
+
+export default function Providers({ children }) {
+  return (
+    <ConfigProvider theme={{ token: { colorPrimary: "#F79400" } }}>
+      <App>{children}</App>
+    </ConfigProvider>
+  );
+}
+```
+
+### Usage (every component)
+
+```tsx
+import { App, Button } from "antd";
+
+export default function MyComponent() {
+  // Call the hook at the top of the component...
+  const { message, notification, modal } = App.useApp();
+
+  // ...but FIRE the feedback from an event handler or an effect, never during render.
+  // antd warns ("You are calling notice in render") and the notice is dropped.
+  const handleSave = async () => {
+    try {
+      await save();
+      message.success("Saved");
+    } catch (err) {
+      notification.error({ message: "Save failed", description: String(err) });
+    }
+  };
+
+  const handleDelete = () => {
+    modal.confirm({ title: "Are you sure?", onOk: doDelete });
+  };
+
+  return (
+    <>
+      <Button onClick={handleSave}>Save</Button>
+      <Button danger onClick={handleDelete}>Delete</Button>
+    </>
+  );
+}
+```
+
+| Don't (static — ignores `ConfigProvider`) | Do (`App.useApp()`) |
+|---|---|
+| `import { message } from "antd"; message.success(...)` | `const { message } = App.useApp(); message.success(...)` |
+| `import { notification } from "antd"; notification.error(...)` | `const { notification } = App.useApp(); notification.error(...)` |
+| `Modal.confirm({...})` | `const { modal } = App.useApp(); modal.confirm({...})` |
+
+`App.useApp()` is a hook — call it at the top of the component, not inside a callback. For feedback fired outside React (an axios interceptor, a plain util), lift the call into a component or pass the instance in; do not fall back to the static import.
+
+**Note:** `<Modal>` used as a *component* (Pattern 2 below) is unaffected — it renders inside the tree and inherits context normally. Only the static `Modal.confirm()` / `Modal.info()` family is affected.
 
 ## Core Patterns
 
@@ -129,9 +202,12 @@ export default function DataTable() {
 Standard form modal pattern:
 
 ```tsx
-import { Modal, Form, Input, Button, message } from "antd";
+import { Modal, Form, Input, Button, App } from "antd";
 
 export default function AddModal({ isOpen, onClose, onSuccess }) {
+  // MANDATORY: not the static `message` import — it ignores ConfigProvider.
+  // See "Feedback APIs" above.
+  const { message } = App.useApp();
   const [form] = Form.useForm();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -172,7 +248,7 @@ export default function AddModal({ isOpen, onClose, onSuccess }) {
 - Use `layout="vertical"` for labels above inputs
 - Include validation rules with clear messages
 - Reset form on success: `form.resetFields()`
-- Show feedback: `message.success()` / `message.error()`
+- Show feedback via `const { message } = App.useApp()` — the static `message` import ignores `ConfigProvider` ([Feedback APIs](#feedback-apis))
 - Set `maskClosable={true}` for better UX
 
 ### Pattern 3: Selectable Card Grids
@@ -328,8 +404,8 @@ Read these files for detailed information:
 1. **[design-tokens.md](references/design-tokens.md)** - Colors, spacing, typography system. **Canonical for every color value.**
 2. **[codebase-patterns.md](references/codebase-patterns.md)** - Real patterns from existing code
 3. **[component-patterns.md](references/component-patterns.md)** - Ant Design component standards
-4. **[styling-layout.md](references/styling-layout.md)** - Layout patterns and responsive design. **Stale in three places — do not follow them:** its `Charts: shadcn/ui` tech-stack line (charts are out of scope, see above), its `Avoid: Inline styles` rule (this house style uses inline styles for layout and spacing — see Styling Approach), and its `colorPrimary: '#1890ff'` example (the brand primary is `#F79400`).
-5. **[animations.md](references/animations.md)** - Loading indicators and transitions
+4. **[styling-layout.md](references/styling-layout.md)** - Layout patterns and responsive design. Written Tailwind-first, so it reads against the grain of this file's Ant-Design-first mandates; its known conflicts (spacing grid, CSS files, inline styles, z-index, breakpoints, router, brand primary, charts) are reconciled inline in that file. Where anything there still disagrees with this file, **this file wins**.
+5. **[animations.md](references/animations.md)** - Loading indicators and transitions. Drawer/modal behaviour is owned by `component-patterns.md`; that file wins on any drawer conflict.
 
 ## Typography Scale
 
@@ -387,4 +463,4 @@ const { data, error, isLoading, mutate } = useSWR(
 
 ## Before You Finish
 
-Re-run the checklist in [Step 2](#step-2-follow-the-component-checklist). That is the single copy — there is no separate finishing list to diverge from it.
+Re-run the checklist in [Step 2](#step-2-follow-the-component-checklist) — there is no separate finishing list to diverge from it. If you also worked from `styling-layout.md` or `animations.md`, their topic checklists are supplements to Step 2, never replacements, and Step 2 wins on any conflict.

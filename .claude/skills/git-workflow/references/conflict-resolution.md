@@ -73,15 +73,32 @@ it only after confirming the commit is genuinely redundant — its changes are a
 upstream:
 
 ```bash
-# Confirm the commit adds nothing before skipping it.
-git show REBASE_HEAD                       # what you are about to drop
-git diff REBASE_HEAD^ REBASE_HEAD          # empty output => already applied upstream, safe to skip
-git rebase --skip
+# 1. See what you would drop.
+git show REBASE_HEAD
+
+# 2. Resolve the conflict, stage it, then ask git what is left on top of upstream.
+git add <resolved-files>
+git diff --cached HEAD   # EMPTY     => the commit contributes nothing; dropping it loses nothing
+                         # NON-EMPTY => this is exactly the work `--skip` would delete
+
+# 3. Run --continue either way: it commits the remainder, and drops the commit by
+#    itself when step 2 came back empty. Use --skip only to abandon a commit you
+#    have deliberately decided not to keep.
+git rebase --continue
 ```
 
-If the diff is not empty, `--skip` deletes real work. Resolve the conflict and
-`git rebase --continue` instead. A commit dropped by `--skip` is still recoverable from
-`git reflog` until it is garbage-collected.
+**Do not test redundancy with `git diff REBASE_HEAD^ REBASE_HEAD`.** That is the commit's patch
+against *its own parent* — a value that does not depend on upstream at all — so it is non-empty for
+every non-empty commit, redundant or not. On two rebases differing only in whether skipping was
+safe, it returned 119 and 131 bytes: the same verdict in the case where `--skip` loses nothing and
+the case where it destroys the work. Redundancy only becomes decidable *after* you resolve, which
+is what step 2 does.
+
+You will also rarely face this choice: git drops a commit whose content is already upstream
+*before* stopping, printing `dropping <sha> ... -- patch contents already upstream`. If git stopped
+and offered `--skip`, it has **not** concluded the commit is redundant.
+
+A commit dropped by `--skip` is still recoverable from `git reflog` until it is garbage-collected.
 
 ### Strategy 2: Merge and Resolve All at Once
 

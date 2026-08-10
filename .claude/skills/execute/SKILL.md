@@ -113,9 +113,9 @@ Process batches in order. Within each batch, maximize parallelism.
 
 **Execution rules:**
 - Send a single message with multiple `Agent` tool calls for parallel agent launches
-- Use `run_in_background: true` for agent tasks that can run concurrently
+- Agent tasks run in the background by DEFAULT — omit `run_in_background` for concurrent launches; writing `true` is a documented no-op. Pass `run_in_background: false` only when you must block on a result before continuing
 - For direct edits (Write/Edit), execute sequentially if they touch the same file
-- **Fork subagents** (omit `subagent_type`) when workers need your conversation context — shares prompt cache, much cheaper
+- **Fork subagents** — set `subagent_type: "fork"` explicitly when a worker needs your conversation context; it shares the prompt cache and is much cheaper. **Omitting `subagent_type` does NOT fork**: it starts a general-purpose agent with a *fresh* context and never errors, so the context you assumed was shared is silently absent. Put what the worker needs in its `prompt`, or continue an already-spawned agent with `SendMessage` (which resumes it with its context intact)
 - **Coordinator synthesis**: After research agents complete, READ and SYNTHESIZE all findings before launching implementation agents — never pass raw research output
 - For risky/experimental implementation tasks, pass the `Agent` tool's own `isolation: "worktree"` parameter — it gives that agent a temporary git worktree so it works on an isolated copy of the repo. This is a parameter of the `Agent` launcher, **not** `EnterWorktree`: `EnterWorktree` is explicit-instruction-only, session-scoped, and cannot be entered twice, so it is never the isolation mechanism for a batch
 - For long-running monitoring, use CronCreate instead of manual polling loops
@@ -177,7 +177,7 @@ See [references/agent-selection.md](references/agent-selection.md) for the compl
 | Write tests | test-automation agent |
 | Database work | database-architect agent |
 | Performance analysis | performance-optimizer agent |
-| Security audit | security-scan command |
+| Security audit / auth / OWASP | security-auditor agent (Opus) — the security-scan skill is a scanner, not a substitute |
 | Library documentation | library-docs skill (context7 MCP) |
 | Complex reasoning | deep-analysis skill (sequential-thinking MCP) |
 | Web research | WebSearch + WebFetch |

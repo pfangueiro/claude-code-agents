@@ -23,7 +23,9 @@ metadata:
     app.kubernetes.io/version: "1.0.0"
     app.kubernetes.io/managed-by: helm
 spec:
-  replicas: 2
+  # No `replicas` here on purpose — the HPA below owns this field. Pinning it while an
+  # HPA is active flaps forever under GitOps; see the warning under the HPA template.
+  # No HPA for this workload? Then add `replicas: 2` (omitting it defaults to 1).
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -183,6 +185,25 @@ spec:
           periodSeconds: 60
 ```
 
+**WARNING — pinned `replicas` + HPA + GitOps self-heal flap forever.** The Deployment above
+composes safely with this HPA *only because it omits `spec.replicas`*. Put that field back and
+the HPA scales the Deployment up while the GitOps engine reverts it to the pinned number, in a
+loop, with **no error raised anywhere** — the only symptom is an oscillating replica count and a
+storm of sync / `ScalingReplicaSet` events. Kubernetes says removing it is recommended, since
+re-applying a pinned value while an HPA is active risks "thrashing or flapping behavior"
+([HPA docs](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#migrating-deployments-and-statefulsets-to-horizontal-autoscaling)).
+
+| Engine | Why it reverts the HPA | Fix |
+|--------|------------------------|-----|
+| Argo CD `selfHeal: true` | live replicas ≠ Git replicas ⇒ OutOfSync ⇒ self-heal patches it back | omit `replicas`; if a Helm chart forces it, use `ignoreDifferences` **plus** `RespectIgnoreDifferences=true` (see below) |
+| Argo CD `ServerSideApply=true` | applies with `--force-conflicts`, seizing `spec.replicas` from the HPA's field manager | omit `replicas` — force-conflicts overrides field ownership |
+| Flux `Kustomization` | every `interval` re-applies each field that diverges from Git; Flux has **no** field-level ignore | omit `replicas` (the [Flux FAQ](https://fluxcd.io/flux/faq/) requires it) |
+
+Removing `replicas` costs a one-time dip to 1 pod on first apply (the API default) before the HPA
+scales up to `minReplicas`. Avoid the dip by dropping the field from the live object first —
+`kubectl apply edit-last-applied deployment/APP_NAME`, delete `spec.replicas`, then commit. The
+same rule covers anything a controller owns: never pin in Git a field HPA, KEDA, or VPA writes.
+
 ## Karpenter (AWS Node Autoscaling)
 
 Karpenter replaces Cluster Autoscaler with workload-aware, faster node provisioning.
@@ -279,6 +300,19 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: APP_NAME
+  # Belt-and-braces for charts that always render `replicas` and cannot omit it.
+  # Needs BOTH of these: ignoreDifferences alone only silences the diff — Argo still
+  # applies the desired state as-is during a sync, so replicas snap back on the next
+  # commit or manual sync. RespectIgnoreDifferences pre-patches it out of the apply.
+  # `name:` is REQUIRED here, not optional tidiness. Omit it and the rule matches EVERY
+  # Deployment in this Application, so replica drift goes both undetected and unhealed
+  # across all of them while the UI still reports Synced.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: APP_NAME
+      jsonPointers:
+        - /spec/replicas
   syncPolicy:
     automated:
       prune: true
@@ -286,6 +320,7 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+      - RespectIgnoreDifferences=true
     retry:
       limit: 3
       backoff:
@@ -315,6 +350,10 @@ spec:
       name: APP_NAME
       namespace: APP_NAME
 ```
+
+Flux has no equivalent of Argo's `ignoreDifferences`: this Kustomization re-applies every field
+that diverges from Git on each `interval`, so omitting `spec.replicas` from the Deployment is the
+*only* way to let an HPA hold a replica count here. See the HPA warning above.
 
 ## Helm Chart Scaffold
 

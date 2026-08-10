@@ -129,7 +129,7 @@ export const ProgressLoader = () => {
       percent={percent} 
       status="active"
       strokeColor={{
-        '0%': '#1890ff',
+        '0%': '#F79400',  // brand orange — see design-tokens.md (canonical)
         '100%': '#52c41a',
       }}
     />
@@ -226,15 +226,35 @@ export const DotsLoader = () => (
 
 ## Focus States
 
-All interactive elements must have visible focus states for accessibility:
+Every interactive element must have a visible **keyboard** focus state. Scope it with
+`:focus-visible`, not `:focus` — browsers match `:focus-visible` on keyboard/programmatic focus but
+not on an ordinary mouse click, which is precisely the "ring persists after clicking" complaint that
+`component-patterns.md` addresses.
 
 ```css
-.focus-ring:focus {
+.focus-ring:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(24, 144, 255, 0.2);
-  border-color: #1890ff;
+  box-shadow: 0 0 0 3px rgba(247, 148, 0, 0.2); /* brand orange */
+  border-color: #F79400;
 }
 ```
+
+### Interaction with the `blur()` pattern
+
+`component-patterns.md` (Button Patterns → "Removing Focus Border After Click") mandates
+`e.currentTarget.blur()` on toggle and icon-only buttons. **That file owns the rule — follow it
+there.** Be aware of what it does: `blur()` fires on *activation*, and keyboard activation
+(Enter/Space on a `<button>`) dispatches the same click event, so focus moves to `<body>` whether
+the user clicked or typed. Verified on a `<button>`: after `focus()` the active element is the
+button; after activation with a `blur()` handler it is `BODY`.
+
+Two consequences to respect:
+
+- **Never signal state by the element keeping focus.** Use `aria-pressed` / `aria-expanded` plus a
+  styled active state, so the control still reads correctly once focus is gone.
+- **Do not extend `blur()` beyond the buttons that file names** (toggles, icon-only actions, state
+  changes that do not navigate). Never apply it to form fields, links, or controls inside a dialog
+  that a keyboard user has to return to.
 
 ## Modal/Drawer Animations
 
@@ -253,18 +273,29 @@ import { Modal } from 'antd';
 ```
 
 ### Drawer Entry
+
+Drawer behaviour is owned by **`component-patterns.md` → Drawer Patterns**, which mandates the full
+card-like pattern (header styling, fullscreen toggle, widths, close icon). Use that pattern; the
+snippet here only illustrates the animation-relevant props.
+
 ```tsx
 import { Drawer } from 'antd';
 
+// ❌ NEVER add `destroyOnClose` — it destroys the content before the close
+//    animation runs, so the drawer vanishes instantly instead of sliding out.
+//    (component-patterns.md, Drawer Patterns §8.)
 <Drawer
   open={isOpen}
   placement="right"
   width={400}
-  destroyOnClose
 >
   Drawer content
 </Drawer>
 ```
+
+To reset state on close, do it in `onClose` and delay the cleanup ~300ms so the close animation can
+finish — see `component-patterns.md`, Drawer Patterns §10. Never reach for `destroyOnClose` just to
+reset state.
 
 ## List Animations
 
@@ -288,7 +319,7 @@ const items = data.map((item, index) => (
 
 ### Next.js Page Transition
 ```tsx
-// app/layout.tsx or pages/_app.tsx
+// app/layout.tsx — App Router (this codebase uses next/navigation, not the Pages Router)
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -367,7 +398,10 @@ const animationClass = prefersReducedMotion ? '' : 'animate-fade-in';
 4. **Debounce scroll/resize animations**
 5. **Use requestAnimationFrame for JS animations**
 
-## Animation Checklist
+## Animation Checklist (animation only)
+
+Topic-scoped **supplement** to the authoritative component checklist in `SKILL.md`, Step 2 — not a
+replacement. Run Step 2 as well; it wins on any conflict.
 
 - [ ] Animation has clear purpose
 - [ ] Duration follows standards (150ms/250ms/350ms)
@@ -375,5 +409,6 @@ const animationClass = prefersReducedMotion ? '' : 'animate-fade-in';
 - [ ] Works with reduced motion preferences
 - [ ] Does not cause layout shifts
 - [ ] Tested on low-end devices
-- [ ] Focus states are visible
+- [ ] Keyboard focus state is visible, via `:focus-visible`
+- [ ] No `destroyOnClose` on drawers (component-patterns.md, Drawer Patterns §8)
 - [ ] Animations are smooth at 60fps

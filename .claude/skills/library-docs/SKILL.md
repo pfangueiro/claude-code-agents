@@ -36,8 +36,16 @@ The context7 MCP server provides two tools:
 
 **`mcp__context7__resolve-library-id`**
 - Resolves a library name to a Context7-compatible ID. Params (both required): `libraryName` (e.g. "Next.js") and `query` (what you're after — used to rank matches).
-- Example: `{ libraryName: "react", query: "hooks" }` → `/facebook/react`
+- Example: `{ libraryName: "React", query: "hooks" }` → ranked candidates, top match `/reactjs/react.dev`
 - Returns candidates with reputation/snippet/benchmark scores; pick the best. Skip only if the user already gave a `/org/project` ID.
+
+**Library IDs drift — resolve is the source of truth, not this file.** Context7 re-homes libraries, and the old ID is left as a stub that returns exactly one line and **zero documentation**:
+
+```
+Library /facebook/react has been redirected to this library: /react/react.
+```
+
+If you see that, you did not get docs. Re-run `resolve-library-id` and query the ID it gives you. Treat every hardcoded ID below as a hint, not a guarantee.
 
 **`mcp__context7__query-docs`**
 - Fetches documentation for a resolved library. Params (both required): `libraryId` (the `/org/project` ID) and `query` (one specific concept, e.g. "useEffect cleanup").
@@ -62,12 +70,12 @@ The context7 MCP server provides two tools:
 **Example MCP Calls:**
 ```javascript
 // Step 1: Resolve library ID
-mcp__context7__resolve-library-id({ libraryName: "react", query: "hooks" })
-// Returns: "/facebook/react"
+mcp__context7__resolve-library-id({ libraryName: "React", query: "hooks" })
+// Returns ranked candidates; top match: "/reactjs/react.dev"
 
 // Step 2: Get docs
 mcp__context7__query-docs({
-  libraryId: "/facebook/react",
+  libraryId: "/reactjs/react.dev",
   query: "hooks"
 })
 ```
@@ -80,22 +88,31 @@ mcp__context7__query-docs({
 ```
 
 **Workflow:**
-1. Resolve "Next.js 14" to version-specific ID
-2. Fetch Next.js v14 routing documentation
+1. Resolve "Next.js" — resolve never returns a version-pinned ID, but it does list the available versions
+2. Append one of those version tags **verbatim** to the bare ID
 3. Explain routing with v14-specific features
 
 **Example MCP Calls:**
 ```javascript
-// Resolve with version
-mcp__context7__resolve-library-id({ libraryName: "Next.js 14", query: "routing" })
-// Returns: "/vercel/next.js/v14.x.x"
+// Step 1: Resolve. Returns the BARE id plus the versions that actually exist.
+mcp__context7__resolve-library-id({ libraryName: "Next.js", query: "routing" })
+// Returns: "/vercel/next.js"
+//   Versions: v14.3.0-canary.87, v13.5.11, v15.1.8, v12.3.7, v16.2.9, ...
 
-// Get routing docs
+// Step 2: Pin by appending a tag copied verbatim from that Versions list.
 mcp__context7__query-docs({
-  libraryId: "/vercel/next.js/v14.x.x",
+  libraryId: "/vercel/next.js/v14.3.0-canary.87",
   query: "routing"
 })
 ```
+
+**Do not invent a version.** Semver wildcards are rejected — `/vercel/next.js/v14.x.x` fails with:
+
+```
+Version "v14.x.x" not found for library "/vercel/next.js". Available versions: ...
+```
+
+Only tags from the live `Versions:` line work, and that list rotates as releases land. If you need a version you cannot find there, query the unpinned ID and say which version the docs reflect.
 
 ### Pattern 3: API Comparison
 
@@ -145,22 +162,23 @@ mcp__context7__query-docs({
 **Example MCP Calls:**
 ```javascript
 // Step 1: Resolve library ID
-mcp__context7__resolve-library-id({ libraryName: "react", query: "server components" })
-// Returns: "/facebook/react"
+mcp__context7__resolve-library-id({ libraryName: "React", query: "server components" })
+// Returns ranked candidates; top match: "/reactjs/react.dev"
 
 // Step 2: Get docs — one concept per call; split follow-ups into separate calls
 mcp__context7__query-docs({
-  libraryId: "/facebook/react",
+  libraryId: "/reactjs/react.dev",
   query: "server components"
 })
 ```
 
 ## Supported Libraries
 
-The context7 MCP server supports hundreds of libraries. Common ones include:
+The context7 MCP server supports hundreds of libraries. Every ID below was verified to return real
+documentation on 2026-08-10 — but IDs drift, so resolve first and trust the resolver over this list.
 
 **Frontend Frameworks:**
-- React (`/facebook/react`)
+- React (`/reactjs/react.dev`)
 - Vue (`/vuejs/core`)
 - Angular (`/angular/angular`)
 - Svelte (`/sveltejs/svelte`)
@@ -174,7 +192,7 @@ The context7 MCP server supports hundreds of libraries. Common ones include:
 - Prisma (`/prisma/prisma`)
 
 **Tools & Libraries:**
-- Tailwind CSS (`/tailwindlabs/tailwindcss`)
+- Tailwind CSS (`/tailwindlabs/tailwindcss.com`)
 - TypeScript (`/microsoft/TypeScript`)
 - Vite (`/vitejs/vite`)
 
@@ -304,10 +322,9 @@ To verify the MCP server is available, Claude Code should show context7 in the M
 
 ## Limitations & Considerations
 
-**Response Size:**
-- Not client-configurable — context7 decides how much documentation to return
-- Scope depth with the `query` instead: one concept per call
-- Budget calls, not size: no more than 3 `query-docs` calls per question
+**Stale IDs:**
+- A redirect stub (`Library X has been redirected to ...`) is a **failed** lookup, not a result — re-resolve and query the new ID
+- A version tag that is not on the live `Versions:` line errors; wildcards like `v14.x.x` never work
 
 **Library Coverage:**
 - Most popular libraries supported

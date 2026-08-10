@@ -2,17 +2,22 @@
 
 ## Styling Approach
 
+> **Reconciled with `SKILL.md`.** This file is written Tailwind-first, which reads against the grain
+> of the Ant-Design-first mandates in `SKILL.md`. Every known conflict is called out inline below.
+> Where anything here still disagrees with `SKILL.md`, **`SKILL.md` wins.**
+
 ### Tech Stack
 - **Primary**: Ant Design components
-- **Utility Classes**: Tailwind CSS for custom styling
-- **Charts**: shadcn/ui components where applicable
-- **Avoid**: Inline styles unless absolutely necessary
+- **Utility Classes**: Tailwind CSS — sparingly, utility classes only (SKILL.md ranks it 4th, "rarely")
+- **Charts**: **out of scope for this skill entirely** — see SKILL.md, "Out of Scope". Use a dedicated data-visualization reference.
+- **Inline styles**: **expected** for layout and spacing — SKILL.md's Styling Approach ranks them *above* Tailwind. Do not avoid them.
 
 ### Import Order
 ```tsx
-// 1. React and Next.js
+// 1. React and Next.js — App Router. Use 'next/navigation', NOT the Pages Router
+//    'next/router'. This matches the real code in codebase-patterns.md.
 import { useState } from 'react';
-import { useRouter } from 'next/router';
+import { useRouter } from 'next/navigation';
 
 // 2. Third-party libraries
 import { Form, Input, Button } from 'antd';
@@ -24,23 +29,29 @@ import { CustomComponent } from '@/components';
 import { formatDate } from '@/utils';
 import type { User } from '@/types';
 
-// 5. Styles
-import styles from './Component.module.css';
+// 5. Styles — NONE.
+//    SKILL.md DON'Ts: "Don't create custom CSS files". There is no per-component
+//    stylesheet to import; use theme tokens + inline styles instead.
 ```
 
 ## Tailwind Utilities
 
 ### Spacing
-Use consistent spacing based on the 4px grid:
+
+The mandated steps are **8px / 12px / 16px / 24px** (SKILL.md, Step 3) — *not* every rung of
+Tailwind's 4px scale. 4px is reserved for optical nudges only (the card-grid `paddingBottom: 4px`
+and the drawer fullscreen button's `padding: 4px` in SKILL.md are the documented uses).
 
 ```tsx
-// Padding
-p-1  // 4px
+// Padding — mandated steps
 p-2  // 8px
 p-3  // 12px
 p-4  // 16px (most common)
 p-6  // 24px
-p-8  // 32px
+
+// Off-scale — do not reach for these
+p-1  // 4px  — optical nudges only, not a spacing step
+p-8  // 32px — not a mandated step
 
 // Margin
 mt-4  // margin-top: 16px
@@ -65,17 +76,28 @@ gap-4  // 16px
 ```
 
 ### Responsive Design
+
+Responsive layout is **antd Grid's** job (`<Row>` / `<Col>`), per SKILL.md's Ant-Design-first
+mandate — and it is what the Sidebar Layout and Card Grid patterns further down this file already
+use.
+
 ```tsx
-// Mobile-first approach
-<div className="w-full md:w-1/2 lg:w-1/3">
-  
-// Breakpoints:
-// sm: 640px
-// md: 768px
-// lg: 1024px
-// xl: 1280px
-// 2xl: 1536px
+// antd <Col> breakpoints:
+// xs:  < 576px
+// sm:  >= 576px
+// md:  >= 768px
+// lg:  >= 992px
+// xl:  >= 1200px
+// xxl: >= 1600px
+<Row gutter={[16, 16]}>
+  <Col xs={24} md={12} lg={8}>...</Col>
+</Row>
 ```
+
+⚠ **Tailwind's same-named breakpoints are different numbers** (sm 640 / md 768 / lg 1024 / xl 1280 /
+2xl 1536). Only `md` coincides. Never express one responsive rule half in antd and half in Tailwind:
+`lg:` flips at 1024px while `<Col lg>` flips at 992px, so the two disagree across a 32px band and the
+layout breaks only at those widths. Pick antd Grid.
 
 ### Typography
 ```tsx
@@ -193,7 +215,7 @@ import { ConfigProvider } from 'antd';
 <ConfigProvider
   theme={{
     token: {
-      colorPrimary: '#1890ff',
+      colorPrimary: '#F79400', // brand orange — see design-tokens.md (canonical)
       borderRadius: 6,
       fontSize: 16,
     },
@@ -287,14 +309,23 @@ import { Divider } from 'antd';
 
 ## Z-Index Management
 
+**antd owns overlay layering — Tailwind's `z-*` scale cannot reach it.** Modals, drawers, dropdowns,
+popovers, `message` and `notification` are rendered by antd far above Tailwind's ceiling: antd's
+`Drawer` `zIndexPopup` defaults to **1000**, `Popover` **1030**, `Dropdown` **1050**, `Popconfirm`
+**1060**. Tailwind's `z-50` is literally `z-index: 50`, so it cannot stack against any of them.
+
+Adjust antd layers with the `zIndexPopupBase` seed token or a per-component `zIndexPopup` on
+`ConfigProvider` — never with a utility class.
+
 ```tsx
-// Use consistent z-index scale
+// Tailwind z-* is only for in-page, non-antd stacking, and must stay below 1000
 z-0    // Base layer
 z-10   // Elevated content
-z-20   // Dropdowns
+z-20   // Custom (non-antd) floating elements
 z-30   // Sticky headers
-z-40   // Modals backdrop
-z-50   // Modals
+
+// ❌ These rows were wrong and are removed: antd modals/drawers sit at >= 1000,
+//    so `z-40` / `z-50` never layer a backdrop or modal against them.
 ```
 
 ## Shadow Usage
@@ -335,10 +366,10 @@ hover:shadow-lg  // Card hover effect
 ## Performance
 
 ### CSS Best Practices
-1. **Use Tailwind utilities** over custom CSS when possible
-2. **Avoid deep nesting** in custom CSS
-3. **Minimize CSS-in-JS** runtime costs
-4. **Use CSS modules** for component-specific styles
+1. **Prefer theme tokens + inline styles**, then Tailwind utilities — never a new stylesheet
+2. **Avoid deep nesting** in any CSS you inherit
+3. **No CSS-in-JS libraries** (SKILL.md DON'Ts) — antd's own runtime is the exception you already have
+4. **No component CSS files, including CSS modules** — SKILL.md DON'Ts: "Don't create custom CSS files"
 
 ### Class Composition
 ```tsx
@@ -354,6 +385,11 @@ import clsx from 'clsx';
 
 ## Dark Mode (If Applicable)
 
+Prefer antd's dark algorithm plus `theme.useToken()` — SKILL.md mandates theme tokens
+(`token.colorText`, `token.colorBgContainer`), which already flip with the active algorithm. The
+Tailwind `dark:` form below only applies to non-antd markup, and must be kept in sync with the antd
+theme by hand.
+
 ```tsx
 // Using Tailwind dark mode
 <div className="bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white">
@@ -361,15 +397,18 @@ import clsx from 'clsx';
 </div>
 ```
 
-## Common Patterns Checklist
+## Common Patterns Checklist (layout only)
+
+Topic-scoped **supplement** to the authoritative component checklist in `SKILL.md`, Step 2 — not a
+replacement. Run Step 2 as well; it wins on any conflict.
 
 - [ ] Use Ant Design components as base
-- [ ] Apply Tailwind for spacing and layout
-- [ ] Follow 4px spacing grid
+- [ ] Use theme tokens + inline styles for spacing and layout; Tailwind only as a rare utility
+- [ ] Follow the 8px / 12px / 16px / 24px spacing steps
 - [ ] Use semantic color tokens
-- [ ] Mobile-first responsive design
+- [ ] Mobile-first responsive design via antd Grid breakpoints (not Tailwind's)
 - [ ] Maintain consistent shadows
-- [ ] Ensure accessible focus states
+- [ ] Ensure a visible keyboard focus state (see `animations.md`, Focus States)
 - [ ] Use shadow-md for standard cards
-- [ ] Keep z-index values organized
+- [ ] Layer antd overlays via ConfigProvider z-index tokens, not utility classes
 - [ ] Test on multiple screen sizes

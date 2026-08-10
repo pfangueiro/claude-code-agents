@@ -133,6 +133,12 @@ jobs:
         # Interpolated by the runner: $IMAGE_NAME does not exist on the
         # remote host, so the fully qualified name must be baked in here.
         script: |
+          # The registry login in the build job happened on the RUNNER. This
+          # script runs on the remote host, which has never authenticated —
+          # pulling a private image there fails with 'denied: requested
+          # access to the resource is denied'. Log in before pulling.
+          echo "${{ secrets.DOCKER_PASSWORD }}" \
+            | docker login ${{ env.REGISTRY }} -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
           docker pull ${{ env.IMAGE_NAME }}:latest
           docker-compose up -d
 ```
@@ -304,20 +310,38 @@ jobs:
         aws-region: us-east-1
 
     - name: Deploy to green environment
+      id: deploy
       run: |
-        aws deploy create-deployment \
+        # create-deployment is ASYNC — it returns a deployment ID immediately,
+        # long before the revision is live. Capture the ID so the next step
+        # can block on it.
+        DEPLOYMENT_ID=$(aws deploy create-deployment \
           --application-name my-app \
           --deployment-group-name green-env \
-          --s3-location bucket=my-bucket,key=app.zip,bundleType=zip
+          --s3-location bucket=my-bucket,key=app.zip,bundleType=zip \
+          --query deploymentId --output text)
+        echo "deployment-id=$DEPLOYMENT_ID" >> "$GITHUB_OUTPUT"
+
+    - name: Wait for the green deployment to succeed
+      run: |
+        # Without this waiter the smoke tests below hit the PREVIOUS build
+        # while the new one is still rolling out: they pass, and a broken
+        # revision gets promoted. The waiter exits non-zero on a failed or
+        # timed-out deployment, so the job fails closed.
+        aws deploy wait deployment-successful \
+          --deployment-id ${{ steps.deploy.outputs.deployment-id }}
 
     - name: Run smoke tests
       run: ./scripts/smoke-test.sh https://green.example.com
 
     - name: Switch traffic to green
       run: |
+        # Every entry in --default-actions requires Type. Omitting it fails
+        # client-side with 'Missing required parameter in DefaultActions[0]:
+        # "Type"', so the one step that promotes green never runs.
         aws elbv2 modify-listener \
           --listener-arn ${{ secrets.LISTENER_ARN }} \
-          --default-actions TargetGroupArn=${{ secrets.GREEN_TARGET_GROUP }}
+          --default-actions Type=forward,TargetGroupArn=${{ secrets.GREEN_TARGET_GROUP }}
 
     - name: Monitor deployment
       run: ./scripts/monitor-metrics.sh
@@ -338,19 +362,42 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
     - name: Set up kubectl
       uses: azure/setup-kubectl@v3
+
+    - name: Configure kubeconfig
+      # setup-kubectl installs the BINARY only — it writes no kubeconfig and
+      # authenticates nothing. Without this step every kubectl call below
+      # fails because it has no cluster to talk to.
+      run: aws eks update-kubeconfig --name ${{ vars.EKS_CLUSTER_NAME }} --region us-east-1
 
     - name: Deploy canary (10% traffic)
       run: |
         kubectl apply -f k8s/canary-10.yaml
-        kubectl rollout status deployment/app-canary
+        # Wait on the manifest just applied, never on a hardcoded name. A literal
+        # `deployment/app-canary` that does not match this file returns 0 instantly
+        # against whatever else is already converged, and the gate passes vacuously.
+        # (-f needs the file to hold the rollout-able workload; a mixed file errors
+        # loudly, which is the correct direction to fail.)
+        kubectl rollout status -f k8s/canary-10.yaml --timeout=10m
 
     - name: Monitor metrics for 10 minutes
       run: ./scripts/monitor-canary.sh 600
 
     - name: Increase to 50% traffic
-      run: kubectl apply -f k8s/canary-50.yaml
+      run: |
+        kubectl apply -f k8s/canary-50.yaml
+        # apply only records desired state. Without this wait the monitor
+        # below measures the still-running 10% pods and reports the 50%
+        # step healthy — the same fail-open shape as an unwaited deploy.
+        kubectl rollout status -f k8s/canary-50.yaml --timeout=10m
 
     - name: Monitor metrics for 10 minutes
       run: ./scripts/monitor-canary.sh 600
@@ -358,6 +405,9 @@ jobs:
     - name: Full rollout
       run: |
         kubectl apply -f k8s/production.yaml
+        # Production must converge BEFORE the canary is deleted — removing it
+        # first drops serving pods while the rollout is still in progress.
+        kubectl rollout status -f k8s/production.yaml --timeout=10m
         kubectl delete -f k8s/canary-50.yaml
 ```
 

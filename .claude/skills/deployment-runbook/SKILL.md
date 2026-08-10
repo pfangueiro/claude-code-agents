@@ -52,6 +52,16 @@ Before any production deployment:
 
 ## Deployment Strategies
 
+> **Command convention — read once, it applies to every code block below.**
+> This skill ships **exactly one** executable: `scripts/health_check.py`. Any command written
+> in `<angle-brackets>` is a **placeholder for a tool you supply** — it is not shipped here, not
+> inlined anywhere in this file, and there is no universal implementation of it (switching
+> traffic, running migrations or restoring a database is entirely platform-specific).
+> Substitute your own command before you rely on the procedure.
+> Placeholders are deliberately written so a paste fails loudly (`no such file or directory`,
+> non-zero exit) instead of appearing to succeed. Only `python3 scripts/health_check.py …`
+> is a real, runnable command in this document.
+
 ### 1. Blue-Green Deployment
 
 **Best for**: Zero-downtime deployments, easy rollbacks
@@ -63,21 +73,22 @@ Before any production deployment:
 4. Monitor for issues
 5. Keep blue as instant rollback option
 
-**Commands:**
+**Commands:** (`<…>` = placeholder you must supply; only the `health_check.py` line is shipped)
 ```bash
 # Deploy to green environment
-./deploy.sh --env green
+<your-deploy-tool> --env green
 
-# Run health checks
+# Run health checks  (REAL — this script ships with the skill)
 python3 scripts/health_check.py --env green
 
 # Switch traffic (gradual)
-./switch_traffic.sh --from blue --to green --percentage 10
-./switch_traffic.sh --from blue --to green --percentage 50
-./switch_traffic.sh --from blue --to green --percentage 100
+<your-traffic-switch-tool> --from blue --to green --percentage 10
+<your-traffic-switch-tool> --from blue --to green --percentage 50
+<your-traffic-switch-tool> --from blue --to green --percentage 100
 
-# If issues: instant rollback
-./switch_traffic.sh --from green --to blue --percentage 100
+# If issues: instant rollback — see "Emergency rollback" under Rollback Procedures.
+# Write your real command there NOW, not while the site is down.
+<your-traffic-switch-tool> --from green --to blue --percentage 100
 ```
 
 ### 2. Canary Deployment
@@ -115,38 +126,40 @@ python3 scripts/health_check.py --env green
 
 ### Phase 1: Pre-Deployment (T-30 minutes)
 
+`<…>` = placeholder you must supply. The two `git` lines are real commands.
 ```bash
 # 1. Verify staging environment
-./verify_staging.sh
+<your-staging-verify-tool>
 
-# 2. Create deployment tag
+# 2. Create deployment tag  (REAL — plain git)
 git tag -a v1.2.3 -m "Release 1.2.3"
 git push origin v1.2.3
 
 # 3. Trigger production build
-./build_production.sh --tag v1.2.3
+<your-build-tool> --tag v1.2.3
 
 # 4. Backup database
-./backup_db.sh --environment production
+<your-db-backup-tool> --environment production
 
 # 5. Notify team
-./notify_slack.sh "🚀 Starting deployment v1.2.3 in 30 minutes"
+<your-notify-tool> "🚀 Starting deployment v1.2.3 in 30 minutes"
 ```
 
 ### Phase 2: Deployment (T-0)
 
+Every line below is a `<…>` placeholder you must supply — none of these ship with the skill.
 ```bash
 # 1. Enable maintenance mode (if needed)
-./maintenance_mode.sh --enable
+<your-maintenance-mode-tool> --enable
 
 # 2. Run database migrations
-./run_migrations.sh --environment production
+<your-migration-tool> --environment production
 
 # 3. Deploy application
-./deploy.sh --environment production --version v1.2.3
+<your-deploy-tool> --environment production --version v1.2.3
 
 # 4. Disable maintenance mode
-./maintenance_mode.sh --disable
+<your-maintenance-mode-tool> --disable
 ```
 
 ### Phase 3: Post-Deployment Health Checks
@@ -162,22 +175,28 @@ git push origin v1.2.3
 # Run health checks
 python3 scripts/health_check.py --environment production
 
-# Output BEFORE you implement the checks (expected, and correct):
-# ✗ API Health: API unreachable: ... api.example.com ...   <- placeholder host
-# ✗ Database: NOT IMPLEMENTED - no verification of Database connectivity was performed...
-# ✗ Cache: NOT IMPLEMENTED - no verification of Cache layer was performed...
-# ✗ Metrics: NOT IMPLEMENTED - no verification of Application metrics was performed...
-# ✗ External Services: NOT IMPLEMENTED - no verification of External services was performed...
-# ✗ SOME CHECKS FAILED
+# Output BEFORE you implement the checks (expected, and correct) — verbatim, exit 1:
+# ✗ API Health: API unreachable: HTTPSConnectionPool(host='api.example.com', port=443): ...
+# ✗ Database: NOT IMPLEMENTED - no verification of Database connectivity was performed. ...
+# ✗ Cache: NOT IMPLEMENTED - no verification of Cache layer was performed. ...
+# ✗ Metrics: NOT IMPLEMENTED - no verification of Application metrics was performed. ...
+# ✗ External Services: NOT IMPLEMENTED - no verification of External services was performed. ...
+# ✗ SOME CHECKS FAILED (0/5 of the checks that ran passed)
 
-# Once implemented and pointed at real hosts, a passing run reads:
-# ✓ API Health: API healthy (HTTP 200)
+# Once implemented and pointed at real hosts, a passing run reads (exit 0):
+# ✓ API Health: API responding (7ms)          <- elapsed ms, NOT "HTTP 200"; the number varies
 # ✓ Database: Database connectivity OK
 # ✓ Cache: Cache layer accessible
 # ✓ Metrics: Metrics within thresholds
-# ✓ External Services: External services reachable
-# ✓ ALL CHECKS PASSED
+# ✓ External Services: <your string — the script ships none for this check>
+# ✓ ALL CHECKS PASSED (5/5)
 ```
+
+Four of those five strings — `API responding (<n>ms)`, `Database connectivity OK`, `Cache layer
+accessible`, `Metrics within thresholds` — are the ones in `health_check.py`'s own implementation
+snippets. `check_external_services()` ships **no** success string: it only returns the fail-closed
+`_not_implemented(...)` message, so whoever implements it chooses the wording. The API line reports
+measured latency, never the status code. Match on the exit code, not on any of this text.
 
 ### Phase 4: Monitoring (T+30 minutes)
 
@@ -213,34 +232,42 @@ Rollback immediately if:
 
 ### Rollback Methods
 
-#### Method 1: Traffic Switch (Fastest)
+#### Method 1: Traffic Switch (Fastest) — "Emergency rollback"
+
+> **🛑 There is no shipped rollback command. `<your-traffic-switch-tool>` is a placeholder.**
+> This skill cannot know how your traffic is steered — a Kubernetes Service selector, an ALB
+> target-group weight, a DNS record and an nginx upstream are four different commands, and
+> guessing one here would be worse than admitting there is none.
+> **Fill in the real command for your platform below, and verify it in staging, BEFORE an
+> incident.** Discovering mid-outage that the fastest rollback path is a placeholder is the
+> failure this warning exists to prevent.
 
 ```bash
-# Blue-green: instant rollback
-./switch_traffic.sh --from green --to blue --percentage 100
+# Blue-green: instant rollback — PLACEHOLDER, replace with your platform's command
+<your-traffic-switch-tool> --from green --to blue --percentage 100
 
-# Verification
+# Verification  (REAL — this script ships with the skill)
 python3 scripts/health_check.py --environment production
 ```
 
 #### Method 2: Version Revert
 
 ```bash
-# Deploy previous version
-./deploy.sh --environment production --version v1.2.2
+# Deploy previous version — PLACEHOLDER
+<your-deploy-tool> --environment production --version v1.2.2
 
-# Run health checks
+# Run health checks  (REAL — this script ships with the skill)
 python3 scripts/health_check.py --environment production
 ```
 
 #### Method 3: Database Rollback
 
 ```bash
-# If migrations were applied
-./rollback_migration.sh --environment production --steps 1
+# If migrations were applied — PLACEHOLDER
+<your-migration-rollback-tool> --environment production --steps 1
 
-# Restore from backup (last resort)
-./restore_db.sh --backup latest --environment production
+# Restore from backup (last resort) — PLACEHOLDER
+<your-db-restore-tool> --backup latest --environment production
 ```
 
 ### Post-Rollback
@@ -250,9 +277,9 @@ python3 scripts/health_check.py --environment production
    python3 scripts/health_check.py --environment production
    ```
 
-2. **Notify stakeholders**
+2. **Notify stakeholders** (placeholder — supply your own notifier)
    ```bash
-   ./notify_slack.sh "⚠️ Deployment v1.2.3 rolled back. System stable on v1.2.2"
+   <your-notify-tool> "⚠️ Deployment v1.2.3 rolled back. System stable on v1.2.2"
    ```
 
 3. **Create postmortem**
@@ -420,8 +447,21 @@ Incident report: [link]
 - **health_check.py**: Deployment health-check harness. **Template — only the API check is
   implemented**; the rest fail closed with `NOT IMPLEMENTED` until you wire them up.
 
-This skill ships exactly that one script — every other procedure here is inline. Do not cite a
-resource file unless it exists on disk (`validate.sh` asserts this).
+That is the **only** executable this skill ships. Do not cite a resource file unless it exists on
+disk (`validate.sh` asserts this).
+
+Every other command in this document is a `<angle-bracketed>` **placeholder for a tool you
+supply** — not shipped, and not inlined elsewhere in this file, because each one is
+platform-specific and this skill cannot know your platform:
+
+- `<your-deploy-tool>` · `<your-traffic-switch-tool>` · `<your-staging-verify-tool>`
+- `<your-build-tool>` · `<your-db-backup-tool>` · `<your-db-restore-tool>`
+- `<your-migration-tool>` · `<your-migration-rollback-tool>`
+- `<your-maintenance-mode-tool>` · `<your-notify-tool>`
+
+Earlier revisions wrote these as bare `./<name>.sh` invocations, which read as runnable commands
+that do not exist — including the emergency rollback. They are bracketed now so a paste fails
+loudly instead of looking like it worked.
 
 ## Best Practices
 
@@ -436,12 +476,14 @@ resource file unless it exists on disk (`validate.sh` asserts this).
 
 ## Quick Reference
 
-**Emergency Rollback:**
+**Emergency Rollback** — ⚠️ **placeholder, NOT a runnable command.** Nothing here switches
+traffic; substitute your platform's command (see Rollback Procedures → Method 1: Traffic
+Switch) and have it written down *before* the incident:
 ```bash
-./switch_traffic.sh --from green --to blue --percentage 100
+<your-traffic-switch-tool> --from green --to blue --percentage 100
 ```
 
-**Health Check:**
+**Health Check** (real — the one shipped executable):
 ```bash
 python3 scripts/health_check.py --env production
 ```

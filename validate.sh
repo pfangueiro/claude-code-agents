@@ -917,15 +917,38 @@ done
 # user typing the slash command — so the heading check certifies a gate that cannot fire.
 #
 # ASSERTION CHOICE: this guard tests the LOGICAL RELATION between the gate's two arms, not any one
-# phrase. Inside the gate section, EVERY sentence that names invocation as a trigger (unconditional
-# / invocation / invoked / user typed / typed `/x` / explicitly asked) must ALSO negate its
-# authority over the abort list — a negation (not|never|n't) reaching an override verb
-# (override|overrule|bypass|waive|supersede|trump|excuse) while referring to the abort/gate — and at
-# least one such sentence must exist. That is a FAMILY of phrasings, not a magic word: a rewrite is
-# free to say "never bypasses the ABORT list" or "does not waive the gate" and still pass (verified
-# by mutation). What it cannot do is state an invocation trigger and leave it un-neutralized, which
-# is exactly the regression. Grepping the repair's own wording would instead have been a magic-word
-# proxy — and would have passed the worst case, an OR arm re-added while the sentence stayed.
+# phrase — and it now tests BOTH sides, because an evader only has to beat the weaker one. The
+# weaker one was the invocation arm: negation was already matched as a synonym family while
+# invocation was a CLOSED 6-token list, so a paraphrase ("the slash command alone suffices") walked
+# straight past. Worse, the negation test was chunk-scoped, so a grant and its own neutralizer
+# could sit in ONE chunk and the chunk read as neutralized — "**Gate:** Explicit invocation, or a
+# multi-step goal, though invocation does not override an ABORT" was a demonstrated FALSE PASS.
+# The previous claim here — that fine-grained chunking stops laundering — was WRONG; it is retracted.
+#
+#   (i) GRANT detector (per LINE, and with NO negation amnesty — this is what actually stops
+#       laundering). Any line in the gate section that references the trigger (invocation /
+#       invoking / invoked / slash command / typing / activation / being asked / an act of invoking
+#       such as "running `/x`") and ALSO grants passage fails outright. Passage is granted three
+#       ways: a sufficiency claim (enough | suffices | sufficient | all it takes | by itself | on
+#       its own | alone is | qualifies | clears/passes/satisfies the gate | green light); a
+#       criterion DECLARATION that is not restrictive (a `Gate:`/`Criteria:`/`Condition:`/`Trigger:`
+#       label, or "proceed|run|use|apply|activate ... when|if", with no "only"); or an
+#       unconditional quantifier ("any invocation", "whenever invoked", "automatically clears").
+#       A negation elsewhere on the line does NOT launder the grant — only a negator governing the
+#       sufficiency word's own clause (no comma/semicolon crossed) counts. So "invocation is not
+#       enough" passes, while "... does not override an ABORT, though running `/execute` is enough"
+#       fails. Breadth is safe on the trigger side here precisely because the grant marker is the
+#       rare, discriminating half — the pairing is what makes it specific.
+#
+#  (ii) ARM + DOMINANCE (chunk level). A chunk naming invocation via the NARROW token list and not
+#       neutralized is an un-neutralized arm; and at least one chunk must assert dominance — a
+#       negation (not|never|n't) reaching an override verb (override|overrule|bypass|waive|
+#       supersede|trump|excuse) while referring to the abort/gate. Dominance RECOGNITION uses the
+#       BROAD trigger family while offence detection keeps the NARROW one: widening recognition can
+#       only credit more honest phrasings ("Typing `/execute` does not waive the gate", which the
+#       narrow list scored NODOMINANCE) and can never admit an evasion, whereas widening offence
+#       would false-fail benign redirect prose like "then run `/investigate` for the root cause".
+#
 # A third conjunct requires the section to declare ABORT conditions at all (>=2 `ABORT` mentions:
 # the dominance statement plus at least one condition), so dominance over an empty set cannot pass
 # vacuously.
@@ -936,36 +959,118 @@ done
 # renaming a heading cannot shrink the guard's scope silently.
 # FULL-ONLY: a prose defect install.sh cannot rewrite, so --quick would heal-loop the watchdog.
 #
-# Gap-tested by mutation: OR arm re-added alongside an intact dominance sentence -> FAIL; whole
-# pre-repair gate restored -> FAIL; one "**Gate:** Explicit invocation, or ..." line appended ->
-# FAIL; dominance sentence deleted -> FAIL; unmodified -> PASS; reworded dominance -> PASS.
+# GAP-TESTED BY EXECUTION against copies of the four gate files. Only results actually observed are
+# recorded here:
+#   the four gate files as they stand (deep-analysis/diverge/execute/investigate) -> OK, all four
+#   dominance sentence deleted                                     -> NODOMINANCE
+#   pre-repair gate restored ("**Gate:** Explicit invocation, or a genuinely hard problem.") -> ARM
+#   ABORT mentions reduced to one                                  -> NOABORTS|1
+#   heading absent                                                 -> NOSECTION
+#   6 legitimate rewordings of the dominance sentence ("never bypasses the ABORT list", "does not
+#     waive the gate", "does not excuse an ABORT", "does not supersede an ABORT", ...) -> OK
+#
+# A PREVIOUS VERSION OF THIS COMMENT claimed "25 evasion strings -> 0 leaks". That claim was false:
+# an independent gate then leaked three of them through the live validate.sh. Corrected, and the
+# two root causes fixed, both of which were structural rather than vocabulary gaps:
+#   A. the denial-amnesty fragments were unanchored, so `pass` matched inside "bypass" and the
+#      sentence "... is enough, though it never bypasses the ABORT list" cancelled its own grant;
+#   B. `trig` — a closed verb list — gated the STRONG signals and short-circuited with `next`, so
+#      "If the user says `/execute`, proceed." and "Whenever the user requests it, run the
+#      protocol." were never examined at all. g_suff/g_always now evaluate independently of trig.
+# Because B showed the blacklist is only ever one paraphrase from a leak, conjunct (0) inverts the
+# approach for bullets: a positive whitelist of the three legitimate shapes. Re-run after the fix
+# (`_gate_dominance` on synthetic sections, output captured):
+#   10 evasions incl. all 3 that leaked and the 4 the reviewers demonstrated -> 0 leaks (7 GRANT, 2 ARM)
+#   2 legitimate restrictive run-conditions ("Run the N-phase protocol only when/for ...") -> OK
+#   the four live gate files (deep-analysis/diverge/execute/investigate)      -> OK, all four
+# Not claimed: evasion-proof. A grant written as a PROSE PARAGRAPH rather than a bullet still faces
+# only conjuncts (i)/(ii), which remain vocabulary-based.
+# KNOWN LIMIT, pre-existing and unchanged by this hardening (verified by running the HEAD analyzer
+# on the same probes — identical verdicts): the ARM conjunct flags ANY chunk naming invocation that
+# is not itself a negation-reaching-an-override-verb. So a conjunctive restrictive criterion ("Run
+# the protocol only when invoked AND the goal is multi-step"), an outright prohibition ("Do not run
+# the protocol when merely invoked"), and neutral prose ("Being invoked is common; check every ABORT
+# row") are all reported ARM. Those are false FAILs — the guard is too strict there — not fail-opens,
+# and ARM fires before the new GRANT conjunct, so exempting them on the GRANT side would be dead code.
 
 _gate_dominance() {
     awk '
         /^##+[[:space:]]*Pre-Flight Gate/ { inb=1; found=1; next }
         inb && /^##+[[:space:]]/          { inb=0 }
-        inb                               { body = body " " $0 }
+        inb {
+            body = body " " $0
+
+            # ---- (i) per-LINE passage-GRANT detector; no same-line negation amnesty ----
+            ln = tolower($0)
+            gsub(/\*\*/, "", ln)   # so **Gate:** reads as gate:
+
+            # ---- (0) fail-CLOSED bullet whitelist -------------------------------------
+            # A blacklist of "granting" phrasings is an arms race the guard keeps losing: three
+            # evasions leaked past conjunct (i) below purely by dodging its verb list. Inside a
+            # gate section the legitimate bullet vocabulary is tiny and formulaic, so the shapes
+            # are enumerated POSITIVELY instead: an ABORT, a ROUTE OUT, or a restrictive
+            # run-condition. Any other bullet fails regardless of what it says, which is what
+            # makes it robust to paraphrase. A false FAIL here is loud and one edit to fix; the
+            # false PASS it replaces was silent. Prose PARAGRAPHS are deliberately not whitelisted
+            # (the dominance sentence is free-form) — they remain covered only by (i) and (ii).
+            if ($0 ~ /^[[:space:]]*[-*][[:space:]]/) {
+                if ($0 !~ /^[[:space:]]*[-*][[:space:]]*(\*\*)?(ABORT|ROUTE OUT)/ \
+                    && ln !~ /(^|[^a-z])only([^a-z]|$)/) {
+                    grants++
+                    if (granttxt == "") { granttxt = $0 }
+                }
+            }
+
+            trig = (ln ~ /invocation|invoking|invoked|unconditional|slash command|user typed|user asks|user asked|explicitly asked|being asked|asked for it|typing|typed|activation/ \
+                    || ln ~ /(^|[^a-z])(run|running|type|typing|typed|call|calling|use|using|say|saying|says|ask|asking|asks|enter|entering|issue|issuing|request|requests|requesting|invoke|invokes)[a-z]*[ \t]+[`"]?\//)
+
+            g_suff = (ln ~ /(^|[^a-z])(enough|suffice|suffices|sufficient|all it takes|by itself|on its own|alone is|is alone|qualifies|qualify)([^a-z]|$)/ \
+                      || ln ~ /(clear|pass|satisf|meet)[a-z]*[ \t]+(this[ \t]+|the[ \t]+)?gate|green.?light/)
+            # Only a negator inside the same clause as the sufficiency word denies it (no , ; . is
+            # crossed): "invocation is not enough" is a denial, "..., though invoking it is enough" is not.
+            # Every fragment is anchored on a non-letter. Unanchored, the `pass` branch matched
+            # INSIDE "bypass", so "… though it never bypasses the ABORT list" — the most natural
+            # disclaimer anyone would write — cancelled its own grant and the line passed clean.
+            if (g_suff && ln ~ /(^|[^a-z])(not|never|n.t|nor|hardly|rarely)([^.,;]*[^a-z])?(enough|suffic|all it takes|by itself|on its own|alone|qualif|clear|pass|satisf|meet|green)/) g_suff = 0
+            g_label  = (ln ~ /(^|[^a-z])(gate|criteria|criterion|condition|conditions|trigger|triggers|threshold|entry|passage)[ \t]*:/)
+            g_cond   = (ln ~ /(^|[^a-z])(proceed|run|use|apply|activate|start|engage)[a-z]*[^.]*[^a-z](when|if)([^a-z]|$)/)
+            g_always = (ln ~ /(any|every)[ \t]+(invocation|invoking|use|time)|whenever[ \t]+(invoked|invoking|the user|you are|it is)|always[ \t]+(proceed|run|qualif|pass)|automatic[a-z]*[ \t]*(proceed|run|qualif|pass|clear|satisf)/)
+            restrictive = (ln ~ /(^|[^a-z])only([^a-z]|$)/)
+
+            # g_suff and g_always are self-identifying ("X alone suffices", "whenever the user …"):
+            # gating them behind `trig` let any paraphrase outside its verb list skip detection
+            # entirely. Only the weak conjuncts (a bare label or a when/if clause) still need a
+            # trigger word to show the subject really is invocation.
+            if (g_suff || g_always || ((g_label || g_cond) && trig && !restrictive)) {
+                grants++
+                if (granttxt == "") { granttxt = $0 }
+            }
+        }
         END {
             if (!found) { print "NOSECTION"; exit }
             tmp = body
             aborts = gsub(/ABORT/, "", tmp)
-            # Sentence-sized chunks so a negation cannot be credited to a different clause.
-            # Bold delimiters split too: gate arms in this codebase are written as **Gate:** /
-            # **Unconditional trigger — ...**, and finer chunks make it harder for an
-            # un-neutralized arm to hide inside a neighbouring negated sentence.
+            # ---- (ii) chunk-level un-neutralized ARM + dominance assertion ----
+            # Sentence-sized chunks, bold delimiters split too. NOTE: chunking alone does NOT stop
+            # laundering (demonstrated false pass) — conjunct (i) above is what does.
             gsub(/[.!?][ \t]+/, "&\n", body)
             gsub(/\*\*/, "\n", body)
             n = split(body, chunk, "\n")
             for (i = 1; i <= n; i++) {
                 low = tolower(chunk[i])
-                inv = (low ~ /unconditional/ || low ~ /invocation/ || low ~ /invoked/ \
+                # NARROW = offence (widening it false-fails benign redirect prose).
+                inv_narrow = (low ~ /unconditional/ || low ~ /invocation/ || low ~ /invoked/ \
                        || low ~ /user typed/ || low ~ /typed `\// || low ~ /explicitly asked/)
-                if (!inv) continue
+                # BROAD = dominance recognition only; can credit more honest phrasings, never admit one.
+                inv_broad = (inv_narrow || low ~ /invoking|slash command|typing|user asks|user asked|being asked|asked for it|activation/ \
+                       || low ~ /(^|[^a-z])(run|running|type|typing|typed|call|calling|use|using|say|saying|ask|asking|enter|entering|issue|issuing)[ \t]+[`"]?\//)
                 neg = (low ~ /(not|never|n.t)[^.]*(override|overrule|bypass|waive|supersede|trump|excuse)/)
                 ref = (low ~ /abort|gate/)
-                if (neg && ref) { ok++ } else { bad++; if (badtxt == "") badtxt = chunk[i] }
+                if (inv_broad && neg && ref) { ok++; continue }
+                if (inv_narrow) { bad++; if (badtxt == "") badtxt = chunk[i] }
             }
             if (bad > 0)    { gsub(/^[ \t]+|[ \t]+$/, "", badtxt); print "ARM|" substr(badtxt, 1, 110); exit }
+            if (grants > 0) { gsub(/^[ \t]+|[ \t]+$/, "", granttxt); print "GRANT|" substr(granttxt, 1, 110); exit }
             if (ok == 0)    { print "NODOMINANCE"; exit }
             if (aborts < 2) { print "NOABORTS|" aborts; exit }
             print "OK"
@@ -987,6 +1092,8 @@ for _gate_file in .claude/skills/*/SKILL.md; do
             pass "$_gname: pre-flight gate is abort-dominant" ;;
         ARM\|*)
             fail "$_gname: un-neutralized invocation arm — invoking the skill satisfies the gate, so its ABORT list is unreachable: ${_gverdict#ARM|}" ;;
+        GRANT\|*)
+            fail "$_gname: gate GRANTS passage on invocation (sufficiency claim / non-restrictive criterion / unconditional trigger) — a same-line disclaimer does not neutralize it: ${_gverdict#GRANT|}" ;;
         NODOMINANCE)
             fail "$_gname: gate never states that invocation does NOT override an ABORT — dominance is unasserted" ;;
         NOABORTS\|*)
@@ -1054,6 +1161,36 @@ if [ -f "install.sh" ]; then
     fi
 fi
 
+# ONE detector, two sweeps (SKILL.md below, and the reference files after it). Factored into a
+# function deliberately: two copies of this awk would drift, and a drifted second copy that matches
+# nothing is a guard reporting green over an unread file — the defect class this file exists to catch.
+_fork_scan() {
+    awk '
+        {
+            low = tolower($0)
+            is_ask   = (low ~ /askuserquestion/)
+            # `task tool` is the canonical spawn mechanism in this product and was missing;
+            # `launch ... agent` catches the instruction phrasing that names no tool.
+            is_agent = (low ~ /explore agent|sub-?agent|subagent_type|spawn|`agent`|agent tool|agent launcher|task tool|launch[^.]*agent/)
+            if (!is_ask && !is_agent) next
+            # A line that states the fork LIMITATION is documentation, not an instruction.
+            # Excused only by a marker ON THIS LINE — either it states the fork limitation,
+            # or it explicitly scopes itself out of fork mode. A caveat elsewhere in the
+            # file must NOT excuse an instruction here (that was the amnesty hole).
+            if ((low ~ /fork/ && low ~ /cannot|can not|unavailable|not available|does not have|do not have|no access/) \
+                || low ~ /un-?forked only|main session only|not in fork|unavailable when forked/) {
+                if (is_ask)   cav_ask = 1
+                if (is_agent) cav_agent = 1
+                next
+            }
+            if (is_ask)   off_ask = 1
+            if (is_agent) off_agent = 1
+            printf "OFF %d: %s\n", FNR, substr($0, 1, 120)
+        }
+        END { printf "SUM %d %d %d %d\n", off_ask+0, off_agent+0, cav_ask+0, cav_agent+0 }
+    ' "$1"
+}
+
 section "Checking Forked Skills Do Not Instruct Spawning"
 
 _fork_files=()
@@ -1078,30 +1215,7 @@ elif [ "${#_fork_files[@]}" -eq 0 ]; then
 else
     for _fork_file in "${_fork_files[@]}"; do
         _fname=$(basename "$(dirname "$_fork_file")")
-        _fscan=$(awk '
-            {
-                low = tolower($0)
-                is_ask   = (low ~ /askuserquestion/)
-                # `task tool` is the canonical spawn mechanism in this product and was missing;
-                # `launch ... agent` catches the instruction phrasing that names no tool.
-                is_agent = (low ~ /explore agent|sub-?agent|subagent_type|spawn|`agent`|agent tool|agent launcher|task tool|launch[^.]*agent/)
-                if (!is_ask && !is_agent) next
-                # A line that states the fork LIMITATION is documentation, not an instruction.
-                # Excused only by a marker ON THIS LINE — either it states the fork limitation,
-                # or it explicitly scopes itself out of fork mode. A caveat elsewhere in the
-                # file must NOT excuse an instruction here (that was the amnesty hole).
-                if ((low ~ /fork/ && low ~ /cannot|can not|unavailable|not available|does not have|do not have|no access/) \
-                    || low ~ /un-?forked only|main session only|not in fork|unavailable when forked/) {
-                    if (is_ask)   cav_ask = 1
-                    if (is_agent) cav_agent = 1
-                    next
-                }
-                if (is_ask)   off_ask = 1
-                if (is_agent) off_agent = 1
-                printf "OFF %d: %s\n", FNR, substr($0, 1, 120)
-            }
-            END { printf "SUM %d %d %d %d\n", off_ask+0, off_agent+0, cav_ask+0, cav_agent+0 }
-        ' "$_fork_file")
+        _fscan=$(_fork_scan "$_fork_file")
         read -r _off_ask _off_agent _cav_ask _cav_agent <<< "$(printf '%s\n' "$_fscan" | awk '$1=="SUM"{print $2, $3, $4, $5}')"
 
         # NO file-level caveat amnesty. A line that states the limitation is already skipped
@@ -1115,6 +1229,89 @@ else
             [ "$QUIET" = "--quiet" ] || printf '%s\n' "$_fscan" | grep '^OFF ' | sed 's/^OFF /         line /'
         fi
     done
+fi
+
+# ---- Coverage extension: the REFERENCE files of fork-declared skills ----------------------
+# The sweep above globbed only `.claude/skills/*/SKILL.md`, and this script contained zero
+# occurrences of `references/` — so a live violation one directory down was invisible to it:
+# `.claude/skills/investigate/references/investigation-frameworks.md:158` instructs an
+# "Explore agent" while investigate declares `context: fork`. A skill's references/ is read by
+# the same forked subagent as its SKILL.md, so the same rule must apply. Same detector, wider glob.
+#
+# SCOPING CHOICE — stated plainly because it leaves something unguarded. Two such violations
+# already exist in reference files that this change does not own and may not edit. They are pinned
+# below by EXACT offending text (not by filename, not by a count, not by line number, which would
+# shift under any edit) and reported as WARN, so the pre-existing debt is visible on every run
+# without failing the build. ANY finding that is not one of those exact lines FAILS — including a
+# NEW violation in the very same file. Residual hole, accepted knowingly: if a pinned line is
+# fixed and later reintroduced verbatim it warns instead of failing.
+#
+# The pin cannot rot into a fail-open: for every baseline entry whose text is STILL PRESENT in its
+# file, the sweep must actually have flagged it. Present-but-unflagged means the detector stopped
+# working, which is a FAIL — that is this guard's own self-test, run against real data every time.
+_fork_ref_baseline=(
+    ".claude/skills/deep-analysis/references/integration-guide.md|Task #1: Research current API surface → Explore agent"
+    ".claude/skills/investigate/references/investigation-frameworks.md|### Pass 1: Broad Sweep (Explore agent)"
+)
+
+section "Checking Forked Skills' Reference Files Do Not Instruct Spawning"
+
+if [ "${#_fork_files[@]}" -eq 0 ]; then
+    pass "Fork-ref guard: no skill declares 'context: fork' — no reference files in scope"
+else
+    _ref_files=()
+    for _fork_file in "${_fork_files[@]}"; do
+        while IFS= read -r _ref; do
+            [ -n "$_ref" ] && _ref_files+=("$_ref")
+        done < <(find "$(dirname "$_fork_file")" -type f -name '*.md' ! -name 'SKILL.md' ! -name '._*' 2>/dev/null | sort)
+    done
+
+    _ref_new=""
+    _ref_hit=""          # newline-joined "path|trimmed text" of everything the sweep flagged
+    # bash 3.2 (what macOS ships) errors on "${arr[@]}" for an EMPTY array under `set -u`, which
+    # would abort validate.sh mid-run rather than report anything. Reachable the moment a forked
+    # skill ships no reference files.
+    for _ref in ${_ref_files[@]+"${_ref_files[@]}"}; do
+        while IFS= read -r _oline; do
+            [ -n "$_oline" ] || continue
+            _otxt=$(printf '%s' "$_oline" | sed 's/^OFF [0-9]*: //; s/^[[:space:]]*//; s/[[:space:]]*$//')
+            _ref_hit="$_ref_hit$_ref|$_otxt
+"
+            _known=0
+            for _b in "${_fork_ref_baseline[@]}"; do
+                [ "$_ref|$_otxt" = "$_b" ] && { _known=1; break; }
+            done
+            if [ "$_known" -eq 1 ]; then
+                warn "Fork-ref guard: KNOWN pre-existing fork violation, baselined not fixed — $_ref:${_oline#OFF }"
+            else
+                _ref_new="$_ref_new $_ref:${_oline#OFF }"
+            fi
+        done < <(_fork_scan "$_ref" | grep '^OFF ' || true)
+    done
+
+    if [ -z "$_ref_new" ]; then
+        pass "Fork-ref guard: no NEW fork violation in ${#_ref_files[@]} reference file(s) of ${#_fork_files[@]} forked skill(s)"
+    else
+        fail "Fork-ref guard: NEW fork violation(s) in a forked skill's reference file — a forked subagent has no Agent launcher / AskUserQuestion:$_ref_new"
+    fi
+
+    # Self-test: a baseline entry still present in its file MUST have been flagged.
+    _ref_rot=""
+    for _b in "${_fork_ref_baseline[@]}"; do
+        _bf="${_b%%|*}"; _bt="${_b#*|}"
+        if [ ! -f "$_bf" ]; then
+            warn "Fork-ref guard: baselined file no longer exists ($_bf) — drop the stale baseline entry"
+        elif ! grep -Fq "$_bt" "$_bf" 2>/dev/null; then
+            warn "Fork-ref guard: baselined violation was FIXED in $_bf — drop the entry so it fails if reintroduced"
+        elif ! printf '%s' "$_ref_hit" | grep -Fqx "$_bf|$_bt"; then
+            _ref_rot="$_ref_rot $_bf"
+        fi
+    done
+    if [ -z "$_ref_rot" ]; then
+        pass "Fork-ref guard: detector self-test — every still-present baselined violation was re-detected"
+    else
+        fail "Fork-ref guard: detector REGRESSED — baselined violation text is still in the file but the sweep no longer flags it:$_ref_rot"
+    fi
 fi
 
 # ============================================================================
@@ -1303,6 +1500,39 @@ if [ -d ".claude/commands" ]; then
     pass "Found $cmd_count command(s)"
 else
     warn "No .claude/commands/ directory found"
+fi
+
+# ============================================================================
+# /execute Agent Matrix Must Enumerate Every Shipped Agent
+# ============================================================================
+#
+# agent-selection.md called itself the "complete reference" while listing 9 of 13 agents, so
+# security-auditor (the Opus agent CLAUDE.md marks CRITICAL) was unselectable from /execute and
+# security work routed to a grep-based scanner instead. The file carries a self-check, but a
+# doc-only invariant is one nobody runs — and that one was itself fail-open (run from the wrong
+# directory, both inputs come back empty and `comm` prints nothing, which reads as clean).
+# Enforced here with both sides asserted non-empty.
+#
+# Gap-tested by mutation: one `### <agent>` heading removed -> FAIL naming it; restored -> PASS.
+
+section "Checking /execute agent matrix covers every shipped agent"
+
+_sel_doc=".claude/skills/execute/references/agent-selection.md"
+if [ -f "$_sel_doc" ] && [ -d ".claude/agents" ]; then
+    _have=$(ls .claude/agents/*.md 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.md$//' | sort)
+    _doc=$(grep -oE '^### [a-z-]+' "$_sel_doc" | sed 's/^### //' | sort)
+    if [ -z "$_have" ] || [ -z "$_doc" ]; then
+        fail "/execute agent matrix: an input was empty (agents=$(printf '%s' "$_have" | grep -c . ), doc=$(printf '%s' "$_doc" | grep -c . )) — comparison not performed"
+    else
+        _missing=$(comm -23 <(printf '%s\n' "$_have") <(printf '%s\n' "$_doc") | tr '\n' ' ')
+        if [ -n "${_missing// /}" ]; then
+            fail "/execute agent matrix omits shipped agent(s): ${_missing% } — unselectable by /execute"
+        else
+            pass "/execute agent matrix enumerates all $(printf '%s\n' "$_have" | grep -c .) shipped agents"
+        fi
+    fi
+else
+    fail "/execute agent matrix: $_sel_doc or .claude/agents missing — coverage unverified"
 fi
 
 # ============================================================================

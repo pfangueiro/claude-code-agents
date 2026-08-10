@@ -47,12 +47,30 @@ refactor/simplify-auth-flow
 
 ### Branch Cleanup
 ```bash
-# Delete merged local branches
-git branch --merged main | grep -v "main" | xargs git branch -d
+# Delete merged local branches. DRY RUN FIRST — this prints exactly what the next
+# command deletes. Keep the exclusion list in sync with your branching model
+# (see branching-models.md): main/develop are permanent, and release/* and hotfix/*
+# are merged into main by definition, so an unfiltered sweep eats them every time.
+git for-each-ref --format='%(refname:short)' --merged main refs/heads/ \
+  | grep -vxE 'main|master|develop|release/.*|hotfix/.*'
+
+# Same list, actually deleted. `git branch -d` still refuses anything not fully
+# merged, and refuses the branch you currently have checked out.
+git for-each-ref --format='%(refname:short)' --merged main refs/heads/ \
+  | grep -vxE 'main|master|develop|release/.*|hotfix/.*' \
+  | while read -r branch; do git branch -d "$branch"; done
 
 # Delete remote tracking branches that no longer exist
 git fetch --prune
 ```
+
+**Never run `git branch --merged main | grep -v "main" | xargs git branch -d`.** Executed against a
+Git Flow repo it deletes `develop`, `release/*` and `hotfix/*`, because "merged into main" is
+exactly what those branches are. Two further faults: `git branch` prefixes the current branch with
+`* `, which arrives at `git branch -d` as a literal `*` argument (`error: branch '*' not found`),
+and `grep -v "main"` is an unanchored substring filter, so it also spares unrelated branches such as
+`feature/remaining-cleanup`. `git for-each-ref` emits bare names with no marker, and `grep -vxE`
+anchors the match to the whole branch name.
 
 ---
 

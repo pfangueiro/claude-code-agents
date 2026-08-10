@@ -185,10 +185,28 @@ credentials are mounted as **secret files** under `/run/secrets/` rather than pa
 environment variables, and **every service declares CPU/memory limits**
 (`deploy.resources.limits` is honoured by `docker compose up` in Compose v2, not just Swarm).
 
-Before `docker compose up`, create the secret file — keep it `chmod 0600`, gitignored, and
-never bake it into an image. Also create the non-secret env file the `api` service declares:
-Compose resolves `env_file` eagerly and **aborts the whole stack** if the path is missing, so
-an absent `api/.env` fails `docker compose config` before a single container starts.
+**Create every host path this file binds — with the right TYPE — before `docker compose up`.**
+Compose resolves `env_file` eagerly and **aborts the whole stack** if the path is missing, so an
+absent `api/.env` fails before a single container starts. The remaining bind sources fail later
+and worse: Docker auto-creates a missing bind source as a **directory**, so every source that is
+meant to be a *file* gets a directory instead and the container dies with
+`not a directory: Are you trying to mount a directory onto a file (or vice-versa)?`. That failure
+is **sticky** — the bogus directory outlives the failed run, so even writing the correct file
+afterwards fails with `is a directory` and every retry reproduces the same error until it is
+removed. Measured on Compose v5.1.2 / Engine 29.4.0, `docker compose config` exits **0** with all
+four of these missing, so it does not work as the pre-flight check.
+
+This file binds six host paths — four files and two directories. Miss any one and the stack does
+not come up:
+
+| Host source | Type | Bound by |
+|---|---|---|
+| `./secrets/postgres_password.txt` | file | `secrets.postgres_password` → `/run/secrets/postgres_password` |
+| `./api/.env` | file | `api` `env_file` |
+| `./init-db.sql` | file | `postgres` → `/docker-entrypoint-initdb.d/init.sql` |
+| `./nginx.conf` | file | `nginx` → `/etc/nginx/nginx.conf` |
+| `./api/uploads` | directory | `api` → `/app/uploads` |
+| `./ssl` | directory | `nginx` → `/etc/nginx/ssl` |
 
 **`depends_on` gates on start, not on readiness — unless you ask for health.** A bare
 `depends_on: [api]` means `condition: service_started`: the dependent is released the moment
@@ -202,12 +220,67 @@ is never a *missing* healthcheck; it is a *lying* one. That is why the `api` pro
 `curl -f`.
 
 ```bash
-mkdir -p secrets && openssl rand -base64 32 > secrets/postgres_password.txt
+# 1. Secret — chmod 0600, gitignored, never baked into an image.
+#    Generate ONLY if absent. This block doubles as the repair procedure for a
+#    half-created stack, so it gets re-run — and an unguarded `>` would mint a new
+#    password while the existing `postgres-data` volume still holds the old one.
+#    Postgres only reads POSTGRES_PASSWORD when it initialises an EMPTY data
+#    directory, so the app then fails auth while `pg_isready` still reports healthy.
+mkdir -p secrets
+if [ ! -s secrets/postgres_password.txt ]; then
+  openssl rand -base64 32 > secrets/postgres_password.txt
+fi
 chmod 0600 secrets/postgres_password.txt
 
-# Non-secret config for the api service. Empty is fine; the file just has to exist.
-mkdir -p api && touch api/.env
+# 2. The directory-type bind sources (this also creates ./api for the env file below).
+mkdir -p api/uploads ssl
+
+# 3. The file-type bind sources. `rmdir` undoes a directory left behind by an earlier
+#    failed run and — unlike `rm -rf` — refuses to delete anything that is not empty.
+for f in api/.env init-db.sql; do
+  if [ -d "$f" ]; then rmdir "$f"; fi
+  [ -e "$f" ] || : > "$f"
+done
+
+# 4. nginx.conf must be a VALID config, not merely present: nginx exits with
+#    `[emerg] no "events" section in configuration` on an empty file, so `touch` here
+#    only trades one startup failure for another. This placeholder starts clean —
+#    replace it with your real proxy rules. Do not add an `upstream` block until those
+#    services are actually up: nginx resolves upstream hostnames at startup and exits
+#    with `host not found in upstream "frontend:3000"` when they are not.
+if [ -d nginx.conf ]; then rmdir nginx.conf; fi
+if [ ! -s nginx.conf ]; then
+  cat > nginx.conf <<'NGINX'
+events {}
+http {
+  server {
+    listen 80;
+    location / { return 200 "nginx up - replace ./nginx.conf with your real config\n"; }
+  }
+}
+NGINX
+fi
+
+# 5. Assert what actually breaks. `docker compose config` does not check any of this.
+rc=0
+for p in secrets/postgres_password.txt api/.env init-db.sql nginx.conf; do
+  [ -f "$p" ] || { echo "NOT A FILE: $p"; rc=1; }
+done
+for p in api/uploads ssl; do
+  [ -d "$p" ] || { echo "NOT A DIR: $p"; rc=1; }
+done
+[ "$rc" -eq 0 ] && echo "all bind sources present with the right type"
 ```
+
+**Recovering a stack that already failed this way takes more than deleting the directories.**
+The `nginx` failure is the kind one — it is loud, and re-running the block above repairs it. The
+`postgres` one is silent: its entrypoint runs `/docker-entrypoint-initdb.d/*` only against an
+**empty** `PGDATA`, so the bad run initialised the database, errored with
+`psql: ... could not read from input file: Is a directory`, and `restart: unless-stopped` brought
+it straight back up reporting **healthy** — with the schema never applied. Measured: after
+replacing the directory with real SQL and `up -d --force-recreate`, the seeded table was still
+absent; only `docker compose down -v` (which drops the `postgres-data` volume) let it apply. A
+green `docker compose ps` is not evidence that your init script ran.
 
 ```yaml
 services:

@@ -18,8 +18,15 @@ How deep-analysis connects with other skills and agents in the toolchain.
 ```
 
 **When to use which:**
-- `/investigate` — full 8-phase root cause protocol with evidence, fix, and prevention
-- `/deep-analysis` — structured reasoning only, no code changes
+- `/investigate` — a reproducible defect whose cause is genuinely **unknown**: 8 phases, including a
+  PROVE phase that tests each hypothesis against evidence before any cause is named
+- `/deep-analysis` — a decision that is genuinely **open**: several defensible answers to weigh, and
+  no cause that needs proving
+
+The split is unknown-cause vs open-decision — **not** "makes code changes vs doesn't". Reasoning
+about an unexplained defect instead of investigating it substitutes plausibility for the PROVE
+phase, so deep-analysis ABORTs on it (SKILL.md ABORT row: *a reproducible defect whose cause is
+genuinely unknown → `/investigate`*).
 
 ### /deep-read (codebase reading engine)
 
@@ -75,14 +82,22 @@ How deep-analysis connects with other skills and agents in the toolchain.
 
 ### performance-optimizer
 
-**Flow:** deep-analysis diagnoses the bottleneck, performance-optimizer implements the fix.
+**Flow:** the cause is already proven; deep-analysis weighs the competing remedies, and
+performance-optimizer implements the one chosen.
 
 ```
-1. /deep-analysis "API response time degraded from 200ms to 2s"
-   → Produces: Root cause identified (e.g., N+1 queries in document list)
+1. /deep-analysis "Profiling proves the dashboard issues 40 queries per page load (N+1 on
+   line items). Eager-load, materialized view, or read-through cache?"
+   → Produces: Trade-off analysis — staleness vs write amplification vs operational cost,
+     with a recommendation and its risks
 2. performance-optimizer agent
-   → Produces: Optimized queries, added indexes, benchmark results
+   → Produces: Implementation of the chosen strategy, before/after benchmark
 ```
+
+**Boundary:** deep-analysis chooses between remedies for a **proven** cause. A slowdown whose cause
+is *not* yet proven — "response time degraded from 200ms to 2s, nobody knows why" — is an ABORT
+here and goes to `/investigate`. Naming a root cause by reasoning alone is exactly the failure the
+PROVE phase exists to prevent.
 
 ### database-architect
 
@@ -99,19 +114,38 @@ How deep-analysis connects with other skills and agents in the toolchain.
 
 ## Decision Tree: Which Tool for the Job
 
+Walk the branches in order. The defect branch is first because it is the one most often
+skipped, and `/deep-analysis` is a narrow exit rather than the fallback.
+
 ```
-Do you need to understand existing code first?
-├── YES: Use /deep-read (then chain to other skills as needed)
-└── NO: Complex problem requiring reasoning?
-    ├── YES: Is it a bug/crash/error?
-    │   ├── YES: Use /investigate (full protocol)
-    │   └── NO: Is it a design/architecture decision?
-    │       ├── YES: Use /deep-analysis
-    │       └── NO: Is it a multi-step implementation?
-    │           ├── YES: Use /execute
-    │           └── NO: Use /deep-analysis
-    └── NO: Use regular response or direct tool calls
+1. Is it a bug, crash, error, regression, or unexplained slowdown?
+   ├── Cause already obvious, or the fix already chosen
+   │     → apply the fix directly
+   └── Cause genuinely unknown
+         → /investigate — NOT /deep-analysis. You still get the reasoning
+           (Phase 4 HYPOTHESIZE calls deep-analysis), plus the Phase 5 PROVE
+           step that deep-analysis has no substitute for.
+
+2. Not a defect. Is it answerable by reading the code or running one command?
+   ├── YES, and the code is large → /deep-read, then answer
+   └── YES                        → answer directly / direct tool calls
+
+3. Is it a multi-step implementation goal?
+   └── YES → /execute (which may call deep-analysis for one open sub-decision)
+
+4. Is it a genuinely open decision — architecture or technology choice, a
+   trade-off, a design space with several defensible answers?
+   ├── The decision is about EXISTING code you have not read
+   │     → /deep-read FIRST, then this step. Reasoning over a codebase you
+   │       have not read produces confident conclusions about imagined code.
+   ├── Option space still too wide to converge → /diverge first, then converge here
+   └── One reasoned conclusion needed          → /deep-analysis
+
+5. Anything else → answer directly.
 ```
+
+`/deep-analysis` is **not** the default exit. Every branch above that routes elsewhere is a
+branch it must not swallow — reaching step 5 means answer directly, not "reason about it anyway".
 
 ---
 
@@ -126,4 +160,4 @@ Do you need to understand existing code first?
 | Performance issue investigation | /investigate (uses deep-analysis in Phase 4) |
 | Technology selection + migration | /deep-analysis → architecture-planner → /execute |
 | Complex bug → fix → prevent | /investigate (full protocol) |
-| Design review of existing code | /deep-analysis + code-quality agent |
+| Design review of existing code | /deep-read → code-quality agent (add /deep-analysis only if an open trade-off survives the read) |

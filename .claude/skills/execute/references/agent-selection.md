@@ -2,6 +2,21 @@
 
 Complete reference for choosing the right tool, agent, skill, or MCP server for each task type.
 
+> **Sync invariant:** the agent list below must enumerate every file in `.claude/agents/`. Verify
+> mechanically, never by hand:
+> ```bash
+> cd "$(git rev-parse --show-toplevel)" || exit 1
+> have=$(ls .claude/agents/*.md 2>/dev/null | xargs -n1 basename | sed 's/\.md$//' | sort)
+> doc=$(grep -oE '^### [a-z-]+' .claude/skills/execute/references/agent-selection.md | sed 's/^### //' | sort)
+> # Both sides MUST be non-empty. Without this the check is fail-open: run from the wrong
+> # directory, both inputs come back empty, comm prints nothing, and "no output" reads as
+> # a clean bill of health for a comparison that never happened.
+> [ -n "$have" ] && [ -n "$doc" ] || { echo "BROKEN: an input was empty — check not performed"; exit 1; }
+> comm -23 <(printf '%s\n' "$have") <(printf '%s\n' "$doc")
+> ```
+> must print nothing. An agent missing here is unselectable by `/execute`.
+> This is also enforced automatically by `validate.sh`, so it cannot silently rot.
+
 ## Decision Flow
 
 ```
@@ -36,8 +51,11 @@ Is the task a simple, directed action?
         ├── Code review → code-quality agent
         ├── Performance work → performance-optimizer agent
         ├── Architecture design → architecture-planner agent
-        ├── Security audit → security-scan command
+        ├── Security audit / auth / OWASP → security-auditor agent (Opus, mandatory)
         ├── DevOps/CI/CD → devops-automation agent
+        ├── Reliability, SLO/SLI, runbooks → sre-specialist agent
+        ├── Docs, README, API reference → documentation-maintainer agent
+        ├── Author a new agent definition → meta-agent agent (Opus)
         └── Production incident → incident-commander agent
 ```
 
@@ -72,6 +90,14 @@ Is the task a simple, directed action?
 **Model:** Sonnet
 **When:** After implementation — as a verification step in Phase 5
 
+### security-auditor (subagent_type: security-auditor)
+**Use for:** Security review, vulnerability assessment, authn/authz validation, OWASP compliance, threat modeling, secrets handling
+**Model:** Opus
+**When:** MANDATORY for any task touching auth, sessions, crypto, input handling, SQL, file upload, or user data — schedule it in the review batch alongside code-quality
+**Do NOT substitute the `security-scan` skill for this agent.** That skill is a pattern/dependency
+scanner producing a severity-ranked report; it cannot reason about a design. Run the scanner *and*
+the agent — the agent is the reviewer.
+
 ### database-architect (subagent_type: database-architect)
 **Use for:** Schema design, migrations, query optimization, indexing, data modeling
 **Model:** Sonnet
@@ -85,10 +111,25 @@ Is the task a simple, directed action?
 **Use for:** Docker, Kubernetes, CI/CD pipelines, infrastructure, deployment
 **Model:** Sonnet
 
+### sre-specialist (subagent_type: sre-specialist)
+**Use for:** Reliability engineering, SLO/SLI definition, error budgets, on-call workflow, capacity planning, chaos engineering, runbooks, postmortems
+**Model:** Sonnet
+**When NOT to use:** An active outage — that is incident-commander. Use sre-specialist before and after, not during
+
 ### incident-commander (subagent_type: incident-commander)
 **Use for:** Production emergencies ONLY — outages, crashes, data loss
 **Model:** Opus
 **Priority:** Immediate — skip normal batch planning
+
+### documentation-maintainer (subagent_type: documentation-maintainer)
+**Use for:** READMEs, API reference, user guides, tutorials, changelog entries, docstrings
+**Model:** Haiku
+**When:** Last batch — docs depend on the final shape of the code
+
+### meta-agent (subagent_type: meta-agent)
+**Use for:** Authoring a NEW agent definition for `.claude/agents/` — activation patterns, tool allowlist, model choice
+**Model:** Opus
+**When NOT to use:** Ordinary work that an existing agent already covers. Creating an agent is not a step in delivering a feature
 
 ### general-purpose (subagent_type: general-purpose)
 **Use for:** Tasks that don't fit any specialist, multi-step research, complex queries
@@ -98,10 +139,9 @@ Is the task a simple, directed action?
 
 | Skill | Trigger | Invocation |
 |-------|---------|------------|
-| bedrock-integration | Any AWS Bedrock API work | Consult reference — don't invoke, read SKILL.md |
 | deep-analysis | Complex reasoning, architecture decisions, debugging | sequential-thinking MCP |
 | library-docs | Need current docs for any library/framework | context7 MCP |
-| security-scan | Security audit of code | `/security-scan` |
+| security-scan | Scan for leaked secrets, dependency CVEs, OWASP code patterns | `/security-scan` — a scanner; it does NOT replace the security-auditor agent |
 | code-review-checklist | Structured code review | Consult reference |
 | git-workflow | Git operations guidance | Consult reference |
 | scheduled-tasks | Schedule recurring checks/polls | CronCreate tool |

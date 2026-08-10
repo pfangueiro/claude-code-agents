@@ -109,7 +109,7 @@ When multiple agents could activate, priority determines which leads:
 For persistent multi-agent work, use Claude Code's team system:
 
 ### Forming a Team (experimental)
-Agent teams are experimental — enable with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`. There is no `TeamCreate` tool (removed v2.1.178); a team forms when the first teammate is spawned via the Agent tool with a `team_name`. One team per session; the shared task list persists under `~/.claude/tasks/`, but the team config is removed at session end.
+Agent teams are experimental — enable with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`. There is no `TeamCreate`/`TeamDelete` tool (removed v2.1.178), and the Agent tool's `team_name` parameter is **deprecated and ignored** — per `sdk-tools.d.ts`, *"The session has a single implicit team."* So there is nothing to create and nothing to name: the team already exists, and spawning an agent with `name:` is what makes that teammate addressable via SendMessage. One team per session; the shared task list persists under `~/.claude/tasks/`, but the team config is removed at session end.
 
 ### Inter-Agent Messaging
 ```
@@ -129,24 +129,34 @@ Workers get limited tools based on their type:
 Workers NEVER get: AskUserQuestion, EnterPlanMode, ExitPlanMode, ScheduleWakeup, WaitForMcpServers
 
 ### Background Agents with Notifications
-Launch agents with `run_in_background: true`. They run async and send a `<task-notification>` when done:
+**Background is the DEFAULT — do not invert this.** Per the shipped `sdk-tools.d.ts`: *"Agents run in
+the background by default; you will be notified when one completes. Set to false to run this agent
+synchronously when you need its result before continuing."* Writing `run_in_background: true` merely
+restates the default — it is a no-op, not the thing that makes an agent asynchronous. Pass
+`run_in_background: false` to BLOCK on the result.
 ```
 Agent:
   prompt: "research the authentication library options"
-  run_in_background: true
   subagent_type: "Explore"
+  # background by default — no flag needed
 ```
-Continue other work while the agent runs. Read its output when notified.
+Continue other work while the agent runs; a `<task-notification>` arrives on completion. Do not sleep or poll.
 
 ### Fork Subagents (Cheap Context Sharing)
-Omit `subagent_type` to fork — inherits full context, shares prompt cache:
+**Omitting `subagent_type` does NOT fork.** Per `sdk-tools.d.ts` the field is optional and selects
+*"the type of specialized agent to use for this task"*; omit it and a **general-purpose** agent runs
+with a **fresh context** — silently, with no error, so you lose the context sharing you assumed.
+Fork by passing the value explicitly:
 ```
 Agent:
   description: "analyze findings"
   prompt: "based on our conversation, summarize..."
-  run_in_background: true
-  # no subagent_type = fork (shares prompt cache, much cheaper)
+  subagent_type: "fork"   # forks the coordinator: inherits context, shares prompt cache
+                          # (`model` is IGNORED for forks — they always inherit the parent model)
 ```
+To share context with a non-fork agent, put it in the `prompt` (an agent knows only what its prompt
+contains), or continue an already-spawned agent with `SendMessage` — that resumes it with its
+context intact.
 
 See `multi-agent-orchestration` skill for comprehensive patterns.
 

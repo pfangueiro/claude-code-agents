@@ -9,6 +9,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Known-open sweep: the 10 remaining majors closed, and the six new defects that sweep introduced.**
+  A 10-fixer / 10-reviewer / 1-gate run repaired the carried-forward majors; an adversarial review then
+  found that six of the ten areas had introduced a new defect, and those were fixed on top. What
+  actually landed:
+  - **ci-cd-templates** — the blue/green cutover was an *invalid* AWS call (`modify-listener` without
+    `Type` in `DefaultActions[0]`, rejected by the aws-cli 2.34.37 parser), so the one step that
+    promotes green could never run; smoke tests ran before the async `create-deployment` finished; the
+    canary job installed `kubectl` with no kubeconfig. Fixed, plus the follow-on: `kubectl rollout
+    status deployment/app` was a **hardcoded name**, which returns 0 instantly against whatever else is
+    already converged — now waits on the manifest just applied (`-f`).
+  - **git-workflow** — `git diff REBASE_HEAD^ REBASE_HEAD` cannot measure "already applied upstream"
+    (it is the commit's own patch against its own parent, independent of upstream); replaced with a
+    check proven in scratch repos to distinguish the two cases. The unguarded
+    `git branch --merged | xargs git branch -d` — which deleted `develop` and `release/1.2.0`, the two
+    branches this same skill marks Permanent — is now guarded.
+  - **library-docs** — three of four worked examples returned zero documentation. Every library ID in
+    the file was re-queried live; `/facebook/react` and `/tailwindlabs/tailwindcss` were bare redirects
+    and the version-pinned ID form does not exist.
+  - **kubernetes-ops** — pinned `replicas` + HPA + Argo `selfHeal` flapped forever. Fixed, and the
+    follow-on too: the new `ignoreDifferences` had **no `name:` selector**, which would have disabled
+    replica drift detection *and* correction for every Deployment in the Application.
+  - **docker-deployment** — four of six bind-mount sources were never created, so Docker made
+    *directories* named `nginx.conf`/`init-db.sql` and the stack failed stickily. Fixed; and since the
+    block doubles as the repair procedure, the unguarded `openssl rand > secrets/…` that would rotate
+    the DB password on re-run (while the volume keeps the old one, leaving `pg_isready` green) is now
+    generate-if-absent.
+  - **ui-guidelines** — antd's static `message`/`notification`/`Modal.confirm` cannot consume
+    `ConfigProvider` context, which is this skill's central mandate; `App.useApp()` now required. The
+    replacement snippet initially fired all three **in the render body** (renders nothing, antd warns)
+    — corrected to event handlers, and an unreproducible theme-hash literal replaced with the
+    comparison that actually holds.
+  - **execute / agent-coordination** — `agent-selection.md` omitted 4 of 13 agents, so security work
+    routed to a grep scanner instead of the Opus `security-auditor`; a phantom `bedrock-integration`
+    row (no such skill has ever existed) removed. Its self-check was **fail-open** — run from the wrong
+    directory both inputs come back empty and `comm` prints nothing, reading as clean — so it is now
+    fail-closed *and* enforced by validate.sh instead of living only in prose.
+    `execute/SKILL.md` still taught "omit `subagent_type` to fork" two lines from a corrected line;
+    omitting does **not** fork, it silently starts a fresh-context general-purpose agent.
+  - **deployment-runbook** — ten cited scripts that are neither shipped nor inline, including the
+    mid-incident rollback, no longer read as runnable; and the documented success string
+    "External services reachable" appears nowhere in the script, which ships none for that check.
+  - **The abort-dominance guard was fail-open two ways** — the defect it exists to prevent, in the
+    guard itself. Its denial-amnesty fragments were unanchored, so `pass` matched inside **bypass** and
+    "… is enough, though it never bypasses the ABORT list" cancelled its own grant; and `trig`, a
+    closed verb list, gated the strong signals and short-circuited, so "If the user says `/execute`,
+    proceed." was never examined at all. Both fixed, and because a blacklist is always one paraphrase
+    from a leak, gate **bullets** are now checked against a positive whitelist of the three legitimate
+    shapes (ABORT / ROUTE OUT / restrictive run-condition) — fail-closed by construction. 10 evasions
+    incl. all four the reviewers demonstrated: 0 leaks; the four live gates still pass. The header
+    comment's false "25 evasions -> 0 leaks" claim is corrected to what was actually re-run, with the
+    remaining limit stated (a grant written as a prose paragraph still faces only the vocabulary
+    conjuncts).
+  - Latent crash: `"${_ref_files[@]}"` on an empty array aborts under `set -u` on **bash 3.2**, which
+    is what macOS ships — reachable as soon as a forked skill has no reference files.
+  241 checks, 0 errors, verified under bash 3.2 and bash 5.
+
 - **Final remediation sweep: the last 13 skills, plus three holes the repairs themselves left.**
   A 15-agent run repaired the assigned defects, verified each independently, then re-tested all 27 skills by
   execution. Measured result on the re-test: **0 broken, 19 of 27 ready to rely on, 8 still carrying a major**
