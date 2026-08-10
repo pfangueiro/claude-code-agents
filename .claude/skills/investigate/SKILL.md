@@ -1,6 +1,6 @@
 ---
 name: investigate
-description: Deep root cause analysis engine. Systematically investigates bugs, crashes, unexpected behavior, and performance issues through an 8-phase diagnostic protocol. Uses structured reasoning (sequential-thinking MCP), multi-pass codebase analysis, git forensics, evidence-based hypothesis testing, and the 5 Whys method. Never jumps to a fix — always proves the root cause first.
+description: Deep root cause analysis engine for defects whose cause is genuinely unknown. Runs an 8-phase diagnostic protocol — observe, reproduce, trace, hypothesize, prove, root cause, fix, prevent — using sequential-thinking MCP, multi-pass code reading, git forensics, competing hypotheses, and the 5 Whys, proving the cause with evidence before any fix. Returns a proven root-cause report; the fix runs only after that diagnosis is approved. Use when the user runs /investigate, or when a bug, crash, exception, stack trace, regression, flaky or intermittent failure, data corruption, memory leak, or unexplained slowness needs its root cause found and nobody knows why. Expensive — do not select it when the cause is already known, for a typo, syntax, import or config mistake, for a feature request or refactor, for "what does this code do", or for applying a fix the user already chose; handle those directly. For a live production outage, route to incident-commander first and investigate after service is restored.
 context: fork
 argument-hint: "<bug description, error message, or symptom>"
 ---
@@ -16,12 +16,13 @@ Systematic deep investigation protocol. Finds the REAL cause, not the surface sy
 - Unconditional: user typed `/investigate` or asked to find a root cause.
 - Conditional self-judge: run only for a real bug / unexpected behavior whose root cause is UNKNOWN.
 - ABORT: a bug whose cause is already known (just fix it), a feature request, an obvious-cause config/syntax error, or anything not actually broken.
+- ROUTE OUT: a **live production outage** — service down, users impacted, an active incident — goes to **incident-commander FIRST**. Mitigate and restore service, then run `/investigate` for the root cause. An unknown cause does NOT admit an outage to this protocol: diagnosis-before-mitigation is paid for in downtime.
 
-**Gate:** Explicit invocation, or a genuine unknown-cause defect. Otherwise fix directly.
+**Gate:** Explicit invocation, or a genuine unknown-cause defect that is not an active production incident. Otherwise fix directly, or route out.
 
 ## Protocol
 
-Process every `/investigate` invocation through these 8 phases in strict order. Never skip a phase. Never jump to Phase 7 (FIX) without completing Phases 1-6.
+Process every `/investigate` invocation through these 8 phases in strict order. Never skip a phase. Never jump to Phase 7 (FIX) without completing Phases 1-6 **and** satisfying the Phase 6 consent gate. Phase 6 is a hard halt: stopping there for approval is a correct completion of the protocol, not a skipped phase.
 
 ---
 
@@ -190,17 +191,23 @@ Write the definitive explanation before touching any code.
 3. Identify the **blast radius** — what else is affected:
    - Are there similar patterns elsewhere in the codebase?
    - Use Grep to find analogous code that may have the same bug
-4. Present the root cause analysis to the user before proceeding to fix
+4. Present the root cause analysis for approval before proceeding to fix
 
 **Output:** Root cause statement, causal chain, blast radius assessment.
 
-**Gate:** User understands and agrees with the diagnosis before any fix is attempted.
+**Gate — HARD HALT. Consent is required, and silence is never consent.** Phase 7 may begin only after the user has seen this diagnosis and approved a fix.
+
+- **Forked run (`context: fork` — the default): STOP HERE.** End the run at Phase 6, return the root-cause report as the final answer, and do NOT enter Phase 7 or Phase 8. Consent cannot be obtained mid-run because a forked run cannot use AskUserQuestion, so the fix is out of scope for this invocation by construction. Close the report with: "Root cause proven — approve to proceed with the fix (Phases 7-8)."
+- **Un-forked only:** present the diagnosis, obtain the user's explicit agreement, then continue to Phase 7. No agreement, no fix — stop here instead.
+- **Resuming:** Phases 7-8 run in a *subsequent* invocation that carries the user's approval of this diagnosis. The approval must be present in that invocation; never infer it from the fact that an investigation already ran.
 
 ---
 
 ### Phase 7: FIX — Address the Root Cause
 
 Fix the root cause, not the symptom. Minimal, targeted change.
+
+**Precondition — do not start without it:** the Phase 6 consent gate is satisfied, i.e. this invocation carries the user's approval of the diagnosis. A forked run has already ended at Phase 6 and never reaches this phase. If you cannot point to that approval, stop and return the Phase 6 report instead.
 
 1. Design the fix:
    - What is the minimum change that eliminates the root cause?
@@ -265,7 +272,7 @@ The investigation isn't complete until recurrence is prevented.
 | 7. FIX | Read, Edit, Write, Bash | code-quality agent for review |
 | 8. PREVENT | Write, Edit, Bash | test-automation agent for tests |
 
-> **Fork note:** `/investigate` runs forked (`context: fork`) for context isolation — the deep trace/evidence stays out of the main conversation and only the root-cause report returns. Forked subagents cannot use the `Agent` launcher or `AskUserQuestion`, so the "When to Use Agents" column (Explore / code-quality / test-automation) and any user clarification apply only when this protocol is run un-forked. When forked (the default), perform those steps inline with the Primary Tools and surface any needed user input in the final report. (Core RCA runs on Primary Tools — Read/Grep/Bash/sequential-thinking/Playwright/context7/GitHub/LSP — all available to subagents, so fork costs nothing for the core.)
+> **Fork note:** `/investigate` runs forked (`context: fork`) for context isolation — the deep trace/evidence stays out of the main conversation and only the root-cause report returns. Forked subagents cannot use the `Agent` launcher or `AskUserQuestion`, so the "When to Use Agents" column (Explore / code-quality / test-automation) and any user clarification apply only when this protocol is run un-forked. When forked (the default), perform those steps inline with the Primary Tools and surface any needed user input in the final report. Because consent cannot be collected mid-run, **Phase 6 is a hard halt when forked** — the run ends with the root-cause report, and Phases 7-8 wait for a subsequent, approval-carrying invocation (see the Phase 6 gate, which is authoritative). (Core RCA runs on Primary Tools — Read/Grep/Bash/sequential-thinking/Playwright/context7/GitHub/LSP — all available to subagents, so fork costs nothing for the core.)
 
 ## Anti-Patterns — What This Skill Prevents
 
@@ -284,6 +291,7 @@ The investigation isn't complete until recurrence is prevented.
 | Situation | Use |
 |-----------|-----|
 | Bug, crash, error, unexpected behavior | `/investigate` |
+| **Live production outage** — service down, users impacted, active incident | **incident-commander FIRST** — mitigate and restore, then `/investigate` for the RCA |
 | Build a new feature | `/execute` |
 | Quick "what does this code do?" | Explore agent directly (main session only) |
 | Performance slow but unclear why | `/investigate` (treat slowness as symptom) |

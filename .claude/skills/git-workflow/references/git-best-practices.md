@@ -74,7 +74,10 @@ git fetch --prune
 ### PR Review Etiquette
 - Respond to all comments, even if just acknowledging
 - Resolve conversations after addressing feedback
-- Don't force-push after review has started (use fixup commits)
+- Don't force-push after review has started (use fixup commits) — it invalidates in-progress review
+  comments and can drop commits a reviewer already pulled
+- Never force-push `main` or any protected/shared branch, at any stage; on your own unshared branch
+  prefer `git push --force-with-lease`, which aborts if someone else has pushed since your last fetch
 - Squash fixup commits before merge
 
 ---

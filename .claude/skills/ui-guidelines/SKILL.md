@@ -1,6 +1,6 @@
 ---
 name: ui-guidelines
-description: Comprehensive UI/UX guidelines for building React/Next.js components with Ant Design, shadcn/ui charts, and consistent styling. Use when creating forms, tables, modals, cards, or any UI component. Enforces color palette, typography, spacing (8px/12px/16px/24px), animations, and component patterns specific to the application.
+description: Ant Design house style for one specific React/Next.js application — its design tokens, color palette, typography scale, 8px/12px/16px/24px spacing, animations, and copy-ready patterns for antd tables, forms in modals, selectable card grids, loading states, avatars, and status tags. Use when building or restyling a form, table, modal, card, list, or page layout in a codebase that already standardizes on Ant Design and the new component must match the existing design system. It is not a general UI or accessibility reference, does not apply to Tailwind, Material UI, Chakra, or plain-CSS projects, and carries no chart or data-visualization guidance — charts, graphs, dashboards, and palette choice for data viz are out of scope.
 ---
 
 # UI Guidelines for Application

@@ -3,21 +3,48 @@
 Skill Initializer - Creates a new skill from template
 
 Usage:
-    init_skill.py <skill-name> --path <path>
+    init_skill.py <skill-name> --path <path> [--description <text>]
 
 Examples:
     init_skill.py my-new-skill --path skills/public
     init_skill.py my-api-helper --path skills/private
     init_skill.py custom-skill --path /custom/location
+
+The skill name and the optional description are validated BEFORE anything is
+written. A skill whose frontmatter breaks the documented constraints cannot be
+loaded, so scaffolding one only defers the failure to a point where it is
+harder to diagnose.
 """
 
+import re
 import sys
 from pathlib import Path
 
 
+# Frontmatter constraints Claude Code enforces when loading a skill. Source:
+# https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices
+#   name        — max 64 characters; lowercase letters, numbers and hyphens only;
+#                 no XML tags; no reserved words "anthropic" / "claude"
+#   description — non-empty; max 1024 characters; no XML tags
+PLATFORM_MAX_NAME_LENGTH = 64
+PLATFORM_MAX_DESCRIPTION_LENGTH = 1024
+RESERVED_NAME_WORDS = ('anthropic', 'claude')
+
+# quick_validate.py, the validator this skill ships, is stricter than the platform on
+# name length and hyphen hygiene. Emitting a name it rejects just moves the failure
+# one step downstream, so its rules are enforced here too.
+VALIDATOR_MAX_NAME_LENGTH = 40
+
+DEFAULT_DESCRIPTION = (
+    "[TODO: Complete and informative explanation of what the skill does and when to "
+    "use it. Include WHEN to use this skill - specific scenarios, file types, or "
+    "tasks that trigger it.]"
+)
+
+
 SKILL_TEMPLATE = """---
 name: {skill_name}
-description: "[TODO: Complete and informative explanation of what the skill does and when to use it. Include WHEN to use this skill - specific scenarios, file types, or tasks that trigger it.]"
+description: "{description}"
 ---
 
 # {skill_title}
@@ -191,17 +218,98 @@ def title_case_skill_name(skill_name):
     return ' '.join(word.capitalize() for word in skill_name.split('-'))
 
 
-def init_skill(skill_name, path):
+def validate_skill_name(skill_name):
+    """
+    Return an error message if skill_name cannot be used, or None if it is usable.
+
+    Ordered platform-fatal rules first, then the stricter house rules quick_validate.py
+    applies, so the reported error is the most consequential one.
+
+    The character-set rule is also what makes the name safe as a path segment: '/',
+    '\\' and '.' are all outside [a-z0-9-], so 'skills/../etc' and '../escape' are
+    rejected here and can never reach the mkdir.
+    """
+    if not skill_name or not skill_name.strip():
+        return "Skill name is empty"
+    if len(skill_name) > PLATFORM_MAX_NAME_LENGTH:
+        return (f"Skill name is {len(skill_name)} characters (max "
+                f"{PLATFORM_MAX_NAME_LENGTH}) — the skill would not load")
+    if re.search(r'<[^>]*>', skill_name):
+        return "Skill name cannot contain XML tags"
+    if not re.match(r'^[a-z0-9-]+$', skill_name):
+        return (f"Skill name '{skill_name}' must contain only lowercase letters, "
+                f"numbers and hyphens")
+    reserved = next((word for word in RESERVED_NAME_WORDS if word in skill_name), None)
+    if reserved:
+        return (f"Skill name '{skill_name}' contains the reserved word '{reserved}' "
+                f"— names cannot contain 'anthropic' or 'claude'")
+    if skill_name.startswith('-') or skill_name.endswith('-') or '--' in skill_name:
+        return (f"Skill name '{skill_name}' cannot start or end with a hyphen, or "
+                f"contain consecutive hyphens")
+    if len(skill_name) > VALIDATOR_MAX_NAME_LENGTH:
+        return (f"Skill name is {len(skill_name)} characters — quick_validate.py "
+                f"rejects anything over {VALIDATOR_MAX_NAME_LENGTH}")
+    return None
+
+
+def validate_description(description):
+    """
+    Return an error message if description cannot be used, or None if it is usable.
+
+    Beyond the documented platform rules, double quotes, backslashes and newlines are
+    rejected: the template writes the description as a double-quoted YAML scalar, and
+    any of those three would produce frontmatter that no longer parses. Refusing is
+    honest; silently mangling the text is not.
+    """
+    if description is None:
+        return None
+    if not description.strip():
+        return "Description is empty"
+    if len(description) > PLATFORM_MAX_DESCRIPTION_LENGTH:
+        return (f"Description is {len(description)} characters (max "
+                f"{PLATFORM_MAX_DESCRIPTION_LENGTH}) — the skill would not load")
+    if '<' in description or '>' in description:
+        return "Description cannot contain XML tags (or the characters < and >)"
+    if '"' in description or '\\' in description or '\n' in description:
+        return ('Description cannot contain a double quote, a backslash or a newline '
+                '— it is written as a quoted YAML scalar; write it into SKILL.md '
+                'directly instead')
+    return None
+
+
+def validate_output_path(path):
+    """Return an error message if path cannot host a skill directory, else None."""
+    if not path or not path.strip():
+        return "Output path is empty"
+    parent = Path(path).expanduser()
+    if parent.exists() and not parent.is_dir():
+        return f"Output path exists but is not a directory: {parent}"
+    return None
+
+
+def init_skill(skill_name, path, description=None):
     """
     Initialize a new skill directory with template SKILL.md.
 
     Args:
         skill_name: Name of the skill
         path: Path where the skill directory should be created
+        description: Optional frontmatter description; the TODO placeholder is used
+            when omitted
 
     Returns:
         Path to created skill directory, or None if error
+
+    Nothing is written until the name, path and description all validate, so a
+    rejected invocation leaves no half-built skill behind.
     """
+    for error in (validate_skill_name(skill_name),
+                  validate_output_path(path),
+                  validate_description(description)):
+        if error:
+            print(f"❌ Error: {error}")
+            return None
+
     # Determine skill directory path
     skill_dir = Path(path).resolve() / skill_name
 
@@ -222,7 +330,8 @@ def init_skill(skill_name, path):
     skill_title = title_case_skill_name(skill_name)
     skill_content = SKILL_TEMPLATE.format(
         skill_name=skill_name,
-        skill_title=skill_title
+        skill_title=skill_title,
+        description=description if description else DEFAULT_DESCRIPTION
     )
 
     skill_md_path = skill_dir / 'SKILL.md'
@@ -270,28 +379,47 @@ def init_skill(skill_name, path):
     return skill_dir
 
 
+def parse_args(argv):
+    """
+    Return (skill_name, path, description) for a well-formed invocation, else None.
+
+    description is None when --description was not supplied.
+    """
+    if len(argv) < 4 or argv[2] != '--path':
+        return None
+    rest = argv[4:]
+    if rest and (len(rest) != 2 or rest[0] != '--description'):
+        return None
+    return argv[1], argv[3], (rest[1] if rest else None)
+
+
 def main():
-    if len(sys.argv) < 4 or sys.argv[2] != '--path':
-        print("Usage: init_skill.py <skill-name> --path <path>")
+    parsed = parse_args(sys.argv)
+    if parsed is None:
+        print("Usage: init_skill.py <skill-name> --path <path> [--description <text>]")
         print("\nSkill name requirements:")
         print("  - Hyphen-case identifier (e.g., 'data-analyzer')")
         print("  - Lowercase letters, digits, and hyphens only")
-        print("  - Max 40 characters")
+        print("  - No XML tags; cannot contain 'anthropic' or 'claude'")
+        print(f"  - Max {VALIDATOR_MAX_NAME_LENGTH} characters "
+              f"(platform limit is {PLATFORM_MAX_NAME_LENGTH})")
         print("  - Must match directory name exactly")
+        print("\nDescription requirements (when --description is given):")
+        print(f"  - Non-empty, max {PLATFORM_MAX_DESCRIPTION_LENGTH} characters")
+        print("  - No XML tags, double quotes, backslashes or newlines")
         print("\nExamples:")
         print("  init_skill.py my-new-skill --path skills/public")
         print("  init_skill.py my-api-helper --path skills/private")
         print("  init_skill.py custom-skill --path /custom/location")
         sys.exit(1)
 
-    skill_name = sys.argv[1]
-    path = sys.argv[3]
+    skill_name, path, description = parsed
 
     print(f"🚀 Initializing skill: {skill_name}")
     print(f"   Location: {path}")
     print()
 
-    result = init_skill(skill_name, path)
+    result = init_skill(skill_name, path, description)
 
     if result:
         sys.exit(0)

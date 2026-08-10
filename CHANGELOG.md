@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Round-3 P0: a git recipe that destroyed user work, three gates that passed on failure, and over-triggering
+  fixed at the only layer that can fix it.** Each repair was proven by running the real tool against the doc's own
+  text, with a negative control reproducing the original failure:
+  - **`git-workflow` silently discarded the user's own commits.** `--ours`/`--theirs` **invert under rebase** —
+    measured on git 2.50.1: under merge `--ours` is your work, under rebase `--ours` is the *upstream* — while the
+    skill taught rebase-first with merge-only semantics. Following it mid-rebase resolved conflicts to upstream and
+    threw away the replayed commits, leaving a clean-looking file and no warning. Added the merge-vs-rebase mapping
+    (flags and `:2:`/`:3:` stages), a resolve-by-branch-name procedure, and guards on every unguarded destructive
+    one-liner (`reset --hard`, `clean -fd`, `rebase --skip`, branch delete, force-push).
+  - **`docker-deployment`'s compose healthcheck reported HEALTHY on a 503** — A/B'd against a container actually
+    serving 503 (Engine 29.4.0): old probe → healthy, `curl -fsS … || exit 1` → unhealthy. `depends_on:
+    service_healthy` had been releasing dependents against a dead API.
+  - **`observability-stack`'s SLO alerts could not fire for a single-service outage.** Verified with real
+    `promtool`: grouping `by (service)` alone still yields `got:[]` — the `or 0 *` padding is also load-bearing,
+    because an all-5xx service has no numerator series. Also replaced the `loki` exporter, deleted from
+    collector-contrib in v0.131.0, which took down the metrics and traces pipelines too (config resolution is
+    all-or-nothing).
+  - **`investigate` ran its fix phases unconsented when forked.** Phase 6's consent gate is unsatisfiable without
+    AskUserQuestion; the contradiction is now closed at both ends — the rule that forbade stopping was amended, not
+    just the gate.
+  - **`skill-creator`'s placeholder gate was bypassable by renaming** the generated examples; detection is now
+    content-based, plus the documented name/description constraints are enforced at scaffold time.
+  - **`deployment-runbook` exit codes now discriminate**: `2` usage, `1` failed, `3` partial, `0` ok. A blue-green
+    invocation that argparse rejected used to return the code the script documented as "everything that ran
+    passed", and a *typo'd* `--check` was indistinguishable from a probe that ran and failed.
+  - **Over-triggering fixed at the description layer.** Anthropic's docs are explicit that only `name` +
+    `description` are pre-loaded and decide activation — SKILL.md is read only *after* selection — so every
+    body-level entry gate written in earlier rounds was at the wrong layer. Eight descriptions rewritten (third
+    person, what + specifically when, heavyweight skills stating the narrow conditions that warrant them), and the
+    four body lines that then contradicted their own new description were corrected.
+
+### Fixed
+
 - **Retiring a skill left it live — a hole the retirement itself exposed.** Deleting `api-guidelines` from the
   repo did **not** remove it from `~/.claude/skills`: the skills orphan-prune is deliberately scoped to names the
   framework *currently* ships (so it can never touch the user's own skills), which means a **deleted** framework

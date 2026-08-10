@@ -14,11 +14,24 @@ Checks performed (the contract advertised in skill-creator/SKILL.md, Step 5):
 Fail-closed: a check that cannot verify its subject reports failure, never
 success. Unfilled template content (a '[TODO: ...]' description, an untouched
 init_skill.py example file, a body with no instructions) is a validation
-failure, not a pass. Frontmatter is parsed with PyYAML, never scraped, so
-YAML that Claude Code would reject is rejected here too; if PyYAML is missing
-the run fails rather than passing an unverified skill.
+failure, not a pass. Template detection keys on file CONTENT, not on filename,
+so renaming or relocating a generated example does not hide it. Frontmatter is
+parsed with PyYAML, never scraped, so YAML that Claude Code would reject is
+rejected here too; if PyYAML is missing the run fails rather than passing an
+unverified skill.
+
+Frontmatter constraints enforced here mirror the documented platform rules
+(name: max length, lowercase letters/numbers/hyphens only, no XML tags, no
+'anthropic'/'claude'; description: non-empty, max 1024 characters, no XML
+tags). See:
+https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices
+
+Exit code 0 means loadable. An advisory warning (SKILL.md body over the
+documented 500-line budget) is appended to the success message and does not
+change the exit code, because an over-budget skill still loads.
 """
 
+import os
 import sys
 import re
 from pathlib import Path
@@ -47,14 +60,32 @@ TEMPLATE_NAMES = {
     'untitled-skill', 'changeme', 'change-me', 'your-skill', 'your-skill-name',
 }
 
-# Files init_skill.py generates as examples, keyed to a marker sentence unique
-# to the untouched template. Present + unmodified means the skill was never
-# finished.
-TEMPLATE_RESOURCES = [
-    ('scripts/example.py', 'This is a placeholder script'),
-    ('references/api_reference.md', 'This is a placeholder for detailed reference documentation'),
-    ('assets/example_asset.txt', 'This placeholder represents where asset files would be stored'),
-]
+# Reserved words a name may not contain, per the documented frontmatter constraints.
+# Compared against the already-lowercased name as substrings: 'claude-tools' and
+# 'anthropic-helper' are both rejected by the platform, not just the bare words.
+RESERVED_NAME_WORDS = ('anthropic', 'claude')
+
+# Marker sentences copied verbatim from the bodies init_skill.py writes. Detection is
+# CONTENT-based rather than path-based: the generated examples are recognized by what
+# is inside them, so renaming scripts/example.py to scripts/helper.py — or moving it
+# anywhere else in the skill — no longer hides an unfinished scaffold. Compared as
+# bytes so a binary asset cannot raise a decode error and slip through on a
+# technicality.
+TEMPLATE_MARKERS = (
+    b'This is a placeholder script',
+    b'This is a placeholder for detailed reference documentation',
+    b'This placeholder represents where asset files would be stored',
+    b'Delete this entire "Structuring This Skill" section when done',
+    b'[TODO: Replace with the first main section based on chosen structure]',
+)
+
+# init_skill.py (which defines those markers) and this validator (which lists them)
+# necessarily contain the marker strings as literals, and both live in the
+# skill-creator toolchain directory. Skip that one directory so validating
+# skill-creator itself is not a guaranteed false positive. Resolved from __file__, so
+# it is fixed by where the validator lives — a skill under validation cannot rename or
+# symlink its way into the exemption.
+_SELF_DIR = Path(__file__).resolve().parent
 
 RESOURCE_DIRS = ('scripts', 'references', 'assets')
 
@@ -78,9 +109,18 @@ REFERENCE_PATTERNS = [
 # this skill's bundle, so they are excluded from reference scanning.
 FENCE_RE = re.compile(r'^\s*(?:```|~~~)')
 
+# The platform hard limit is 64 characters; 40 is this framework's stricter house
+# style. Stricter is safe (nothing that passes here can breach the platform limit), so
+# it stays as-is — loosening it to 64 would weaken a validator, not fix one.
 MAX_NAME_LENGTH = 40
 MIN_DESCRIPTION_LENGTH = 20
+# Documented platform maximum for the description field. Over this the skill does not
+# load, so it is a failure, not a warning.
+MAX_DESCRIPTION_LENGTH = 1024
 MIN_BODY_LENGTH = 50
+# Documented budget: "Keep SKILL.md body under 500 lines for optimal performance."
+# Advisory — an over-budget skill still loads, so this warns and does not fail.
+MAX_BODY_LINES = 500
 
 
 def _parse_frontmatter(frontmatter):
@@ -157,6 +197,42 @@ def _find_missing_references(body, skill_path):
     return sorted(missing)
 
 
+def _find_template_content(skill_path):
+    """
+    Return a failure message if any file in the skill still holds an unmodified
+    init_skill.py template body, or None when the skill is clean.
+
+    The whole skill tree is walked and matched on CONTENT, so a generated example is
+    caught under any filename and in any directory. Symlinked directories are not
+    followed (no traversal out of the skill, no cycles); symlinked files are read
+    normally, so pointing at a template through a link does not hide it either.
+
+    Fail-closed: a file that cannot be read is reported as a failure, because an
+    unreadable file is an unchecked file.
+    """
+    for dirpath, dirnames, filenames in os.walk(skill_path, followlinks=False):
+        here = Path(dirpath).resolve()
+        if here == _SELF_DIR or _SELF_DIR in here.parents:
+            dirnames[:] = []
+            continue
+        dirnames.sort()
+        for filename in sorted(filenames):
+            path = Path(dirpath) / filename
+            try:
+                data = path.read_bytes()
+            except OSError as err:
+                rel = os.path.relpath(path, skill_path)
+                return (f"'{rel}' could not be read for template-placeholder "
+                        f"validation: {err}")
+            for marker in TEMPLATE_MARKERS:
+                if marker in data:
+                    rel = os.path.relpath(path, skill_path)
+                    return (f"'{rel}' is still an unmodified init_skill.py template "
+                            f"(contains \"{marker.decode()}\") — customize it or "
+                            f"delete it")
+    return None
+
+
 def _find_placeholder(text):
     """Return the placeholder marker found in text, or None."""
     for pattern in PLACEHOLDER_PATTERNS:
@@ -221,6 +297,10 @@ def validate_skill(skill_path):
         return False, f"Name '{name}' is {len(name)} characters (max {MAX_NAME_LENGTH})"
     if name in TEMPLATE_NAMES:
         return False, f"Name '{name}' is an unfilled template placeholder — give the skill a real name"
+    reserved = next((word for word in RESERVED_NAME_WORDS if word in name), None)
+    if reserved:
+        return False, (f"Name '{name}' contains the reserved word '{reserved}' — "
+                       f"names cannot contain 'anthropic' or 'claude'")
     if name != skill_path.resolve().name:
         return False, (f"Name '{name}' must match the skill directory name "
                        f"'{skill_path.resolve().name}' exactly")
@@ -238,6 +318,10 @@ def validate_skill(skill_path):
     if len(description) < MIN_DESCRIPTION_LENGTH:
         return False, (f"Description is too short ({len(description)} characters, "
                        f"minimum {MIN_DESCRIPTION_LENGTH}) to explain what the skill does and when to use it")
+    if len(description) > MAX_DESCRIPTION_LENGTH:
+        return False, (f"Description is {len(description)} characters (max "
+                       f"{MAX_DESCRIPTION_LENGTH}) — the skill will not load; move "
+                       f"detail into the SKILL.md body")
     if ' ' not in description:
         return False, "Description must be a sentence explaining what the skill does and when to use it"
 
@@ -262,16 +346,16 @@ def validate_skill(skill_path):
         return False, ("SKILL.md references files that do not exist: "
                        f"{', '.join(missing_refs)}")
 
-    for rel_path, marker in TEMPLATE_RESOURCES:
-        resource = skill_path / rel_path
-        if not resource.is_file():
-            continue
-        try:
-            if marker in resource.read_text():
-                return False, (f"'{rel_path}' is still the unmodified init_skill.py example "
-                               f"— customize it or delete it")
-        except (OSError, UnicodeDecodeError):
-            return False, f"'{rel_path}' could not be read for template-placeholder validation"
+    template_content = _find_template_content(skill_path)
+    if template_content:
+        return False, template_content
+
+    # --- 5. Advisory budget (does not fail: an over-budget skill still loads) ---
+    body_lines = len(body.strip().splitlines())
+    if body_lines > MAX_BODY_LINES:
+        return True, (f"Skill is valid! Warning: SKILL.md body is {body_lines} lines, "
+                      f"over the documented {MAX_BODY_LINES}-line budget — split "
+                      f"detail into references/ files")
 
     return True, "Skill is valid!"
 

@@ -190,6 +190,17 @@ never bake it into an image. Also create the non-secret env file the `api` servi
 Compose resolves `env_file` eagerly and **aborts the whole stack** if the path is missing, so
 an absent `api/.env` fails `docker compose config` before a single container starts.
 
+**`depends_on` gates on start, not on readiness — unless you ask for health.** A bare
+`depends_on: [api]` means `condition: service_started`: the dependent is released the moment
+the container exists, not when it can serve. Only `condition: service_healthy` waits, and it
+is only as truthful as the dependency's own `healthcheck` — a probe that exits 0 on a 503
+reports *healthy* and releases dependents against a dead service. Measured on Docker Compose
+v5.1.2 / Engine 29.4.0: `service_healthy` against a dependency that declares **no** healthcheck
+is not silently downgraded — Compose fails closed with
+`dependency failed to start: container ... has no healthcheck configured`. So the hazard here
+is never a *missing* healthcheck; it is a *lying* one. That is why the `api` probe below uses
+`curl -f`.
+
 ```bash
 mkdir -p secrets && openssl rand -base64 32 > secrets/postgres_password.txt
 chmod 0600 secrets/postgres_password.txt
@@ -250,8 +261,20 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # Only exit code 0 is healthy. `-f` makes curl exit 22 on any >= 400 response,
+    # `-S` keeps the reason on stderr for `docker inspect`, and `|| exit 1`
+    # normalises every failure to one documented value. A probe WITHOUT `-f`
+    # (plain `curl -s`, or an http.get with no status check) exits 0 on a 503 —
+    # Compose then marks this container healthy and releases `frontend` against a
+    # dead API. See the `depends_on` note above.
+    #
+    # curl must exist INSIDE the api image: node:*-alpine ships busybox wget only
+    # and python:*-slim ships neither. Either add `RUN apk add --no-cache curl` to
+    # the api Dockerfile, or probe with a runtime already in the image, e.g.
+    #   ["CMD","node","-e","require('http').get('http://localhost:4000/health',r=>process.exit(r.statusCode===200?0:1))"]
+    # `CMD-SHELL` also needs a shell, so distroless images must use the exec form.
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4000/health')"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:4000/health || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -330,6 +353,10 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./ssl:/etc/nginx/ssl:ro
     depends_on:
+      # Bare list = `condition: service_started`: nginx starts as soon as these
+      # containers exist, NOT when they can serve. Neither declares a healthcheck,
+      # so `service_healthy` cannot be used here until one is added — Compose fails
+      # closed on a healthcheck-less dependency (see the depends_on note above).
       - frontend
       - api
     networks:
@@ -394,16 +421,58 @@ RUN npm ci --only=production && \
 # Security: Set file permissions
 COPY --chown=app:app . .
 
-# Security: Drop capabilities
+# The writable data dir must exist AND be owned by `app` before USER, because a
+# named volume inherits the ownership of the image path it is mounted over. Skip
+# this and the volume lands root-owned and the non-root process cannot write to it.
+RUN mkdir -p /app/data && chown app:app /app/data
+
+# Security: Run as the non-root user created above.
+# This does NOT drop Linux capabilities. Measured: with only `USER app` the
+# bounding set is unchanged (CapBnd 00000000a80425fb); running as non-root merely
+# empties the *effective* set, and the container can regain those caps via a
+# setuid or file-capability binary. Dropping them is a runtime control — see below.
 USER app
 
-# Security: Read-only filesystem
-# (mount volumes for writable areas)
+# Declares the writable data dir. VOLUME does NOT make the filesystem read-only.
+# Measured on this image with no runtime flags, the app user can still write /tmp,
+# /var/tmp and /dev/shm — and because `COPY --chown=app:app` handed it ownership of
+# its own code it can overwrite /app/index.js and persist across a restart.
+# A read-only rootfs is a runtime control — see below.
 VOLUME ["/app/data"]
 
 EXPOSE 3000
 
 CMD ["node", "index.js"]
+```
+
+**Capability dropping and a read-only rootfs cannot be set in a Dockerfile.** They are
+runtime controls, so a Dockerfile comment claiming them delivers nothing. Apply them where the
+container is actually started, or they are not in effect:
+
+```yaml
+# docker compose — verified to yield CapBnd 0000000000000000, NoNewPrivs 1,
+# a read-only rootfs, and a writable /app/data + /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    volumes:
+      - appdata:/app/data
+```
+
+```bash
+# docker run equivalent
+docker run --cap-drop=ALL --security-opt no-new-privileges:true \
+  --read-only --tmpfs /tmp -v appdata:/app/data myapp:latest
+```
+
+Verify rather than assume — a hardening flag that silently failed to apply is the same as not
+setting it:
+
+```bash
+docker run --rm --cap-drop=ALL --security-opt no-new-privileges:true --read-only myapp:latest \
+  sh -c 'grep -E "^(CapBnd|NoNewPrivs)" /proc/self/status'
+# Expect: CapBnd 0000000000000000  and  NoNewPrivs 1
 ```
 
 ### .dockerignore

@@ -1,6 +1,6 @@
 ---
 name: security-scan
-description: Scan the project or specified path for security vulnerabilities. Auto-activates on security-sensitive code patterns (auth, crypto, input handling, SQL, file uploads). Also available as /security-scan command.
+description: Runs a repository or path security scan and produces a severity-ranked report covering hardcoded secrets and credential patterns, dependency CVEs via npm audit and equivalents, OWASP code patterns such as SQL injection, XSS, SSRF, path traversal and insecure deserialization, unsafe file permissions, and missing HTTP security headers. Use when a scan, audit, or vulnerability check is actually being asked for — /security-scan, scan for vulnerabilities, security audit, check for leaked secrets — or before shipping new code that adds authentication, cryptography, input handling, SQL, or file uploads. Reading, explaining, or editing code that merely happens to touch auth or SQL does not warrant it, since it emits a full scan report rather than an inline observation.
 ---
 
 # Security Scan
@@ -13,7 +13,7 @@ Comprehensive security vulnerability scanner that checks for secrets, dependency
 
 **Explicit invocation:** `/security-scan [path]`
 
-**Autonomous activation** (via security-auditor agent) when code touches:
+**Consider a scan** (typically requested, or invoked by the security-auditor agent) before shipping code that touches:
 - Authentication or authorization logic
 - Cryptographic operations
 - User input handling or validation

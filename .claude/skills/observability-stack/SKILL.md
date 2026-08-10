@@ -69,51 +69,88 @@ groups:
     # Evaluate no faster than 1m: the 3d-range rule below is expensive to recompute.
     interval: 1m
     rules:
-      # Availability SLI: ratio of successful requests
+      # Every SLI is grouped `by (service)` — the dimension the SLO is defined on.
+      #
+      # An ungrouped `sum(rate(...))` collapses the whole fleet into one number and
+      # DILUTES a single service's outage below every burn-rate threshold. With nine
+      # healthy services at 100 req/min and one 10 req/min service that is 100% down,
+      # the fleet error ratio is 10/910 = 0.011 — under the 0.0144 fast-burn
+      # threshold. The service is completely dead and nobody is paged.
+      #
+      # The `or 0 * ...` fallback is not decoration. Binary operators drop series with
+      # no match on the other side, so a service serving *only* 5xx has no
+      # `status!~"5.."` numerator, is dropped by the division, and vanishes from the
+      # SLI — the total-outage case is precisely the one that disappears. The fallback
+      # pins those services to 0 instead of absent. Grouping alone does NOT fix this;
+      # both halves are required. (Verified with `promtool test rules` — see below.)
+
+      # Availability SLI: ratio of successful requests, per service
       - record: sli:availability:ratio_rate5m
         expr: |
-          sum(rate(http_requests_total{status!~"5.."}[5m]))
-          / sum(rate(http_requests_total[5m]))
+          (
+            sum by (service) (rate(http_requests_total{status!~"5.."}[5m]))
+            or 0 * sum by (service) (rate(http_requests_total[5m]))
+          )
+          / sum by (service) (rate(http_requests_total[5m]))
 
       # Long-window availability SLIs — REQUIRED by the multi-window burn-rate
       # alerts below. Every window an alert references must be recorded here:
       # Prometheus returns an empty vector for an unknown metric name, so an
       # alert ANDing an undefined rule silently never fires and logs no error.
+      # Keep the grouping identical across windows: `and` matches on the full label
+      # set, so a rule grouped differently from its partner never intersects.
       - record: sli:availability:ratio_rate30m
         expr: |
-          sum(rate(http_requests_total{status!~"5.."}[30m]))
-          / sum(rate(http_requests_total[30m]))
+          (
+            sum by (service) (rate(http_requests_total{status!~"5.."}[30m]))
+            or 0 * sum by (service) (rate(http_requests_total[30m]))
+          )
+          / sum by (service) (rate(http_requests_total[30m]))
 
       - record: sli:availability:ratio_rate1h
         expr: |
-          sum(rate(http_requests_total{status!~"5.."}[1h]))
-          / sum(rate(http_requests_total[1h]))
+          (
+            sum by (service) (rate(http_requests_total{status!~"5.."}[1h]))
+            or 0 * sum by (service) (rate(http_requests_total[1h]))
+          )
+          / sum by (service) (rate(http_requests_total[1h]))
 
       - record: sli:availability:ratio_rate6h
         expr: |
-          sum(rate(http_requests_total{status!~"5.."}[6h]))
-          / sum(rate(http_requests_total[6h]))
+          (
+            sum by (service) (rate(http_requests_total{status!~"5.."}[6h]))
+            or 0 * sum by (service) (rate(http_requests_total[6h]))
+          )
+          / sum by (service) (rate(http_requests_total[6h]))
 
       # 3d window needs >= 3d retention; evaluate this group no faster than
       # `interval: 1m` — long-range rate() is expensive to recompute.
       - record: sli:availability:ratio_rate3d
         expr: |
-          sum(rate(http_requests_total{status!~"5.."}[3d]))
-          / sum(rate(http_requests_total[3d]))
+          (
+            sum by (service) (rate(http_requests_total{status!~"5.."}[3d]))
+            or 0 * sum by (service) (rate(http_requests_total[3d]))
+          )
+          / sum by (service) (rate(http_requests_total[3d]))
 
-      # Latency SLI: ratio of requests faster than 300ms
+      # Latency SLI: ratio of requests faster than 300ms, per service
       - record: sli:latency:ratio_rate5m
         expr: |
-          sum(rate(http_request_duration_seconds_bucket{le="0.3"}[5m]))
-          / sum(rate(http_request_duration_seconds_count[5m]))
+          (
+            sum by (service) (rate(http_request_duration_seconds_bucket{le="0.3"}[5m]))
+            or 0 * sum by (service) (rate(http_request_duration_seconds_count[5m]))
+          )
+          / sum by (service) (rate(http_request_duration_seconds_count[5m]))
 ```
 
 ### Error Budget Calculation
 
 ```promql
-# Error budget remaining (30-day window)
+# Error budget remaining (30-day window), for one service.
+# The SLI is recorded `by (service)`, so name the service you mean — left
+# unqualified this returns one series per service, never a fleet-wide number.
 1 - (
-  (1 - avg_over_time(sli:availability:ratio_rate5m[30d]))
+  (1 - avg_over_time(sli:availability:ratio_rate5m{service="api"}[30d]))
   / (1 - 0.999)  # SLO target
 )
 ```
@@ -125,6 +162,12 @@ Google SRE recommended approach — alert on budget consumption rate, not raw th
 ```yaml
 groups:
   - name: slo_alerts
+    # Each operand below is a per-service vector (the SLIs are recorded
+    # `by (service)`), and `1 - <vector>` keeps the vector's labels while dropping
+    # __name__. Both sides of every `and` therefore carry exactly `{service="..."}`
+    # and intersect per service, so ONE service breaching its own budget pages on
+    # its own. If the two windows in an `and` are ever grouped differently, the
+    # label sets stop matching and the alert can never fire.
     rules:
       # Fast burn: 2% budget consumed in 1 hour → page
       - alert: SLOBurnRateCritical
@@ -138,7 +181,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "High error budget burn rate (fast burn)"
+          summary: "High error budget burn rate (fast burn) for service {{ $labels.service }}"
           runbook_url: "https://wiki/runbooks/slo-burn-rate"
 
       # Slow burn: 5% budget consumed in 6 hours → page
@@ -153,7 +196,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "Elevated error budget burn rate (slow burn)"
+          summary: "Elevated error budget burn rate (slow burn) for service {{ $labels.service }}"
 
       # Gradual burn: 10% budget consumed in 3 days → ticket
       - alert: SLOBurnRateTicket
@@ -167,6 +210,62 @@ groups:
         labels:
           severity: ticket
 ```
+
+### Verify the Rules Actually Fire
+
+**A silent alert and a healthy service look identical.** A PromQL selector naming a
+metric that was never recorded — a typo, a deleted recording rule, a window nobody
+recorded — returns an **empty vector**. Empty is not an error: the alert evaluates
+to zero series, never fires, logs nothing, and the panel renders "No data", which
+reads as green. The failure mode of a broken SLO alert is silence, and silence is
+exactly what a healthy system produces.
+
+`promtool check rules` **cannot catch this.** It parses and type-checks rule files
+with no TSDB attached, so it has no way to know whether any series ever satisfies a
+selector. It passes an ungrouped, fleet-diluted SLI and a misspelled metric name
+with the same cheerful `SUCCESS`. Treat exit 0 as "the YAML is well-formed", never
+as "this alert can fire".
+
+The only check that catches both is a
+[rule unit test](https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/),
+which synthesizes a TSDB and asserts on the alerts produced:
+
+```yaml
+# slo_test.yml
+rule_files:
+  - sli_rules.yml
+  - slo_alerts.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      # One busy healthy service...
+      - series: 'http_requests_total{service="api", status="200"}'
+        values: '0+1000x120'
+      # ...and one small service that is 100% down. Fleet-wide the error ratio is
+      # only 10/1010 = 0.0099, UNDER the 0.0144 fast-burn threshold — so with an
+      # ungrouped SLI this test fails with `got:[]` and checkout dies unnoticed.
+      - series: 'http_requests_total{service="checkout", status="500"}'
+        values: '0+10x120'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: SLOBurnRateCritical
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: checkout
+            exp_annotations:
+              summary: "High error budget burn rate (fast burn) for service checkout"
+              runbook_url: "https://wiki/runbooks/slo-burn-rate"
+```
+
+```bash
+promtool check rules sli_rules.yml slo_alerts.yml  # syntax only — proves nothing about firing
+promtool test rules slo_test.yml                   # actually evaluates the alert
+```
+
+Run both in CI. Every SLO alert needs at least one unit test that would fail if the
+alert stopped firing — that is the only way the "Tested" box below is honest.
 
 ## Alert Quality Checklist
 
@@ -280,8 +379,18 @@ processors:
 exporters:
   prometheus:
     endpoint: 0.0.0.0:8889
-  loki:
-    endpoint: http://loki:3100/loki/api/v1/push
+  # Loki ingests OTLP natively, so push logs with the core `otlphttp` exporter.
+  # It appends the signal path itself: this posts to http://loki:3100/otlp/v1/logs.
+  #
+  # Do NOT use the old `loki` exporter here. It was deprecated on 2024-07-09 and
+  # DELETED from opentelemetry-collector-contrib in v0.131.0 (2025-07-29), and
+  # collector config resolution is ALL-OR-NOTHING: one unknown exporter type fails
+  # the whole unmarshal at startup — `'exporters' unknown type: "loki" for id:
+  # "loki"` — and the process never comes up, so the failure happens before any
+  # pipeline is built. A stale logs exporter therefore takes the metrics and
+  # traces pipelines down with it — you lose all three signals, not just logs.
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
   otlp/tempo:
     endpoint: tempo:4317
     tls:
@@ -296,7 +405,7 @@ service:
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [loki]
+      exporters: [otlphttp/loki]
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]

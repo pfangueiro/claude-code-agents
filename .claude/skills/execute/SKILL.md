@@ -1,6 +1,6 @@
 ---
 name: execute
-description: Orchestrated task execution engine. Decomposes any goal into small atomic tasks, plans dependencies, selects the right agent/tool/MCP server for each, executes in optimally parallel batches, and tracks everything. Use when given a complex, multi-step goal that benefits from structured decomposition and full tool utilization.
+description: Orchestrated task execution engine. Decomposes a large goal into atomic tasks, plans their dependencies, selects an agent, tool, or MCP server per task, runs them in parallel batches, tracks progress, and reports what changed. Warranted only for genuinely multi-step work — roughly three or more atomic tasks spanning multiple files, agents, or tools that benefit from dependency planning and parallelism, such as execute this, orchestrate this, decompose this goal, or build a feature end to end. Because it plans and batches before acting, it is not for a single edit, a one-file change, a question, a lookup, or anything one or two tool calls already resolve — do those directly.
 argument-hint: "<goal description>"
 ---
 

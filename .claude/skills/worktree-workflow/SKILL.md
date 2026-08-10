@@ -1,6 +1,6 @@
 ---
 name: worktree-workflow
-description: Git worktree isolation for parallel development. Use EnterWorktree/ExitWorktree to create isolated branches for features, experiments, or risky changes. Auto-activates on worktree, parallel branches, isolated work, experiment in isolation, side branch, parallel feature.
+description: Git worktree isolation via the EnterWorktree and ExitWorktree tools — creating a separate checkout on its own branch, working in it, then keeping or discarding it. Use when the user explicitly asks for a worktree, or when work genuinely needs a second checkout of a git repository — a risky refactor that may be thrown away, a hotfix on a release branch while feature work continues in the main tree, or two implementations compared side by side. Triggers include worktree, EnterWorktree, ExitWorktree, isolated checkout, side branch. It does not cover parallelism in general — parallel sub-agents, parallel tool calls, and concurrent tasks are unrelated — nor an ordinary branch switch, a single-file experiment revertible with git checkout, or a non-git project.
 ---
 
 # Worktree Workflow
@@ -18,7 +18,7 @@ Use git worktrees for parallel, isolated development without affecting the main 
 ## Tools
 
 ### EnterWorktree
-Creates an isolated git worktree with a new branch based on HEAD.
+Creates an isolated git worktree on a new branch. The default base ref is `fresh` — the branch is cut from `origin/<default-branch>`, NOT from local HEAD; pass `worktree.baseRef: head` to branch from HEAD. Use only when the user explicitly asks for a worktree.
 
 **Parameters:**
 - `name` (optional) — Descriptive name for the worktree (e.g., `fix-auth-bug`, `experiment-caching`). Auto-generated if omitted.

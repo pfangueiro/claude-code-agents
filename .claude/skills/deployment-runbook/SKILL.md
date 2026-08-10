@@ -91,7 +91,12 @@ python3 scripts/health_check.py --env green
 4. Roll back if metrics degrade
 
 **Monitoring During Canary:**
-- Error rate < baseline + 1%
+- Error rate < 0.1% **absolute** — the Phase 4 healthy ceiling — *and* ≤ baseline + 0.05pp.
+  The canary must never admit more error than a healthy deployment: an allowance of
+  "baseline + 1%" would pass a canary running 10x the error rate the gate exists to
+  protect, and it contradicts the > 99.9% success rate below (which *is* < 0.1% error).
+  The > 1% figure in [Rollback Procedures](#when-to-rollback) is the emergency rollback
+  trigger, not a canary pass mark.
 - Response time < baseline + 10%
 - Success rate > 99.9%
 
@@ -269,6 +274,24 @@ python3 scripts/health_check.py --env production --check api
 # Verbose output
 python3 scripts/health_check.py --env production --verbose
 ```
+
+`--env` accepts any key of `ENVIRONMENTS` in the script: `production`, `staging`, and the
+blue-green slots `blue` and `green` (the choices are derived from that dict, so the accepted
+set cannot drift from the configured one).
+
+**Exit codes — a CI gate must distinguish these. Only `0` is a pass:**
+
+| Code | Meaning |
+|------|---------|
+| `0`  | FULL run, every check passed — the only result that green-lights a deploy |
+| `1`  | at least one check that RAN failed |
+| `2`  | USAGE error (unknown `--env`, bad flag): the invocation was rejected, so NO check ran and nothing was verified |
+| `3`  | PARTIAL run (`--check`): everything that ran passed, but not every check ran, so nothing was gated |
+| `130`| interrupted |
+
+`2` and `3` both mean *the deployment was not gated* and differ only in why. They are kept
+distinct on purpose: a usage error must never share a code with a "what ran passed" result,
+or a gate reading that code would score a mistyped command as a success-ish state.
 
 See `scripts/health_check.py` for implementation.
 

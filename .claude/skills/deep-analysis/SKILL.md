@@ -1,6 +1,6 @@
 ---
 name: deep-analysis
-description: Structured multi-step reasoning for complex problems using the sequential-thinking MCP server. Use when facing architectural decisions, performance bottlenecks, complex debugging, design trade-offs, technology selection, or any problem requiring rigorous step-by-step analysis with hypothesis testing.
+description: Runs a long, structured multi-step reasoning chain over the sequential-thinking MCP server, with branching, revision, and explicit hypothesis verification. Reserved for consequential, genuinely open problems whose answer cannot be reached by reading the code — an architecture decision with several defensible options, an unexplained performance bottleneck, technology selection, design trade-offs, or a migration and risk strategy. Because it is slow and token-heavy it is not for questions with one correct answer, factual or syntax lookups, summarizing or explaining existing code, a defect with an obvious cause, or applying a fix already chosen. Prefer /investigate for root-cause work on a reproducible defect, and /diverge when the need is a wide option space rather than one reasoned conclusion.
 context: fork
 argument-hint: "<problem description or question requiring deep reasoning>"
 ---

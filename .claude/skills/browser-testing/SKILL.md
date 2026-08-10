@@ -1,6 +1,6 @@
 ---
 name: browser-testing
-description: E2E browser testing with Playwright MCP. Visual regression, responsive design, cross-browser testing, codegen sessions. Auto-activates on e2e test, visual regression, screenshot test, browser test, Playwright, responsive test, cross-browser, visual verification.
+description: Hand-driven end-to-end browser testing through the Playwright MCP server — navigating pages, filling forms, asserting HTTP responses, capturing screenshots for visual regression, checking responsive breakpoints and cross-browser behaviour, and recording codegen sessions. Use when a browser genuinely has to be driven interactively and no runnable suite covers the need — authoring e2e, screenshot, or visual-verification coverage where none exists, debugging a failure a suite already surfaced, or exploring a live page. It does not cover running a repository's existing suite. When the repo has a playwright.config file, a tests or e2e directory, or a test:e2e script, running that suite is the correct action and this skill is not required.
 ---
 
 # Browser Testing with Playwright MCP
@@ -9,7 +9,7 @@ Comprehensive patterns for end-to-end browser testing, visual regression, and re
 
 ## First: prefer the repo's own test suite
 
-This skill auto-activates on the bare word "Playwright", including in repos that already have a Playwright suite. Before hand-driving any MCP tool, check for one:
+This skill is for hand-driving a browser when no runnable suite covers the need. It deliberately does NOT claim the bare word "Playwright" — running an existing suite is the correct action. Before hand-driving any MCP tool, check for one:
 
 - `playwright.config.{ts,js,mjs}`, a `tests/` / `e2e/` directory, or a `test:e2e` / `playwright` script in `package.json`.
 

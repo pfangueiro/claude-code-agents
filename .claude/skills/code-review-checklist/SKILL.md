@@ -1,6 +1,6 @@
 ---
 name: code-review-checklist
-description: Systematic code review guidelines and checklist. Use this skill when reviewing code, conducting pull request reviews, or establishing code quality standards. Provides comprehensive review criteria covering functionality, design, testing, security, and documentation. Complements the code-quality agent.
+description: A ten-category human code-review rubric — correctness, design, readability, testing, security, performance, documentation, dependencies, error handling, and style — plus process guidance on feedback tone, review size, and a pre-submit self-review pass. Use when a review verdict is actually being produced on a concrete change, such as reviewing a pull request or diff, self-reviewing before opening one, or defining a team's code review standards. Triggers include code review, review this PR, pull request review, review checklist, review standards. It is a rubric rather than an analyzer, so it does not apply to merely reading or explaining code, answering how something works, debugging, refactoring, or running linters, formatters, and type checkers.
 ---
 
 # Code Review Checklist
@@ -12,7 +12,7 @@ This skill provides a systematic approach to code reviews, ensuring consistent q
 ## When to Use This Skill
 
 - Reviewing pull requests
-- Conducting pair programming sessions
+- Defining or documenting a team's review standards
 - Establishing code review standards for your team
 - Self-reviewing code before submitting
 - Mentoring junior developers on code quality
