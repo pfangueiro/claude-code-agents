@@ -112,6 +112,15 @@ MCP servers provide external tools that extend Claude Code. See `.claude/lib/mcp
 - `smart-file-guard.json` — prompt hook: LLM-based file protection for edge cases
 - `pre-commit-review.json` — agent hook: automated code review before git commit
 
+## Testing the Guards
+
+`validate.sh`'s guards are themselves proven by an executable mutation suite: `bash tests/gap/run.sh`
+injects a real defect for each guard, asserts `validate.sh` FAILS with the expected message, and
+includes a baseline plus a negative control. It runs on every push (`gap-tests` job) — a guard whose
+mutation is not caught fails CI. Read [docs/FAILURE-MODES.md](./docs/FAILURE-MODES.md) before adding
+a guard; the two hard rules are that every guard must be gap-tested, and a fix without a guard is
+incomplete.
+
 ## Observability
 
 Built-in dashboard aggregating Claude Code JSONL session logs across all projects. Files in `observability/`, installed to `~/.claude/analytics/`. Run `claude-obs` to collect data and open the dashboard. Hook-generated events (`agent-events.jsonl`, `permission-audit.jsonl`, `session-summaries.jsonl`) are also ingested.

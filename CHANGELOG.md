@@ -33,7 +33,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     deletes someone's session history). Gap-tested three ways: emit `settings.json` from the owned set
     → FAIL; make `--dry-run` touch a file → FAIL; remove the `--uninstall` arm → FAIL.
 
+### Added
+
+- **`tests/gap/` — the prose "gap-tested by mutation" claims are now executable.** 21 mutations, each
+  injecting a real defect and asserting `validate.sh` fails with the specific expected message, plus a
+  baseline and a **negative control** (a harmless edit must NOT be caught). Runs on every push as the
+  `gap-tests` CI job; ~30s, bash 3.2 clean, deterministic. This closes the failure that produced the
+  worst defects this session: a comment claiming a guard was verified, which nobody re-ran, and which
+  turned out to be false. Guarded in turn — `validate.sh` now fails if the suite is missing, empty, or
+  unwired from CI, because a guard suite that can be deleted silently is no guard at all.
+  Its first run found a real interaction: the suite's scratch copy omitted `tests/` and `.github/`, so
+  the *unmutated* baseline failed the new suite-presence guard and the runner correctly ABORTED rather
+  than score 21 mutations against a tree validate.sh already rejected. The copy was fixed, not the guard.
+
+- **`docs/FAILURE-MODES.md`** — the nine defect classes from six stress-test rounds, each grounded in
+  the incident that produced it, with a contributor checklist. This is the artifact that lets someone
+  other than the original author maintain the framework.
+
 ### Fixed
+
+- **The statusline could not distinguish a release from 18 commits past it.** It rendered a bare
+  `⚙<version>` read from `~/.claude/.framework-version`, so every teammate would see the same glyph
+  regardless of which commit they actually ran. `install.sh` now records `ahead=<n>` at install time
+  (no git call in the statusline hot path) and the segment renders `⚙3.2.0+18` when ahead of the tag.
+
+- **New guard: version consistency.** `SCRIPT_VERSION` is the single source of truth and is what
+  reaches the statusline; the README badge and EXTENSIBILITY.md must agree. The whole remediation
+  effort ran displaying "3.1.1" while 18 commits past that tag, with three files confidently agreeing
+  on a number none of them had verified. Gap-tested.
 
 - **A live heal-loop: an invalid `CLAUDE_CODE_EFFORT_LEVEL` was convicted hourly and never healed.**
   `validate.sh --quick` FAILS on a value outside `low|medium|high|xhigh`, and that failure is exactly

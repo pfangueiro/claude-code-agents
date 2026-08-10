@@ -156,7 +156,13 @@ _gap_strip_ansi() {
 gap_copy_repo() {
     local src="$1" dest="$2" d f
     mkdir -p "$dest" || return 1
-    for d in .claude global-config observability; do
+    # tests and .github are included because validate.sh reads them: the gap-test-suite guard
+    # asserts tests/gap/run.sh + mutations exist and are wired into .github/workflows/validate.yml.
+    # Omitting them made the UNMUTATED copy fail that guard, which correctly aborted the whole run
+    # ("the baseline does not pass, so no verdict below can be trusted") rather than scoring 21
+    # mutations against a tree validate.sh already rejected. The copy must contain everything
+    # validate.sh reads, or the baseline is not a baseline.
+    for d in .claude global-config observability tests .github; do
         [ -d "$src/$d" ] && { cp -R "$src/$d" "$dest/" || return 1; }
     done
     # Top-level regular files, minus the ones nothing reads and one 15MB media

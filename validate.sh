@@ -143,13 +143,35 @@ run_structural_checks() {
         fi
     fi
 
+    # The mutation suite is what proves the guards in this file actually detect anything. If it
+    # were deleted, only the CI workflow would notice — and a workflow that references a missing
+    # script is one more silently-skipped gate. Assert the suite exists, is non-empty, and is
+    # actually wired into CI. Deliberately NOT a pinned mutation count: that would fire on every
+    # legitimate addition and train people to edit the guard instead of reading it.
+    # Gap-tested by mutation (re-run on every push by tests/gap/ — see docs/FAILURE-MODES.md): run.sh removed -> FAIL; mutations/ emptied -> FAIL; CI reference
+    # dropped -> FAIL; unmodified -> PASS.
+    _gap_missing=""
+    [ -f "tests/gap/run.sh" ] || _gap_missing="$_gap_missing tests/gap/run.sh"
+    _gap_n=$(ls tests/gap/mutations/*.sh 2>/dev/null | wc -l | tr -d ' ')
+    [ "${_gap_n:-0}" -gt 0 ] || _gap_missing="$_gap_missing tests/gap/mutations/*.sh"
+    if [ -f ".github/workflows/validate.yml" ]; then
+        grep -q 'tests/gap/run.sh' .github/workflows/validate.yml || _gap_missing="$_gap_missing CI-wiring"
+    else
+        _gap_missing="$_gap_missing .github/workflows/validate.yml"
+    fi
+    if [ -n "$_gap_missing" ]; then
+        fail "Gap-test suite incomplete —$_gap_missing (the guards in this file would then be unproven)"
+    else
+        pass "Gap-test suite present ($_gap_n mutations) and wired into CI"
+    fi
+
     # Version consistency: install.sh's SCRIPT_VERSION is the single source of truth, and it is
     # what lands in ~/.claude/.framework-version and therefore in the statusline glyph. A doc
     # claiming a different number is how a teammate ends up certain they are on a release they are
     # not on. Caught in practice: the framework ran a whole remediation effort at "3.1.1" while
     # 18 commits past that tag, with the README badge, EXTENSIBILITY.md and the marker all agreeing
     # on a number none of them had verified.
-    # Gap-tested by mutation: bump SCRIPT_VERSION alone -> FAIL naming each stale doc; align -> PASS.
+    # Gap-tested by mutation (re-run on every push by tests/gap/ — see docs/FAILURE-MODES.md): bump SCRIPT_VERSION alone -> FAIL naming each stale doc; align -> PASS.
     if [ -f "install.sh" ]; then
         _sv=$(grep -m1 '^SCRIPT_VERSION=' install.sh | cut -d'"' -f2)
         if [ -z "$_sv" ]; then
@@ -191,7 +213,7 @@ run_structural_checks() {
     #   (b) the owned-path enumeration never names user data. Uninstall removes exactly what this
     #       enumeration emits, so a single stray entry here is a command that deletes someone's
     #       session history, personal CLAUDE.md, or telemetry.
-    # Gap-tested by mutation: emit "$HOME/.claude/settings.json" from _framework_owned_paths -> FAIL;
+    # Gap-tested by mutation (re-run on every push by tests/gap/ — see docs/FAILURE-MODES.md): emit "$HOME/.claude/settings.json" from _framework_owned_paths -> FAIL;
     # make cmd_dry_run touch a file -> FAIL; unmodified -> PASS.
     if [ -f "install.sh" ]; then
         _dr_home=$(mktemp -d 2>/dev/null)
@@ -1632,7 +1654,7 @@ fi
 # directory, both inputs come back empty and `comm` prints nothing, which reads as clean).
 # Enforced here with both sides asserted non-empty.
 #
-# Gap-tested by mutation: one `### <agent>` heading removed -> FAIL naming it; restored -> PASS.
+# Gap-tested by mutation (re-run on every push by tests/gap/ — see docs/FAILURE-MODES.md): one `### <agent>` heading removed -> FAIL naming it; restored -> PASS.
 
 section "Checking /execute agent matrix covers every shipped agent"
 
@@ -1664,7 +1686,7 @@ fi
 # A guard that merely asserted the line exists would have passed over it, so this one
 # feeds the regex the strings that matter and checks the verdict.
 #
-# Gap-tested by mutation: default reverted to `[0-9]+ ...` -> FAIL; line deleted -> FAIL;
+# Gap-tested by mutation (re-run on every push by tests/gap/ — see docs/FAILURE-MODES.md): default reverted to `[0-9]+ ...` -> FAIL; line deleted -> FAIL;
 # unmodified -> PASS.
 
 section "Checking /optimize test gate rejects zero-test runs"
