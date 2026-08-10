@@ -95,17 +95,29 @@ Replace `"\"authenticated\":true"` with whatever substring your auth endpoint re
 5. mcp__playwright__playwright_navigate → same page (fresh load)
 6. mcp__playwright__playwright_screenshot → name: "homepage", savePng: true,
      downloadsDir: "<repo>/.screenshots/current"
-7. Run an external comparator with an explicit threshold, e.g. ImageMagick:
-     compare -metric AE .screenshots/baseline/homepage.png \
-                        .screenshots/current/homepage.png diff.png
-   (prints the differing-pixel count; requires ImageMagick installed)
+7. Compare — but assert the dimensions FIRST (see the size-mismatch rule below):
+     B=.screenshots/baseline/homepage.png; C=.screenshots/current/homepage.png
+     db=$(magick identify -format '%wx%h' "$B") ; dc=$(magick identify -format '%wx%h' "$C")
+     [ -n "$db" ] && [ -n "$dc" ] || { echo "FAIL: cannot read dimensions"; exit 1; }
+     [ "$db" = "$dc" ] || { echo "FAIL: size mismatch $db vs $dc — comparison invalid"; exit 1; }
+     compare -metric AE "$B" "$C" diff.png     # differing-pixel count; needs ImageMagick
+   NOTE the filenames: mcp__playwright__playwright_screenshot may write `<name>-<timestamp>.png` rather than
+   `<name>.png`. Resolve the actual path (e.g. `ls -t .screenshots/current/homepage*.png | head -1`)
+   instead of assuming — a comparator pointed at a path that does not exist must FAIL, not pass.
 ```
 
 Fail-closed rules:
 
 - **Decide the pass threshold before running.** "Looks fine" is not a threshold.
 - **A missing baseline is a FAIL, not a pass.** Recording a first baseline is a separate, deliberate step — never let "nothing to compare against" report green.
-- **Pin the viewport and use the same `fullPage` value for both captures.** A size mismatch makes the comparator error out; treat that error as a FAIL.
+- **Pin the viewport and use the same `fullPage` value for both captures, and assert the two images
+  have identical dimensions before comparing.** Do **not** rely on the comparator to notice. Measured
+  on ImageMagick 7.1.2-21: `compare -metric AE` on a 200×200 vs a 100×100 image returns
+  **`0 (0)` with exit 0** — a *perfect pass* — while a genuine same-size regression returns
+  `2601 (0.065)` with exit 1. A size mismatch is therefore the cleanest possible green, which is the
+  opposite of erroring out. Compare `magick identify -format '%wx%h'` on both files and FAIL on any
+  difference. (Earlier revisions of this file asserted the mismatch "makes the comparator error out";
+  that was wrong, and it was wrong in the direction that hides regressions.)
 - **A comparator that did not run, is not installed, or errored is a FAIL.** Report "not verified" — never downgrade it to a pass.
 - **Never report a visual-regression pass from eyeballing two screenshots.** Model inspection of two PNGs is not a diff; if no comparator ran, the honest result is "not verified".
 

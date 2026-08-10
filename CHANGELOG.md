@@ -45,6 +45,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     Step 1 routes readers into** — `component-patterns.md` and `codebase-patterns.md` still taught the
     static `message`/`notification`/`Modal.confirm` APIs the skill now forbids. Converted. (`<Modal>`
     as a *component* is genuinely exempt and was left alone.)
+  - **`browser-testing`'s visual regression could not fail on a size mismatch — and the skill said
+    the opposite.** Its Fail-closed rules asserted "a size mismatch makes the comparator error out;
+    treat that error as a FAIL". Measured on ImageMagick 7.1.2-21, `compare -metric AE` on 200x200
+    vs 100x100 returns **`0 (0)` with exit 0** — the cleanest possible *pass* — while a genuine
+    same-size regression returns `2601 (0.065)` with exit 1. So a mis-sized capture was the easiest
+    way to get green. The recipe now asserts identical `magick identify -format '%wx%h'` dimensions
+    *before* comparing, and no longer assumes the screenshot filename (the tool may append a
+    timestamp; a comparator pointed at a nonexistent path must FAIL). Guarded, and gap-tested both
+    ways: drop the dimension assertion -> FAIL; restore the false claim -> FAIL.
   241 checks, 0 errors, under bash 3.2 and bash 5.
 
 - **Known-open sweep: the 10 remaining majors closed, and the six new defects that sweep introduced.**

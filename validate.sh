@@ -763,6 +763,18 @@ for m in re.finditer(r'[A-Za-z0-9_]+', s):
                     % (s[:m.start()].count("\n") + 1, t))
 if prefixed == 0:
     errs.append("no mcp__playwright__ tool mention found - the guard verifies nothing")
+
+# (c) Visual regression must not trust the comparator to notice a size mismatch. Measured on
+# ImageMagick 7.1.2-21: `compare -metric AE` on 200x200 vs 100x100 returns "0 (0)" with exit 0
+# -- a PERFECT PASS -- while a real same-size regression returns exit 1. The skill previously
+# asserted the opposite ("a size mismatch makes the comparator error out"), which is wrong in
+# the direction that hides regressions. Require the dimension assertion, and forbid the claim.
+if "compare -metric" in s:
+    if not re.search(r"identify\s+-format\s+'%wx%h'", s):
+        errs.append("visual regression compares without asserting identical dimensions first "
+                    "(magick identify -format '%wx%h') - a size mismatch scores AE=0 exit 0, a clean pass")
+    if re.search(r"size mismatch makes the comparator error out", s):
+        errs.append("false claim retained: a size mismatch does NOT make ImageMagick error out")
 print("; ".join(errs))
 PYEOF
 )
