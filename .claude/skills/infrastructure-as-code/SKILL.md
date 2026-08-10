@@ -368,12 +368,19 @@ terraform {
 ```bash
 # Schedule in CI (weekly or daily)
 terraform plan -detailed-exitcode
-# Exit code 0: no changes
-# Exit code 1: error
-# Exit code 2: changes detected (drift!)
-
-# Alert on exit code 2 → investigate manual changes
+rc=$?
+case $rc in
+  0) echo "no drift" ;;
+  2) echo "DRIFT: changes detected — investigate manual changes"; exit 1 ;;
+  *) echo "BROKEN: drift check did not run (exit $rc)"; exit 1 ;;
+esac
 ```
+
+**Alert on exit 1 as loudly as on exit 2.** Alerting only on `2` is a fail-open: this job is
+scheduled and unattended, so expired credentials, an unreachable backend or a syntax error exit `1`
+and produce **silence** — which is indistinguishable from "no drift" to everyone watching. The
+failure mode is a drift detector that has quietly not run for weeks. Never let "did not run" share
+an outcome with "nothing to report".
 
 ## Common AWS Patterns
 

@@ -375,12 +375,19 @@ if $QUICK_MODE; then
         elif ! diff -q "$src" "$dst" >/dev/null 2>&1; then fail "Quick: shared-set drift: ${1#.claude/}"; ss_ok=false; fi
     }
     if [ -d "$HOME/.claude/agents" ]; then
+        # __pycache__ is PRUNED, not merely diffed. The skills ship runnable Python and the docs
+        # tell you to run it, so a `.pyc` appears in the source tree the first time anyone follows
+        # deployment-runbook or skill-creator. It is gitignored, so the working tree stays clean —
+        # but this enumeration used to pick it up, report "shared-set missing", and hand the
+        # watchdog a drift it can never heal (install.sh does not deploy bytecode). Following the
+        # documentation must not put the framework into a permanent heal loop.
         while IFS= read -r f; do _ss_cmp "$f"; done < <(
             { [ -d .claude/agents ]   && find .claude/agents -type f -name '*.md' ! -name '._*'
               [ -d .claude/rules ]    && find .claude/rules -type f -name '*.md' ! -name '._*'
               [ -d .claude/commands ] && find .claude/commands -type f -name '*.md' ! -name '._*'
               [ -d .claude/lib ]      && find .claude/lib -type f ! -name '._*'
-              [ -d .claude/skills ]   && find .claude/skills -type f -path '.claude/skills/*/*' ! -name '._*'; } 2>/dev/null )
+              [ -d .claude/skills ]   && find .claude/skills -name '__pycache__' -prune -o \
+                                             -type f -path '.claude/skills/*/*' ! -name '._*' ! -name '*.pyc' -print; } 2>/dev/null )
         [ "$ss_ok" = true ] && pass "Quick: shared set synced to ~/.claude (agents/skills/commands/rules/lib)"
     else
         fail "Quick: framework not installed user-global (~/.claude/agents missing) — run ./install.sh"
@@ -502,11 +509,21 @@ section "Checking fail-open regression guards"
 _hc=".claude/skills/deployment-runbook/scripts/health_check.py"
 if [ -f "$_hc" ]; then
     if command -v python3 &>/dev/null; then
+        # Assert the probe's OUTCOME, not merely "did not exit 0".
+        # The original guard tested `if python3 … --check X` (i.e. exit 0). A single-check run can
+        # NEVER exit 0 — a run where every executed check passed but not all checks ran exits
+        # EXIT_PARTIAL=3 — so the detection branch was unreachable and the guard printed PASS over
+        # an injected `return True`. That hole was opened by a LATER repair (adding partial-run exit
+        # codes) silently invalidating an EARLIER guard; both were green on the same day.
+        # Measured: fail-closed probe -> 1 (EXIT_FAILED); probe stubbed to succeed -> 3 (EXIT_PARTIAL).
         _hc_open=""
         for _probe in database cache external_services; do
-            if python3 "$_hc" --env staging --check "$_probe" >/dev/null 2>&1; then
-                _hc_open="$_hc_open $_probe"   # exit 0 == reported healthy without verifying
-            fi
+            python3 "$_hc" --env staging --check "$_probe" >/dev/null 2>&1
+            _hc_rc=$?          # capture BEFORE any other command resets $?
+            case $_hc_rc in
+                1) ;;                                            # ran, failed closed — correct
+                *) _hc_open="$_hc_open ${_probe}(exit=$_hc_rc)" ;;  # 3 == reported healthy without verifying
+            esac
         done
         if [ -z "$_hc_open" ]; then
             pass "Fail-open guard: health_check.py unimplemented probes fail closed"

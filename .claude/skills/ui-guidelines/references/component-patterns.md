@@ -924,11 +924,17 @@ const [isModalOpen, setIsModalOpen] = useState(false);
 ```
 
 ### Confirm Modal
+
+Use `modal` from `App.useApp()` — the static `Modal.confirm()` cannot consume `ConfigProvider`
+context, so it silently ignores the theme this skill mandates (see SKILL.md → Feedback APIs).
+
 ```tsx
-import { Modal } from 'antd';
+import { App } from 'antd';
 import { ExclamationCircleOutlined } from '@ant-design/icons';
 
-Modal.confirm({
+const { modal } = App.useApp();   // at the top of the component
+
+modal.confirm({
   title: 'Are you sure?',
   icon: <ExclamationCircleOutlined />,
   content: 'This action cannot be undone.',
@@ -977,8 +983,13 @@ import { Progress } from 'antd';
 ## Notification Patterns
 
 ### Success Notification
+
+`notification` here is from `App.useApp()`, never the static import — same reason as above.
+
 ```tsx
-import { notification } from 'antd';
+import { App } from 'antd';
+
+const { notification } = App.useApp();   // at the top of the component
 
 notification.success({
   message: 'Success',
@@ -999,8 +1010,14 @@ notification.error({
 ```
 
 ### Message (Toast)
+
+`message` here is from `App.useApp()`, never the static import — same reason as above. Fire these
+from event handlers or effects, never during render.
+
 ```tsx
-import { message } from 'antd';
+import { App } from 'antd';
+
+const { message } = App.useApp();   // at the top of the component
 
 message.success('Operation completed successfully');
 message.error('Operation failed');

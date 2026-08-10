@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Round-6 verification: two recipes that destroyed committed work, a dead guard, and a watchdog
+  heal-loop.** A final execution-based stress test of all 27 skills (every `references/` and
+  `scripts/` file, not just SKILL.md). 0 broken. Everything below was reproduced before it was fixed.
+  - **`validate.sh --quick` was RED on a clean tree, and the watchdog could never heal it.** The
+    shared-set enumeration walked `__pycache__`, so the *first time anyone ran a shipped Python
+    script* — which the docs instruct — a `.pyc` appeared in source, was reported
+    `shared-set missing`, and handed the watchdog drift it cannot fix (install.sh does not deploy
+    bytecode). `__pycache__` is now pruned; gap-tested that real drift in a sibling script in the
+    same directory is still caught.
+  - **`git-workflow` certified destroyed work as safe — a defect introduced by the previous round's
+    own repair.** `git diff --cached HEAD` EMPTY was documented as "the commit contributes nothing;
+    dropping it loses nothing". EMPTY is *ambiguous*: it also means you resolved by discarding your
+    own side, and under a rebase `git checkout --ours` **is** the upstream side, so it is easy to hit
+    by accident. Measured on git 2.50.1: resolving that way gives `--cached HEAD` = 0 bytes while
+    `git diff REBASE_HEAD -- <file>` = 112 bytes, and continuing left **zero** commits containing the
+    change. The recipe now treats EMPTY as ambiguous and adds the discriminator that tells the two
+    causes apart. (The prior commit claimed this was "proven in scratch repos" — it was proven on the
+    happy path only.)
+  - **`investigate`'s bisect recipe orphaned commits.** It ran `git bisect start/bad/good` and never
+    `git bisect reset`, leaving a detached HEAD. Verified: a commit made in that state is unreachable
+    from the original branch after reset. Added the reset, the clean-tree precondition, the
+    mark-each-step call, and the do-not-commit-while-bisecting warning with the reflog recovery note.
+  - **The fail-open guard for `health_check.py` could not fail — killed by a later repair.** It tested
+    `if python3 … --check X` (exit 0), but a single-check run can never exit 0: an all-passed-but-
+    partial run exits `EXIT_PARTIAL=3`. That exit code was added by a *later* commit the same day,
+    silently making the earlier guard's detection branch unreachable — both green. Proven by injecting
+    `return True` into `check_database`: the guard printed PASS. It now asserts the outcome
+    (fail-closed probe → 1; probe stubbed to succeed → 3) and FAILS on that same injection.
+  - **`infrastructure-as-code` drift detection alerted only on exit 2**, so an errored run — expired
+    credentials, unreachable backend — exits 1 and produces *silence*, indistinguishable from "no
+    drift" in a scheduled unattended job. Now fails loudly on both, because "did not run" must never
+    share an outcome with "nothing to report".
+  - **`ui-guidelines`' `App.useApp()` mandate had swept SKILL.md but not the two reference files
+    Step 1 routes readers into** — `component-patterns.md` and `codebase-patterns.md` still taught the
+    static `message`/`notification`/`Modal.confirm` APIs the skill now forbids. Converted. (`<Modal>`
+    as a *component* is genuinely exempt and was left alone.)
+  241 checks, 0 errors, under bash 3.2 and bash 5.
+
 - **Known-open sweep: the 10 remaining majors closed, and the six new defects that sweep introduced.**
   A 10-fixer / 10-reviewer / 1-gate run repaired the carried-forward majors; an adversarial review then
   found that six of the ten areas had introduced a new defect, and those were fixed on top. What

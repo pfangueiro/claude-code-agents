@@ -147,7 +147,7 @@ const columns: ColumnsType<DataType> = [
 
 ### Standard Form Modal
 ```tsx
-import { Modal, Form, Input, Button, Select, message } from "antd";
+import { Modal, Form, Input, Button, Select, App } from "antd";
 import { useState } from "react";
 
 interface AddModalProps {
@@ -159,6 +159,9 @@ interface AddModalProps {
 export default function AddModal({ isOpen, onClose, onSuccess }: AddModalProps) {
   const [form] = Form.useForm();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // From App.useApp(), never the static `message` import: the static one cannot consume
+  // ConfigProvider context, so it ignores the theme (SKILL.md -> Feedback APIs).
+  const { message } = App.useApp();
 
   const handleSubmit = async () => {
     try {

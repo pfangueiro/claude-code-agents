@@ -80,11 +80,24 @@ git blame -L <start>,<end> <file>
 # What changed in the last N days
 git log --since="7 days ago" --oneline --stat
 
-# Binary search for the commit that introduced a bug
+# Binary search for the commit that introduced a bug.
+# Commit or stash first: bisect checks out other commits and refuses to run, or carries
+# your uncommitted changes across steps, if the tree is dirty.
+git status --porcelain    # must be empty before starting
+
 git bisect start
 git bisect bad HEAD
 git bisect good <known-good-commit>
-# Then test at each step until the culprit is found
+# Then test at each step, marking each one:
+git bisect good           # ...or `git bisect bad`, until git names the first bad commit
+
+# ALWAYS finish with this — bisect leaves you on a DETACHED HEAD, and `reset` is what
+# returns you to the branch you started on:
+git bisect reset
+
+# Do not commit while bisecting. A commit made on the detached HEAD is orphaned the moment
+# you reset — verified on git 2.50.1: the commit is unreachable from the original branch
+# afterwards. If you already did, recover it with `git reflog` before it is garbage collected.
 ```
 
 ### What Changed Between Working and Broken?

@@ -78,14 +78,32 @@ git show REBASE_HEAD
 
 # 2. Resolve the conflict, stage it, then ask git what is left on top of upstream.
 git add <resolved-files>
-git diff --cached HEAD   # EMPTY     => the commit contributes nothing; dropping it loses nothing
-                         # NON-EMPTY => this is exactly the work `--skip` would delete
+git diff --cached HEAD   # NON-EMPTY => this is exactly the work `--skip` would delete. Keep it.
+                         # EMPTY     => AMBIGUOUS. Do NOT read this as "safe" — go to step 3.
 
-# 3. Run --continue either way: it commits the remainder, and drops the commit by
-#    itself when step 2 came back empty. Use --skip only to abandon a commit you
-#    have deliberately decided not to keep.
+# 3. ONLY IF step 2 was empty. Empty means "the resolved tree equals upstream", which has TWO
+#    causes and they are opposites:
+#      (a) the commit really is already upstream  -> dropping it loses nothing; or
+#      (b) you resolved by discarding your own side -> dropping it destroys your work.
+#    Under a REBASE, `git checkout --ours` is the UPSTREAM side, so (b) is easy to hit by accident.
+#    This is what tells them apart — compare the resolved files against what the commit intended:
+git diff REBASE_HEAD -- <resolved-files>
+#   EMPTY     => resolution matches the commit's own intent, and the tree matches upstream:
+#                genuinely redundant, case (a). Safe to let it drop.
+#   NON-EMPTY => your resolution threw away what this commit was trying to do, case (b).
+#                STOP. Re-resolve keeping your side; do not continue and do not skip.
+
+# 4. Run --continue: it commits the remainder, and drops the commit by itself when step 2
+#    came back empty. Use --skip only to abandon a commit you have deliberately decided
+#    not to keep.
 git rebase --continue
 ```
+
+Measured on git 2.50.1, one file conflicting on both sides. Resolving with the upstream content
+(`git checkout --ours` under a rebase) gives `git diff --cached HEAD` = **0 bytes** — the old wording
+called that "loses nothing" — while `git diff REBASE_HEAD -- f.txt` = **112 bytes**, correctly
+flagging that the commit's work was discarded. Continuing from that state left zero commits on the
+branch containing the change. Resolving the other way inverts both numbers (112 / 0).
 
 **Do not test redundancy with `git diff REBASE_HEAD^ REBASE_HEAD`.** That is the commit's patch
 against *its own parent* — a value that does not depend on upstream at all — so it is non-empty for
