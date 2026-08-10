@@ -38,16 +38,27 @@ its ability to read.
 ### Agent (Spawn Workers)
 ```
 Agent:
-  description: "short description"
-  prompt: "detailed task instructions"
-  subagent_type: "Explore" | "Plan" | "general-purpose" | custom
-  run_in_background: true    # async — get notification when done
-  isolation: "worktree"      # optional — isolated git worktree
-  model: "sonnet" | "opus" | "haiku"
+  description: "short description"      # required — 3-5 words
+  prompt: "detailed task instructions"  # required
+  subagent_type: "Explore" | "Plan" | "general-purpose" | "fork" | custom
+  name: "worker-a"           # optional — makes the agent addressable via SendMessage({to: name})
+  run_in_background: false   # optional — background is the DEFAULT; pass false to BLOCK
+  isolation: "worktree"      # optional — "worktree" | "remote" ("remote" always runs in background)
+  model: "sonnet" | "opus" | "haiku" | "fable"   # optional — IGNORED for subagent_type: "fork"
 ```
 
-**Synchronous (foreground):** Coordinator waits for result. Use for quick lookups.
-**Asynchronous (background):** Coordinator gets `<task-notification>` when done. Use for parallel work.
+**Background is the default — do not invert this.** Verified against the shipped `sdk-tools.d.ts`:
+*"Agents run in the background by default; you will be notified when one completes. Set to false to
+run this agent synchronously when you need its result before continuing."*
+
+- **Background (the default):** omit `run_in_background` entirely. The coordinator keeps working and
+  receives a `<task-notification>` on completion. Do **not** sleep, poll, or proactively check
+  progress — the notification arrives on its own.
+- **Foreground (synchronous):** pass `run_in_background: false`. This *blocks* the coordinator, so
+  use it only when you need the result before the next step.
+
+Writing `run_in_background: true` merely restates the default — it is a no-op, not the thing that
+makes an agent asynchronous.
 
 ### Subagent context — read this before assuming a fork
 **Omitting `subagent_type` does NOT fork the coordinator.** Verified against the shipped
@@ -64,7 +75,6 @@ Agent:
   description: "analyze test results"
   prompt: "<include the context the agent needs — it does NOT inherit yours>"
   subagent_type: "general-purpose"   # be explicit; omitting selects this anyway
-  run_in_background: true
 ```
 
 **When to fork vs fresh agent:**
@@ -74,16 +84,20 @@ Agent:
 ### SendMessage (Inter-Agent Communication)
 ```
 SendMessage:
-  to: "agent-name"     # a single teammate by name (or "main"); no "*" wildcard — send one message per recipient
-  message: "instructions or data"
-  summary: "5-word preview"
+  to: "agent-name"     # required — the `name` given at spawn (or "main", or a background agent's
+                       # agentId); no "*" wildcard — send one message per recipient
+  message: "instructions or data"   # required
+  summary: "5-10 word preview"      # required when `message` is a string
 ```
+
+An agent is only addressable while running if you gave it a `name` when you spawned it — that is
+what the Agent tool's `name` parameter is for.
 
 Used for: assigning tasks, requesting status, sharing results between agents.
 
 ### Agent Teams (experimental)
 
-Peer teammates that message each other directly. **Experimental** — enable with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`. There is NO `TeamCreate`/`TeamDelete` tool (removed in v2.1.178); a team forms implicitly when the first teammate is spawned via the Agent tool with a `team_name`. **One team per session**; the team config is torn down at session end (only the shared task list under `~/.claude/tasks/` persists). Teammates communicate via SendMessage and coordinate via TaskCreate/TaskUpdate.
+Peer teammates that message each other directly. **Experimental** — enable with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`. There is NO `TeamCreate`/`TeamDelete` tool (removed in v2.1.178), and the Agent tool's `team_name` parameter is **deprecated and ignored** — per `sdk-tools.d.ts`, *"The session has a single implicit team."* So there is nothing to create and nothing to name: the team already exists, and spawning an agent with `name:` is what makes it addressable. **One team per session**; the team config is torn down at session end (only the shared task list under `~/.claude/tasks/` persists). Teammates communicate via SendMessage and coordinate via TaskCreate/TaskUpdate.
 
 ## Worker Toolset Restrictions
 
@@ -92,11 +106,16 @@ Workers get restricted tools based on their type:
 | Worker Type | Tools Available |
 |-------------|----------------|
 | **Explore** (research) | Read, Grep, Glob, Bash (read-only), WebSearch, WebFetch |
-| **Background agent** | Read, Grep, Glob, Bash, Edit, Write, WebSearch, Skill, Worktree |
+| **Background agent** | Read, Grep, Glob, Bash, Edit, Write, WebSearch, Skill, EnterWorktree/ExitWorktree |
 | **In-process teammate** | TaskCreate/Update/List/Get, SendMessage, CronCreate |
 | **Custom agent** | Whatever the agent definition specifies in `tools:` |
 
 **Never available to sub-agents:** AskUserQuestion, EnterPlanMode, ExitPlanMode, ScheduleWakeup, WaitForMcpServers
+
+**Nesting caveat:** `run_in_background` and `name` are not universally available. A nested spawn can
+be restricted to *synchronous subagents only* (no `run_in_background`, no `name`), and a teammate
+cannot spawn teammates (`name` unavailable). Treat background-by-default as the coordinator's
+contract, not a guarantee at every depth.
 
 ## Patterns
 
@@ -120,7 +139,7 @@ Phase 4: Launch verification agent:
 
 ### Background Agent with Notification
 ```
-1. Agent(run_in_background: true, prompt: "implement feature X")
+1. Agent(prompt: "implement feature X")   # background by default — no flag needed
 2. Continue other work while agent runs
 3. Receive <task-notification> when agent completes
 4. Collect the result:
@@ -136,8 +155,8 @@ Phase 4: Launch verification agent:
 ```
 Agent:
   prompt: "try experimental approach to caching"
-  isolation: "worktree"
-  run_in_background: true
+  isolation: "worktree"      # isolated copy of the repo, for this agent only
+                             # (background is already the default — no flag needed)
 
 # Agent works in isolated git worktree
 # If changes are good: worktree path + branch returned
@@ -146,8 +165,10 @@ Agent:
 
 ### Team-Based Long-Running Work (experimental — needs CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS)
 ```
-1. Spawn teammates with Agent(subagent_type: ..., team_name: "auth-team")
-   — the team forms on the first spawn (no TeamCreate step)
+1. Spawn teammates with Agent(subagent_type: ..., name: "auth-worker-a")
+   — the session's single implicit team already exists (no TeamCreate step, and
+     `team_name` is deprecated/ignored); `name` is what makes a teammate
+     addressable via SendMessage
 2. Teammates coordinate via:
    - TaskCreate/TaskUpdate (shared task list, persists under ~/.claude/tasks/)
    - SendMessage (one message per named teammate; no "*" broadcast)
@@ -158,9 +179,11 @@ Agent:
 
 - **Launch independent agents in a SINGLE message** — don't serialize parallel work
 - **Synthesize before delegating** — never pass raw research to implementation workers
-- **Use background agents for anything > 30 seconds** — keeps coordinator responsive
-- **Fork when workers need your context** — shares prompt cache, much cheaper
-- **Don't set model on forks** — different models break cache reuse
+- **Let long work stay in the background** — it already is by default; reach for
+  `run_in_background: false` only when you need the result before you can continue
+- **Fork when workers need your context** — `subagent_type: "fork"` shares prompt cache, much cheaper
+- **Don't bother setting `model` on a fork** — the schema *ignores* it; forks always inherit the
+  parent model
 - **Use Explore agents for research** — they can't modify files (safe)
 - **Give workers specific instructions** — vague prompts waste tokens and produce poor results
 - **Check TaskList before spawning** — avoid duplicate work
@@ -169,7 +192,8 @@ Agent:
 
 - Serializing independent research (launch all at once)
 - Passing raw research output without synthesis
-- Using foreground agents for long tasks (blocks coordinator)
+- Passing `run_in_background: false` for long tasks (it blocks the coordinator — background is the default for a reason)
+- Writing `run_in_background: true` and believing it made the agent asynchronous (it is a no-op)
 - Spawning too many agents (diminishing returns past 5-7 parallel)
 - Workers asking user questions (they can't — no AskUserQuestion tool)
 

@@ -10,8 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Final remediation sweep: the last 13 skills, plus three holes the repairs themselves left.**
-  A 15-agent run repaired every remaining defect, verified each independently, then re-tested all 27 skills.
-  Result: **0 broken, 22 of 27 ready to rely on**, and every assigned repair confirmed by execution.
+  A 15-agent run repaired the assigned defects, verified each independently, then re-tested all 27 skills by
+  execution. Measured result on the re-test: **0 broken, 19 of 27 ready to rely on, 8 still carrying a major**
+  (the open ones are listed under *Known open* below — this round did not close them).
   - **Gate logic** (deep-analysis, diverge, context-escalation): the OR-disjunction gates whose unconditional
     arm made their own ABORT lists unreachable are now abort-dominant post-selection redirects — each abort
     condition names where to go instead, and being invoked (even by literal slash command) no longer overrides
@@ -36,7 +37,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Two guards were reporting green on live defects.** The ci-cd guard anchored command detection at `^`, so
     a `curl` **indented inside a `run: |` block** — the normal YAML shape — was invisible to it; widened to
     `^\s*` and gap-tested. New guards now cover the browser-testing and ci-cd-templates repairs, which had none.
-  230 checks, 0 errors.
+  - **The sweep shipped the repo red, and put a fail-open inside the check written to stop fail-opens.**
+    Two defects found on review of the sweep itself, fixed here:
+    - The new abort-dominance guard was correct and convicted `execute` and `investigate` — but shipped without
+      repairing them, so `./validate.sh` exited 1 on its own tree. Both gates now carry the neutralizing clause
+      `deep-analysis` and `diverge` already had. The guard was **not** narrowed to make it green.
+    - `/optimize`'s new test gate defaulted `GUARD_RAN_RE` to `[0-9]+ (passed|…)`, which **matches the string
+      "0 passed"** — a runner that collected zero tests and exited 0 read GREEN through the exact gate added to
+      catch that. Pinned to `[1-9][0-9]*`, and a new guard now **executes** the shipped regex against
+      `0 passed` / `0 passing` / `0 tests ran` / `0 ok` (must reject) and `12 passed` (must accept), so a guard
+      that merely asserted the line exists can no longer pass over it. Gap-tested three ways: regex reverted →
+      FAIL, line deleted → FAIL, unmodified → PASS.
+  236 checks, 0 errors.
+
+### Known open
+
+Carried forward deliberately, not silently. Each is reproduced and located; none is a regression from this work:
+
+- **ci-cd-templates** — blue/green cutover is an invalid `modify-listener` call (missing `Type` in
+  `DefaultActions[0]`); smoke tests run before the async `create-deployment` completes; the canary job installs
+  `kubectl` with no kubeconfig.
+- **git-workflow** — `git diff REBASE_HEAD^ REBASE_HEAD` cannot measure "already applied upstream" (it is the
+  commit's own patch); an unguarded `git branch --merged | xargs git branch -d` deletes branches this same skill
+  marks permanent.
+- **library-docs** — three of four worked examples return zero documentation (`/facebook/react` and
+  `/tailwindlabs/tailwindcss` are bare redirects; the version-pinned ID form does not exist). The prose is right;
+  the copyable examples are not.
+- **docker-deployment** — the setup block pre-creates two of six bind-mount sources, so Docker creates
+  *directories* named `nginx.conf` / `init-db.sql` and the stack fails stickily.
+- **kubernetes-ops** — composing the shipped Deployment + HPA + Argo CD `selfHeal` templates causes permanent
+  replica flapping; no `ignoreDifferences` anywhere.
+- **ui-guidelines** — the antd static `message`/`notification`/`Modal.confirm` APIs cannot consume
+  `ConfigProvider` context (this skill's central mandate) and `App.useApp()` is unmentioned; grid, router and
+  CSS guidance contradict SKILL.md.
+- **execute / agent-coordination.md / deployment-runbook / deep-analysis** — `agent-selection.md` calls itself
+  complete while omitting 4 of 13 agents (security audit routes to a grep scanner instead of the Opus agent);
+  `agent-coordination.md` still carries the three orchestration claims corrected in the skill; ten cited
+  deployment scripts are neither shipped nor inline; `deep-analysis`'s reference file worked-example does the
+  thing its own gate ABORTs.
+- **The abort-dominance guard is asymmetric** — negation is matched as a synonym family, the invocation arm as a
+  closed keyword list, so same-chunk laundering and paraphrase can still pass. It catches the literal shape it
+  was built for, not an evader.
 
 ### Fixed
 

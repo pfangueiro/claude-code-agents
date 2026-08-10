@@ -21,8 +21,9 @@ Claude Code provides these tools natively — no MCP server needed:
 - **Code graph (optional, per-repo)** — an indexed structural-query tool (e.g. CodeGraphContext / `cgc`) answers whole-repo transitive, cross-language, and aggregate queries (blast-radius, dead code, all implementers of X) that LSP's one-hop, per-language calls cannot. Opt-in; **not shipped/registered by this framework** — see the tool's own docs. `/deep-read` uses it as an accelerator when warranted; source stays the source of truth.
 
 ### Git Isolation
-- **EnterWorktree** — Create an isolated git worktree for parallel development, experiments, or risky changes
-- **ExitWorktree** — Leave worktree (keep or remove)
+- **EnterWorktree** — Creates a git worktree under `.claude/worktrees/` on a new branch and switches the **session's** working directory into it. **Explicit-request-only**: never call it unless "worktree" is mentioned by the user or in CLAUDE.md / memory — "fix this bug" / "build this feature" is *not* a trigger. Single-instance (cannot create a new one while already in a worktree session; entering an existing one by `path` is the exception) and session-scoped, so it is **not** a parallel-development or per-task isolation mechanism. Branches from `origin/<default-branch>`, not local HEAD — the base ref comes from the `worktree.baseRef` *setting* (default `fresh`; `head` is the value that uses local HEAD), not from a call parameter.
+- **ExitWorktree** — Leave the worktree and restore the previous working directory (`action`: `keep` or `remove`). Only operates on a worktree created by `EnterWorktree` **in this session** — a no-op otherwise, and it never touches manually created or previous-session worktrees.
+- **Per-agent isolation is a different tool** — the `Agent` tool's `isolation: "worktree"` parameter gives one spawned agent its own git worktree (auto-cleaned if the agent makes no changes; otherwise the path and branch come back in the result). That, not `EnterWorktree`, is the mechanism for isolating risky or parallel agent work.
 
 ### User Interaction
 - **AskUserQuestion** — Present structured questions with labeled options, descriptions, and previews. Supports multi-select and up to 4 questions per call.

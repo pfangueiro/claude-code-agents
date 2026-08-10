@@ -10,11 +10,17 @@ Decompose a goal into atomic tasks, plan dependencies, select optimal tools, and
 
 ## Pre-Flight Gate
 
-- Unconditional: user typed `/execute` or asked to orchestrate/decompose.
-- Conditional self-judge: run only when the goal is genuinely multi-step — ≥3 atomic tasks, spans multiple files/tools, or benefits from parallel batches.
-- ABORT (do it directly): a single edit, a one-file change, a question, or anything one tool call resolves.
+Activation is decided by the frontmatter description alone — this file is read only AFTER the skill
+has been selected. Nothing here can prevent over-triggering, so this gate is a **post-selection
+redirect**, not a filter.
 
-**Gate:** Explicit invocation, or a genuinely multi-step goal. Otherwise just do the task.
+**Before proceeding, check the ABORT condition below. If it holds, STOP, say in one line that it
+fired, and just do the task.** Being invoked — including a literal `/execute` or "orchestrate this"
+— does NOT override an ABORT: the phrasing that selected this skill is not evidence the goal is
+multi-step.
+
+- Run the 6-phase protocol only when the goal is genuinely multi-step — ≥3 atomic tasks, spans multiple files/tools, or benefits from parallel batches.
+- ABORT (do it directly): a single edit, a one-file change, a question, or anything one tool call resolves.
 
 ## Protocol
 

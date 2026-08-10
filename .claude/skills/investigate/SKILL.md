@@ -13,12 +13,18 @@ Systematic deep investigation protocol. Finds the REAL cause, not the surface sy
 
 ## Pre-Flight Gate
 
-- Unconditional: user typed `/investigate` or asked to find a root cause.
-- Conditional self-judge: run only for a real bug / unexpected behavior whose root cause is UNKNOWN.
+Activation is decided by the frontmatter description alone — this file is read only AFTER the skill
+has been selected. Nothing here can prevent over-triggering, so this gate is a **post-selection
+redirect**, not a filter.
+
+**Before proceeding, check the ABORT and ROUTE OUT conditions below. If any holds, STOP, say in one
+line which one fired, and take the redirect instead of starting the 8-phase protocol.** Being
+invoked — including a literal `/investigate` or "find the root cause" — does NOT override an ABORT:
+the phrasing that selected this skill is not evidence the cause is unknown.
+
+- Run the 8-phase protocol only for a real bug / unexpected behavior whose root cause is UNKNOWN.
 - ABORT: a bug whose cause is already known (just fix it), a feature request, an obvious-cause config/syntax error, or anything not actually broken.
 - ROUTE OUT: a **live production outage** — service down, users impacted, an active incident — goes to **incident-commander FIRST**. Mitigate and restore service, then run `/investigate` for the root cause. An unknown cause does NOT admit an outage to this protocol: diagnosis-before-mitigation is paid for in downtime.
-
-**Gate:** Explicit invocation, or a genuine unknown-cause defect that is not an active production incident. Otherwise fix directly, or route out.
 
 ## Protocol
 

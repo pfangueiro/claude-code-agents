@@ -105,9 +105,17 @@ metric_run() {            # metric_run <tool> <cmd...>  -> raw output, or rc 2 =
   printf '%s\n' "$raw"
 }
 
-metric_value() {          # metric_value <parser...>  (reads stdin) -> number, or rc 2 = VOID
-  v=$("$@"); v=$(printf '%s' "$v" | tr -d '[:space:]')
-  case "$v" in ''|*[!0-9.]*) echo "VOID: '$v' is not a number" >&2; return 2 ;; esac
+metric_value() {          # metric_value <parser...>  (reads stdin) -> ONE number, or rc 2 = VOID
+  v=$("$@")
+  # $(...) already drops trailing newlines; strip only the surrounding blanks that BSD
+  # `wc -l` pads with. Whatever survives must be ONE token -- NEVER join what is left.
+  v=${v#"${v%%[![:blank:]]*}"}; v=${v%"${v##*[![:blank:]]}"}
+  case "$v" in
+    '')                echo "VOID: parser produced no output" >&2; return 2 ;;
+    *[[:space:]]*)     printf 'VOID: parser produced %s values, not one scalar:\n%s\n' \
+                         "$(printf '%s\n' "$v" | wc -w | tr -d '[:blank:]')" "$v" >&2; return 2 ;;
+    *[!0-9.]*|.|*.*.*) printf "VOID: '%s' is not a number\n" "$v" >&2; return 2 ;;
+  esac
   printf '%s\n' "$v"
 }
 ```
@@ -133,6 +141,22 @@ Verified behaviour of that guard across all four toolchain states:
 measurement stops the loop: fix the toolchain, then resume. Pin the tool at BASELINE
 (`command -v <tool>` plus `<tool> --version`) and re-assert both every iteration, so a change
 that removes, shadows or downgrades the tool fails the gate instead of winning it.
+
+**One scalar or nothing.** `metric_run` proves the tool ran; `metric_value` proves the parser
+produced *a* number rather than several. A parser that emits one line per file — the obvious
+first attempt at the `eslint . --format json` row below — must never be joined into a score:
+
+| Parser output (`eslint . --format json`, true total 8) | Joined | Guard result |
+|---|---|---|
+| `8` — `jq '[.[].errorCount] \| add'` | 8 | `METRIC = 8` |
+| `       0` — BSD `wc -l` padding | 0 | `METRIC = 0` |
+| `3` `4` `1` — `jq '.[].errorCount'`, one line per file | **`341`** | `VOID: parser produced 3 values, not one scalar` |
+| `3 4 1` — same values on one line | **`341`** | same VOID |
+| *(empty)* — parser matched nothing | VOID | `VOID: parser produced no output` |
+
+Joining is not merely a wrong number. With the tree completely unchanged, walking those same
+three files in a different order turns `341` into `134` — a phantom **-207 "improvement"** that a
+mechanical keep/revert banks as a win. Fix the parser, never the guard.
 
 ### Gate 2 — regression gate: tests outrank the metric, always
 
@@ -202,19 +226,22 @@ result.
 
 ### Custom Metrics
 
-Any command that outputs a number works:
+Any command that outputs **exactly one** number works. `metric_value` voids anything else, so
+reduce to a single scalar *inside the parser* — never leave several values for it to join:
 
 ```bash
-# Count TODO comments
+# Count TODO comments -> one number
 grep -r "TODO\|FIXME\|HACK" src/ | wc -l
 
-# Count functions without JSDoc
-grep -rP "^(export )?(async )?function" src/ | wc -l
-# minus
-grep -rP "@param|@returns" src/ | wc -l
+# Count functions without JSDoc -> two commands = two numbers.
+# Subtract them yourself; feed metric_value the difference, not the pair.
+fns=$(grep -rP "^(export )?(async )?function" src/ | wc -l)
+doc=$(grep -rP "@param|@returns" src/ | wc -l)
+echo $((fns - doc))
 
-# Database query time
-psql -c "EXPLAIN ANALYZE SELECT ..." | grep "Execution Time" | awk '{print $3}'
+# Database query time -> a nested plan prints several "Execution Time" rows;
+# pick one deliberately rather than letting them all through.
+psql -c "EXPLAIN ANALYZE SELECT ..." | grep "Execution Time" | awk 'NR==1{print $3}'
 ```
 
 ## Anti-Patterns

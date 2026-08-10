@@ -50,14 +50,13 @@ error_budget_policy:
     - "Review recent incidents for patterns"
     - "No chaos experiments without team approval"
   budget_critical:   # <20% remaining
-    - "Freeze non-critical deployments"
+    - "Freeze non-critical deployments while the root cause of the burn is unexplained or recurring"
     - "Mandatory postmortem for any new incident"
     - "Dedicated reliability sprint next cycle"
   budget_exhausted:  # 0% remaining — everything in budget_critical, plus:
     - "Escalate to engineering leadership"
     - "All engineering effort on reliability until the burn is explained"
-    - "Freeze feature releases ONLY while the root cause is unexplained or recurring"
-    - "Root cause understood and mitigated: resume releases even at zero budget"
+    - "Root cause understood and mitigated: the freeze lifts and releases resume, even at zero budget"
 ```
 
 **The freeze trigger is an unexplained root cause, not `budget == 0`.** Google's CRE team is

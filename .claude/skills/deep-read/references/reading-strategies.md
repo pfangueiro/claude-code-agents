@@ -140,10 +140,11 @@ How to trace execution paths and identify critical files for different codebase 
 **Strategy:** Narrow scope aggressively in Phase 1. Batch independent Glob/Grep/Read calls into one message so they run in parallel in-fork (the Agent launcher is unavailable when forked). Deep-read the top 10-15 files.
 
 1. Phase 1 MUST narrow to under 50 files — narrow deterministically (centrality, then recency); AskUserQuestion is unavailable when forked
-2. In Phase 2, launch parallel Explore agents:
-   - Agent 1: Map directory structure and tech stack
-   - Agent 2: Map entry points and exports
-   - Agent 3: Map internal dependency graph
+2. In Phase 2, run three mapping sweeps — batch their independent Glob/Grep/Read calls into ONE message so they execute in parallel in-fork:
+   - Sweep 1: Map directory structure and tech stack
+   - Sweep 2: Map entry points and exports
+   - Sweep 3: Map internal dependency graph
+   - Un-forked only: those three sweeps may instead be delegated to parallel Explore agents — the Agent launcher is unavailable when forked, so in a fork use the batched calls above
 3. In Phase 3, trace only the paths relevant to the reading target
 4. In Phase 4, deep-read only the top 10-15 critical files
 5. For surrounding files: read enough to understand interfaces (types, exports, function signatures with their immediate implementation)

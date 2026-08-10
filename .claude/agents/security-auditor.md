@@ -34,55 +34,55 @@ When invoked, you must follow these steps systematically:
 ### 2. OWASP Top 10 Vulnerability Scan
 Systematically check for each OWASP Top 10 vulnerability:
 
-- **A01:2021 - Broken Access Control**
-  - Verify all endpoints have proper authorization
-  - Check for IDOR (Insecure Direct Object References)
-  - Validate privilege escalation prevention
+- **A01:2025 - Broken Access Control**
+  - Verify all endpoints enforce authorization server-side; check for IDOR (Insecure Direct Object References) and privilege escalation
+  - **SSRF (CWE-918) lives here now** — it was A10 in 2021 and is absorbed into A01 in 2025. Validate URL input allowlisting, block internal network and cloud metadata endpoints
+  - Check CSRF (CWE-352) protection and sensitive-data exposure (CWE-200, CWE-201)
 
-- **A02:2021 - Cryptographic Failures**
-  - Audit encryption implementations
-  - Check for weak algorithms (MD5, SHA1)
-  - Verify TLS/SSL configuration
+- **A02:2025 - Security Misconfiguration**
+  - Check for default credentials and unnecessary enabled features
+  - Verify security headers (CSP, HSTS, X-Frame-Options, X-Content-Type-Options) and CORS policies
+  - Audit framework, container, and cloud defaults; no verbose errors in production
 
-- **A03:2021 - Injection**
+- **A03:2025 - Software Supply Chain Failures**
+  - Broader than 2021's "Vulnerable and Outdated Components": covers the whole build, distribution, and update chain, not just consuming a stale library
+  - Scan dependencies for known CVEs and malicious/typosquatted packages; verify integrity (lockfiles, checksums, signatures, pinned versions, SBOM)
+  - Check unmaintained or obsolete components (CWE-1104, CWE-1395, CWE-447) and non-updateable dependencies (CWE-1329)
+
+- **A04:2025 - Cryptographic Failures**
+  - Audit encryption implementations at rest and in transit
+  - Check for weak algorithms (MD5, SHA1) and hardcoded or reused keys
+  - Verify TLS/SSL configuration and key management
+
+- **A05:2025 - Injection**
   - SQL Injection (parameterized queries)
-  - Command Injection (input validation)
-  - LDAP/NoSQL/XML Injection
+  - Command Injection (input validation, no shell interpolation)
+  - LDAP/NoSQL/XML Injection, and Cross-Site Scripting (XSS) via contextual output encoding
 
-- **A04:2021 - Insecure Design**
+- **A06:2025 - Insecure Design**
   - Review threat modeling documentation
-  - Check for security design patterns
-  - Validate fail-secure mechanisms
+  - Check for security design patterns and abuse cases
+  - Validate fail-secure mechanisms and rate limiting
 
-- **A05:2021 - Security Misconfiguration**
-  - Check for default credentials
-  - Verify security headers (CSP, HSTS, X-Frame-Options)
-  - Audit CORS policies
-
-- **A06:2021 - Vulnerable and Outdated Components**
-  - Scan dependencies for known CVEs
-  - Check for outdated libraries
-  - Verify patch management processes
-
-- **A07:2021 - Identification and Authentication Failures**
-  - Validate password policies
+- **A07:2025 - Authentication Failures**
+  - Validate password policies and credential-stuffing defenses
   - Check for MFA implementation
-  - Audit session management
+  - Audit session management (fixation, timeout, invalidation on logout)
 
-- **A08:2021 - Software and Data Integrity Failures**
-  - Verify code signing and integrity checks
+- **A08:2025 - Software or Data Integrity Failures**
+  - Verify code signing and update integrity checks
   - Check for insecure deserialization
-  - Validate CI/CD pipeline security
+  - Validate CI/CD pipeline and artifact integrity
 
-- **A09:2021 - Security Logging and Monitoring Failures**
-  - Ensure security events are logged
-  - Check for log injection vulnerabilities
-  - Verify alerting mechanisms
+- **A09:2025 - Security Logging and Alerting Failures**
+  - Ensure security events are logged with enough context to investigate (CWE-778, CWE-223)
+  - Check for log injection (CWE-117) and sensitive data written to logs (CWE-532)
+  - Verify **alerting**, not just monitoring — 2025 renamed this category to stress that a logged event nobody is paged on is not a control
 
-- **A10:2021 - Server-Side Request Forgery (SSRF)**
-  - Validate URL input sanitization
-  - Check for internal network access
-  - Verify allowlist/denylist implementations
+- **A10:2025 - Mishandling of Exceptional Conditions** *(new in 2025)*
+  - Check error handling does not leak stack traces or internals (CWE-209)
+  - Verify failure modes are fail-closed, never fail-open (CWE-636)
+  - Validate handling of missing parameters, null dereference, and unchecked edge paths (CWE-234, CWE-476, CWE-274)
 
 ### 3. Authentication & Authorization Deep Dive
 - **Authentication Audit:**
@@ -268,7 +268,7 @@ Immediately escalate and force Opus model for:
 
 ## References and Tools
 
-- **OWASP Top 10 2021**: https://owasp.org/Top10/
+- **OWASP Top 10:2025** (current release): https://owasp.org/Top10/2025/
 - **CWE Top 25**: https://cwe.mitre.org/top25/
 - **NIST Cybersecurity Framework**: https://www.nist.gov/cyberframework
 - **SANS Top 25**: https://www.sans.org/top25-software-errors/

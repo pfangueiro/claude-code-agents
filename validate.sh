@@ -908,6 +908,117 @@ for gated_skill in "${GATED_SKILLS[@]}"; do
 done
 
 # ============================================================================
+# Pre-Flight Gates Must Be ABORT-DOMINANT (FULL-ONLY)
+# ============================================================================
+# The check above greps the literal heading — a LABEL, not a rule. A reviewer restored the old
+# always-true OR arm ("**Gate:** Explicit invocation, or a genuinely hard problem.") underneath an
+# intact `## Pre-Flight Gate` heading and validate still printed PASS. An unconditional invocation
+# arm makes the gate's own ABORT list unreachable in precisely the case the list exists for — the
+# user typing the slash command — so the heading check certifies a gate that cannot fire.
+#
+# ASSERTION CHOICE: this guard tests the LOGICAL RELATION between the gate's two arms, not any one
+# phrase. Inside the gate section, EVERY sentence that names invocation as a trigger (unconditional
+# / invocation / invoked / user typed / typed `/x` / explicitly asked) must ALSO negate its
+# authority over the abort list — a negation (not|never|n't) reaching an override verb
+# (override|overrule|bypass|waive|supersede|trump|excuse) while referring to the abort/gate — and at
+# least one such sentence must exist. That is a FAMILY of phrasings, not a magic word: a rewrite is
+# free to say "never bypasses the ABORT list" or "does not waive the gate" and still pass (verified
+# by mutation). What it cannot do is state an invocation trigger and leave it un-neutralized, which
+# is exactly the regression. Grepping the repair's own wording would instead have been a magic-word
+# proxy — and would have passed the worst case, an OR arm re-added while the sentence stayed.
+# A third conjunct requires the section to declare ABORT conditions at all (>=2 `ABORT` mentions:
+# the dominance statement plus at least one condition), so dominance over an empty set cannot pass
+# vacuously.
+#
+# Scope is DERIVED from source (every SKILL.md carrying the heading), never a hardcoded list — the
+# fork-spawn guard below documents why a two-name list printed PASS over a live instance. The
+# coverage cross-check then asserts the derived set still contains every GATED_SKILLS entry, so
+# renaming a heading cannot shrink the guard's scope silently.
+# FULL-ONLY: a prose defect install.sh cannot rewrite, so --quick would heal-loop the watchdog.
+#
+# Gap-tested by mutation: OR arm re-added alongside an intact dominance sentence -> FAIL; whole
+# pre-repair gate restored -> FAIL; one "**Gate:** Explicit invocation, or ..." line appended ->
+# FAIL; dominance sentence deleted -> FAIL; unmodified -> PASS; reworded dominance -> PASS.
+
+_gate_dominance() {
+    awk '
+        /^##+[[:space:]]*Pre-Flight Gate/ { inb=1; found=1; next }
+        inb && /^##+[[:space:]]/          { inb=0 }
+        inb                               { body = body " " $0 }
+        END {
+            if (!found) { print "NOSECTION"; exit }
+            tmp = body
+            aborts = gsub(/ABORT/, "", tmp)
+            # Sentence-sized chunks so a negation cannot be credited to a different clause.
+            # Bold delimiters split too: gate arms in this codebase are written as **Gate:** /
+            # **Unconditional trigger — ...**, and finer chunks make it harder for an
+            # un-neutralized arm to hide inside a neighbouring negated sentence.
+            gsub(/[.!?][ \t]+/, "&\n", body)
+            gsub(/\*\*/, "\n", body)
+            n = split(body, chunk, "\n")
+            for (i = 1; i <= n; i++) {
+                low = tolower(chunk[i])
+                inv = (low ~ /unconditional/ || low ~ /invocation/ || low ~ /invoked/ \
+                       || low ~ /user typed/ || low ~ /typed `\// || low ~ /explicitly asked/)
+                if (!inv) continue
+                neg = (low ~ /(not|never|n.t)[^.]*(override|overrule|bypass|waive|supersede|trump|excuse)/)
+                ref = (low ~ /abort|gate/)
+                if (neg && ref) { ok++ } else { bad++; if (badtxt == "") badtxt = chunk[i] }
+            }
+            if (bad > 0)    { gsub(/^[ \t]+|[ \t]+$/, "", badtxt); print "ARM|" substr(badtxt, 1, 110); exit }
+            if (ok == 0)    { print "NODOMINANCE"; exit }
+            if (aborts < 2) { print "NOABORTS|" aborts; exit }
+            print "OK"
+        }
+    ' "$1"
+}
+
+section "Checking Pre-Flight Gates Are Abort-Dominant"
+
+_gated_found=""
+for _gate_file in .claude/skills/*/SKILL.md; do
+    [ -f "$_gate_file" ] || continue
+    grep -Eq '^##+[[:space:]]*Pre-Flight Gate' "$_gate_file" 2>/dev/null || continue
+    _gname=$(basename "$(dirname "$_gate_file")")
+    _gated_found="$_gated_found $_gname"
+    _gverdict=$(_gate_dominance "$_gate_file")
+    case "$_gverdict" in
+        OK)
+            pass "$_gname: pre-flight gate is abort-dominant" ;;
+        ARM\|*)
+            fail "$_gname: un-neutralized invocation arm — invoking the skill satisfies the gate, so its ABORT list is unreachable: ${_gverdict#ARM|}" ;;
+        NODOMINANCE)
+            fail "$_gname: gate never states that invocation does NOT override an ABORT — dominance is unasserted" ;;
+        NOABORTS\|*)
+            fail "$_gname: gate asserts dominance but declares no ABORT conditions to dominate (${_gverdict#NOABORTS|} ABORT mention(s))" ;;
+        NOSECTION)
+            fail "$_gname: '## Pre-Flight Gate' heading matched but no section body could be read" ;;
+        *)
+            fail "$_gname: abort-dominance analyzer returned an unrecognized verdict '$_gverdict' — guard could not verify" ;;
+    esac
+done
+
+if [ -z "$_gated_found" ]; then
+    # Fail closed: zero gated skills means the guard asserted nothing at all.
+    fail "Abort-dominance guard: no SKILL.md carries a '## Pre-Flight Gate' heading — guard verified nothing"
+else
+    # Coverage: a renamed/removed heading must not silently drop a skill out of scope above.
+    _gate_missing=""
+    for gated_skill in "${GATED_SKILLS[@]}"; do
+        [ -f ".claude/skills/${gated_skill}/SKILL.md" ] || continue
+        case " $_gated_found " in
+            *" $gated_skill "*) ;;
+            *) _gate_missing="$_gate_missing $gated_skill" ;;
+        esac
+    done
+    if [ -z "$_gate_missing" ]; then
+        pass "Abort-dominance guard: every expected gated skill carries a '## Pre-Flight Gate' heading"
+    else
+        fail "Abort-dominance guard: expected gated skill(s) have no '## Pre-Flight Gate' heading and were not analyzed:$_gate_missing"
+    fi
+fi
+
+# ============================================================================
 # Forked Skills Must Not Instruct Spawning
 # (a forked subagent has no Agent launcher and no AskUserQuestion)
 # ============================================================================
@@ -1192,6 +1303,50 @@ if [ -d ".claude/commands" ]; then
     pass "Found $cmd_count command(s)"
 else
     warn "No .claude/commands/ directory found"
+fi
+
+# ============================================================================
+# /optimize Test Gate Must Reject a Zero-Test Run
+# ============================================================================
+#
+# EXECUTES the shipped regex instead of grepping for it. The default was written
+# `[0-9]+ (passed|...)`, which matches the literal string "0 passed" — so a runner that
+# collected zero tests and exited 0 read GREEN through the very gate added to stop that.
+# A guard that merely asserted the line exists would have passed over it, so this one
+# feeds the regex the strings that matter and checks the verdict.
+#
+# Gap-tested by mutation: default reverted to `[0-9]+ ...` -> FAIL; line deleted -> FAIL;
+# unmodified -> PASS.
+
+section "Checking /optimize test gate rejects zero-test runs"
+
+_opt_cmd=".claude/commands/optimize.md"
+if [ -f "$_opt_cmd" ]; then
+    # Pull the shipped default out of  : "${GUARD_RAN_RE:=<regex>}"
+    _ran_re=$(sed -n 's/^: *"\${GUARD_RAN_RE:=\(.*\)}" *$/\1/p' "$_opt_cmd" | head -1)
+    if [ -z "$_ran_re" ]; then
+        fail "/optimize: no GUARD_RAN_RE default found — the zero-test gate is absent or was renamed"
+    else
+        _zero_leak=""
+        for _probe in "0 passed" "0 passing" "0 tests ran" "0 ok"; do
+            printf '%s' "$_probe" | grep -Eqi "$_ran_re" && _zero_leak="$_zero_leak '$_probe'"
+        done
+        # Counter-probe: the regex must still recognise a real run, or it is merely fail-shut.
+        if printf '%s' "12 passed" | grep -Eqi "$_ran_re"; then
+            _real_ok=1
+        else
+            _real_ok=0
+        fi
+        if [ -n "$_zero_leak" ]; then
+            fail "/optimize GUARD_RAN_RE matches a zero-test run —$_zero_leak reads GREEN (fail-open)"
+        elif [ "$_real_ok" -eq 0 ]; then
+            fail "/optimize GUARD_RAN_RE rejects a real run ('12 passed') — gate is unusable"
+        else
+            pass "/optimize GUARD_RAN_RE rejects zero-test output and accepts a real run"
+        fi
+    fi
+else
+    fail "/optimize command file not found — test-gate invariant unverified"
 fi
 
 # ============================================================================

@@ -1007,7 +1007,7 @@ claude-code-agents/
 - `security-scan`: Security vulnerability scanning and OWASP checks
 - `experiment-loop`: Autonomous metric-driven optimization (modify → measure → keep/discard)
 - `scheduled-tasks`: CronCreate/CronDelete/CronList for recurring prompts and polling
-- `worktree-workflow`: Git worktree isolation for parallel development and experiments
+- `worktree-workflow`: Git worktree isolation via EnterWorktree/ExitWorktree — explicit-request-only, session-scoped, single-instance (not a parallelism mechanism)
 - `remote-triggers`: RemoteTrigger API for cross-session automation and scheduled agents
 - `browser-testing`: Playwright MCP for E2E testing, visual regression, responsive design
 - `multi-agent-orchestration`: Coordinator pattern, teams, background agents, SendMessage

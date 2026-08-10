@@ -65,7 +65,7 @@ Beyond agents and skills, Claude Code provides these tools you can use directly:
 |------|----------|
 | **TaskCreate/TaskUpdate/TaskList** | Multi-step work — structured task tracking with dependencies and progress |
 | **CronCreate/CronDelete/CronList** | Recurring prompts, polling, reminders (session-scoped, 7-day max) |
-| **EnterWorktree/ExitWorktree** | Parallel development — isolated git worktree branches for experiments or features |
+| **EnterWorktree/ExitWorktree** | ONLY when the user (or CLAUDE.md/memory) explicitly says "worktree" — "fix this bug"/"build this feature" is not a trigger. Session-scoped and single-instance, so **not** a parallel-development or per-task mechanism; for per-agent repo isolation use the `Agent` tool's `isolation: "worktree"` parameter instead |
 | **RemoteTrigger** | Cross-session automation — create/run scheduled remote agents |
 | **LSP** | Code intelligence — go-to-definition, find-references, hover, document symbols |
 | **AskUserQuestion** | Structured user input with labeled options and previews |

@@ -168,7 +168,7 @@ Skills provide domain knowledge that agents apply. 27 included:
 | **infrastructure-as-code** | Terraform/CDK/Pulumi patterns, IaC testing pyramid, CI/CD for infra, state management |
 | **experiment-loop** | Autonomous experimentation pattern: modify → measure → keep/discard (autoresearch-inspired) |
 | **scheduled-tasks** | CronCreate/CronDelete/CronList for recurring prompts, polling, reminders |
-| **worktree-workflow** | Git worktree isolation for parallel development, experiments, risky refactors |
+| **worktree-workflow** | Git worktree isolation via EnterWorktree/ExitWorktree — explicit-request-only, session-scoped, single-instance (not a parallelism mechanism) |
 | **remote-triggers** | RemoteTrigger API for cross-session automation, scheduled agents |
 | **browser-testing** | E2E testing with Playwright MCP — visual regression, responsive design, codegen |
 | **multi-agent-orchestration** | Coordinator pattern, teams, background agents, worker restrictions, SendMessage |

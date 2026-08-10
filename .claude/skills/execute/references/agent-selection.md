@@ -16,7 +16,9 @@ Is the task a simple, directed action?
 │        GitHub operation? → Bash (gh ...) or GitHub MCP
 │        Code intelligence? → LSP (goToDefinition, findReferences, hover)
 │        Schedule recurring? → CronCreate (session-scoped, 7-day max)
-│        Parallel branch work? → EnterWorktree (isolated git worktree)
+│        Isolate one risky task? → Agent tool's `isolation: "worktree"` parameter
+│          (NOT EnterWorktree — that is explicit-request-only and session-scoped,
+│           so it cannot isolate one task among many)
 │        Cross-session automation? → RemoteTrigger (create/run remote agents)
 │        Track multi-step work? → TaskCreate/TaskUpdate (dependencies, progress)
 │        E2E/browser testing? → Playwright MCP (navigate, click, screenshot)
@@ -103,7 +105,7 @@ Is the task a simple, directed action?
 | code-review-checklist | Structured code review | Consult reference |
 | git-workflow | Git operations guidance | Consult reference |
 | scheduled-tasks | Schedule recurring checks/polls | CronCreate tool |
-| worktree-workflow | Parallel isolated development | EnterWorktree tool |
+| worktree-workflow | User explicitly asks for a worktree / second checkout | EnterWorktree tool (never for per-task isolation) |
 | remote-triggers | Cross-session automation | RemoteTrigger tool |
 | browser-testing | E2E, visual regression, responsive testing | Playwright MCP |
 | multi-agent-orchestration | Teams, background agents, coordinator pattern | Agent/SendMessage tools |

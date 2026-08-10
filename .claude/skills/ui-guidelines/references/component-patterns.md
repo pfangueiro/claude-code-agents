@@ -549,7 +549,7 @@ const ExampleDrawer = () => {
         setIsFullscreen(false); // ALWAYS reset fullscreen on close
       }}
       closeIcon={<X size={16} />}
-      placement="right"                           // CRITICAL: Must be before styles
+      placement="right"                           // Slides in from the right edge
       width={isFullscreen ? 'calc(100vw - 80px)' : 1000}  // CRITICAL: 80px = collapsed sidebar width
       styles={{
         wrapper: {
@@ -706,35 +706,51 @@ content: {
 - Use React keys to force remount if necessary
 - Never use `destroyOnClose` just to reset state
 
-**9. Prop Order (CRITICAL FOR ANIMATION):**
-```tsx
-// ✅ CORRECT PROP ORDER (MUST FOLLOW THIS EXACT ORDER):
-<Drawer
-  title={...}
-  open={visible}
-  onClose={...}
-  closeIcon={<X size={16} />}
-  placement="right"        // MUST be before styles
-  width={...}              // MUST be before styles
-  styles={{...}}           // MUST be after placement and width
->
+**9. Prop Order (READABILITY CONVENTION - not a behavioral requirement):**
 
-// ❌ WRONG - placement/width AFTER styles breaks animation
+Write drawer props in this order so every drawer reads the same way:
+
+`title` → `open` → `onClose` → `closeIcon` → `placement` → `width` → `styles`
+
+```tsx
 <Drawer
   title={...}
-  placement="right"
-  width={1000}
   open={visible}
   onClose={...}
   closeIcon={<X size={16} />}
-  styles={{...}}           // WRONG ORDER
+  placement="right"
+  width={...}
+  styles={{...}}
 >
 ```
 
-**Why prop order matters:**
-- If `placement` and `width` come AFTER `styles`, the drawer will disappear instantly instead of sliding
-- The exact order is: `title` → `open` → `onClose` → `closeIcon` → `placement` → `width` → `styles`
-- This is a React/Ant Design quirk - prop order affects the animation behavior
+**What prop order actually does:**
+
+JSX props compile to a single object literal handed to `React.createElement`. For **distinct**
+prop names, order carries no meaning — the component receives identical values either way.
+`placement`, `width` and `styles` are each read by name by `Drawer`, so writing them in any
+order produces the same rendered drawer and does **not** affect the slide animation. Deviating
+from the convention above is a style nit, not a bug.
+
+Order changes behaviour in exactly two cases:
+
+1. **Duplicate props — the last occurrence wins.**
+   ```tsx
+   <Drawer width={1000} width={500} />   // width === 500
+   ```
+
+2. **Spread position relative to explicit props.**
+   ```tsx
+   <Drawer width={1000} {...rest} />     // rest.width overrides 1000
+   <Drawer {...rest} width={1000} />     // 1000 overrides rest.width
+   ```
+   This is the one worth watching: a `{...props}` spread placed *after* `placement`/`width`/
+   `styles` silently overrides them whenever it carries those keys. Put spreads first unless
+   you intend them to win.
+
+**If a drawer disappears instantly instead of sliding, prop order is not the cause.** The two
+real causes are documented in this same section: `destroyOnClose` (see 8, above) and clearing
+state before the close animation finishes (see 10, below).
 
 **10. State Management (CRITICAL FOR ANIMATION):**
 ```tsx
@@ -829,7 +845,7 @@ const JiraActivityDrawer = () => {
       }}
       closeIcon={<X size={16} />}
       placement="right"
-      width={isFullscreen ? 'calc(100vw - 220px)' : 1000}
+      width={isFullscreen ? 'calc(100vw - 80px)' : 1000}
       styles={{
         wrapper: { boxShadow: 'none' },
         header: {

@@ -154,16 +154,34 @@ infracost diff --path=tfplan --compare-to=infracost-base.json
 # OPA (Open Policy Agent) — custom guardrails
 terraform show -json tfplan > tfplan.json
 
+# Preflight: parse-check the policies FIRST. `opa check` exits 1 on a syntax
+# error, so a broken policy is caught here instead of silently never running.
+opa check policies/
+
 # -i/--input takes a FILE PATH, not stdin (use --stdin-input to pipe instead).
 # --fail-defined exits 1 when the query is defined, i.e. when deny has entries;
-# index with [x] so the query stays undefined (exit 0) when there are none —
-# a bare 'data.terraform.deny' is an empty set, which is always defined.
-opa eval -d policies/ -i tfplan.json --fail-defined --format pretty 'data.terraform.deny[x]'
+# index with [_] so the query stays undefined (exit 0) when there are none —
+# a bare 'data.terraform.deny' is an empty set, which is always defined (exit 1).
+opa eval -d policies/ -i tfplan.json --fail-defined --format pretty 'data.terraform.deny[_]'; rc=$?
+
+# Exit contract — FAIL CLOSED. Measured on OPA 1.19.0:
+#   0 = no violations   1 = violations   2 = error (parse failure, missing input/policy dir)
+# Never key the gate on `-eq 1` alone: exit 2 means the policy never evaluated,
+# and reading that as "clean" lets an unparseable policy wave every change through.
+case $rc in
+  0) echo "policy: clean" ;;
+  1) echo "policy: violations"; exit 1 ;;
+  *) echo "policy: ERROR — did not evaluate"; exit 1 ;;
+esac
 
 # Example policy: deny public S3 buckets
 # policies/deny-public-s3.rego
+# Rego v1: OPA 1.0+ requires `contains` for partial set rules and `if` before the
+# body. `import rego.v1` is a no-op on 1.x and keeps the file valid on 0.59+.
 package terraform
-deny[msg] {
+import rego.v1
+
+deny contains msg if {
   resource := input.resource_changes[_]
   resource.type == "aws_s3_bucket"
   resource.change.after.acl == "public-read"
