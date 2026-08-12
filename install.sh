@@ -857,14 +857,26 @@ sync_hooks() {
     done
     [ "$pruned" -eq 0 ] && print_skip "No orphan hooks to prune"
 
-    # Recover from a full DELETE of settings.json (not just an emptied {} wipe):
-    # the reconcile below is gated on the file existing, so if the file is gone
-    # entirely, seed it from the template first. Without this, --update can never
-    # recreate a deleted settings.json. Atomic cp so a concurrent reader never sees half.
-    if [ ! -f ~/.claude/settings.json ] && [ -f "${SCRIPT_DIR}/global-config/settings.json.template" ]; then
+    # Recover from a full DELETE of settings.json (not just an emptied {} wipe) OR a
+    # CORRUPT / unparseable settings.json: the reconcile below reads the file with jq, so a
+    # missing file can never be recreated and a corrupt file makes every _atomic_settings_jq
+    # below no-op (jq can't parse it) — leaving the corruption unhealed AND blocking the whole
+    # settings reconcile. A corrupt file is preserved (settings.json.corrupt-<ts>) for
+    # forensics / manual recovery before reseeding. Atomic cp so a reader never sees half.
+    local _settings_reseed=0
+    if [ ! -f ~/.claude/settings.json ]; then
+        _settings_reseed=1
+    elif command -v jq >/dev/null 2>&1 && ! jq -e . ~/.claude/settings.json >/dev/null 2>&1; then
+        local _corrupt_ts
+        _corrupt_ts=$(date -u +%Y%m%d-%H%M%S 2>/dev/null || echo backup)
+        cp ~/.claude/settings.json ~/.claude/settings.json.corrupt-"$_corrupt_ts" 2>/dev/null || true
+        print_error "settings.json was not valid JSON — backed up to settings.json.corrupt-${_corrupt_ts} and reseeding from template" || true
+        _settings_reseed=1
+    fi
+    if [ "$_settings_reseed" -eq 1 ] && [ -f "${SCRIPT_DIR}/global-config/settings.json.template" ]; then
         cp "${SCRIPT_DIR}/global-config/settings.json.template" ~/.claude/settings.json.recreate.$$ \
             && mv ~/.claude/settings.json.recreate.$$ ~/.claude/settings.json \
-            && print_success "Recreated missing settings.json from template"
+            && print_success "Recreated settings.json from template"
     fi
 
     # Reconcile hook events and env vars in settings.json against template.

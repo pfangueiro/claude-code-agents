@@ -492,6 +492,24 @@ Carried forward deliberately, not silently. Each is reproduced and located; none
   that fails if the removed `get-library-docs` name reappears (the tool-name analogue of the count-drift check —
   this slipped through because validate only checked MCP *server presence*, not tool names). 223 checks.
 
+### Fixed
+
+- **Self-heal now recovers a CORRUPT `settings.json`, not just a deleted or `{}`-wiped one** (found by
+  an adversarial stress test of the reconcile path). If `~/.claude/settings.json` was present but not
+  valid JSON — e.g. a truncated external write, disk-full, or a bad manual edit — every
+  `_atomic_settings_jq` block read it via `jq` and no-op'd, so the corruption was never healed AND it
+  silently blocked the entire settings reconcile (hooks, permissions, attribution, statusLine). The
+  `{}` wipe was handled; invalid JSON was not. `install.sh` (`sync_hooks`) now detects an unparseable
+  `settings.json`, preserves it as `settings.json.corrupt-<ts>` for forensics/manual recovery, and
+  reseeds from the template before reconciling (which then re-applies every framework block).
+  `validate.sh` gains a structural guard that FAILs when the live `settings.json` is not valid JSON —
+  so errors>0 drives the watchdog to run `install.sh --update`, closing the detect→heal→converge loop
+  automatically. Gap-tested inline in a throwaway `HOME` (an installed-environment guard, so — like its
+  sibling existence guard — it degrades to WARN in the mutation suite's empty HOME rather than shipping
+  a `tests/gap/` entry): inject invalid JSON → validate detects (clear "NOT valid JSON" message) →
+  `--update` backs up + reseeds + restores all framework blocks (`env.CLAUDE_CODE_EFFORT_LEVEL=xhigh`) →
+  validate passes → a 2nd `--update` is byte-identical. Full validate 244/0, mutation suite still 21/21.
+
 ## [3.1.1] - 2026-08-02
 
 ### Changed
