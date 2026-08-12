@@ -93,16 +93,16 @@ run_structural_checks() {
     if [ -f "$HOME/.claude/.framework-version" ] || [ -d "$HOME/.claude/agents" ]; then
         if [ ! -f "$HOME/.claude/settings.json" ]; then
             fail "Structural: ~/.claude/settings.json is MISSING (deleted) — self-heal must recreate it"
-        elif command -v jq >/dev/null 2>&1 && ! jq -e . "$HOME/.claude/settings.json" >/dev/null 2>&1; then
-            # Present but NOT valid JSON (e.g. a truncated external write): every jq-based
-            # reconcile no-ops on it, so the corruption blocks the whole settings reconcile and
-            # cannot self-heal unless it is detected here. Without this the file is unparseable
-            # yet the existence check passes, so validate could exit 0 and the watchdog would
-            # never heal it. Fail -> errors>0 -> watchdog runs install --update, which backs up
-            # the corrupt file and reseeds from template.
-            fail "Structural: ~/.claude/settings.json is NOT valid JSON (corrupt) — run ./install.sh --update to reseed"
+        elif command -v jq >/dev/null 2>&1 && ! jq -e 'type == "object"' "$HOME/.claude/settings.json" >/dev/null 2>&1; then
+            # Present but NOT a usable JSON object — unparseable (a truncated external write) OR
+            # valid JSON of the wrong shape (array / scalar). Every jq-based reconcile no-ops on it,
+            # so the damage blocks the whole settings reconcile and cannot self-heal unless detected
+            # here. Without this the file passes the existence check, validate could exit 0, and the
+            # watchdog would never heal it. Fail -> errors>0 -> watchdog runs install --update, which
+            # backs up the bad file and reseeds from template.
+            fail "Structural: ~/.claude/settings.json is not a valid JSON object (corrupt) — run ./install.sh --update to reseed"
         else
-            pass "Structural: ~/.claude/settings.json exists and is valid JSON"
+            pass "Structural: ~/.claude/settings.json exists and is a valid JSON object"
         fi
     else
         warn "Framework not installed at ~/.claude — skipping installed-environment structural checks (CI or fresh clone)"

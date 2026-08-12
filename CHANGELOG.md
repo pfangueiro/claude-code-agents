@@ -509,6 +509,14 @@ Carried forward deliberately, not silently. Each is reproduced and located; none
   a `tests/gap/` entry): inject invalid JSON → validate detects (clear "NOT valid JSON" message) →
   `--update` backs up + reseeds + restores all framework blocks (`env.CLAUDE_CODE_EFFORT_LEVEL=xhigh`) →
   validate passes → a 2nd `--update` is byte-identical. Full validate 244/0, mutation suite still 21/21.
+- **...and extended to valid-JSON-but-non-object shapes** (a round-2 stress test of the fix immediately
+  above found it incomplete). The first cut reseeded an *unparseable* `settings.json` but not one that is
+  valid JSON of the wrong shape — `[]`, a number, a string, `true` — because `jq -e .` accepts those as
+  "valid", yet the per-block reconcile can't index a non-object, so it no-op'd and the damage persisted.
+  Detection in both `install.sh`'s reseed gate and `validate.sh`'s guard now requires `type == "object"`,
+  covering the full "not a usable object" class. Gap-tested: array / number / string / bool / null / empty /
+  unparseable all reseed to a valid object with hooks, while a valid object is **not** spuriously reseeded
+  (idempotent, no backup churn). Full validate 244/0, mutation suite still 21/21.
 
 ## [3.1.1] - 2026-08-02
 

@@ -857,20 +857,21 @@ sync_hooks() {
     done
     [ "$pruned" -eq 0 ] && print_skip "No orphan hooks to prune"
 
-    # Recover from a full DELETE of settings.json (not just an emptied {} wipe) OR a
-    # CORRUPT / unparseable settings.json: the reconcile below reads the file with jq, so a
-    # missing file can never be recreated and a corrupt file makes every _atomic_settings_jq
-    # below no-op (jq can't parse it) — leaving the corruption unhealed AND blocking the whole
-    # settings reconcile. A corrupt file is preserved (settings.json.corrupt-<ts>) for
+    # Recover from a full DELETE of settings.json (not just an emptied {} wipe) OR a settings.json
+    # that is not a usable JSON OBJECT — either unparseable (truncated write) or valid JSON of the
+    # wrong shape (array / scalar). The per-block reconcile reads the file with jq and either can't
+    # parse it or can't index a non-object, so every _atomic_settings_jq below no-ops — leaving the
+    # damage unhealed AND blocking the whole settings reconcile. Requiring type=="object" (not just
+    # parseable) covers the full class. The bad file is preserved (settings.json.corrupt-<ts>) for
     # forensics / manual recovery before reseeding. Atomic cp so a reader never sees half.
     local _settings_reseed=0
     if [ ! -f ~/.claude/settings.json ]; then
         _settings_reseed=1
-    elif command -v jq >/dev/null 2>&1 && ! jq -e . ~/.claude/settings.json >/dev/null 2>&1; then
+    elif command -v jq >/dev/null 2>&1 && ! jq -e 'type == "object"' ~/.claude/settings.json >/dev/null 2>&1; then
         local _corrupt_ts
         _corrupt_ts=$(date -u +%Y%m%d-%H%M%S 2>/dev/null || echo backup)
         cp ~/.claude/settings.json ~/.claude/settings.json.corrupt-"$_corrupt_ts" 2>/dev/null || true
-        print_error "settings.json was not valid JSON — backed up to settings.json.corrupt-${_corrupt_ts} and reseeding from template" || true
+        print_error "settings.json was not a valid JSON object — backed up to settings.json.corrupt-${_corrupt_ts} and reseeding from template" || true
         _settings_reseed=1
     fi
     if [ "$_settings_reseed" -eq 1 ] && [ -f "${SCRIPT_DIR}/global-config/settings.json.template" ]; then
