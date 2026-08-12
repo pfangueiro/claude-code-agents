@@ -517,6 +517,15 @@ Carried forward deliberately, not silently. Each is reproduced and located; none
   covering the full "not a usable object" class. Gap-tested: array / number / string / bool / null / empty /
   unparseable all reseed to a valid object with hooks, while a valid object is **not** spuriously reseeded
   (idempotent, no backup churn). Full validate 244/0, mutation suite still 21/21.
+- **Agent frontmatter is now YAML-validated, and two agents that weren't valid YAML are fixed** (found by a
+  full-framework content-integrity stress pass). `security-auditor` and `documentation-maintainer` carried an
+  unquoted colon in their `description:` (`Auto-activates on: security…`, `including: writing…`) — strict YAML
+  reads the colon as a nested mapping and rejects it, and the repo's own PyYAML skill validator rejects the same
+  shape; the descriptions are now single-quoted. `validate.sh`'s per-agent check only grepped for the *presence*
+  of `name:`/`description:` lines, so malformed values passed — it now also PARSES each agent's frontmatter with
+  PyYAML and requires name/description/tools/model (degrading to WARN if PyYAML is absent). Gap-tested by a new
+  `tests/gap/` mutation (21 → 22): inject an unquoted colon into an agent description → the guard FAILs, and
+  `--prove` confirms it fires only with the defect. Full validate 245/0, mutation suite 22/22.
 
 ## [3.1.1] - 2026-08-02
 

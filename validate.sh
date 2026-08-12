@@ -1011,6 +1011,45 @@ for agent in "${EXPECTED_AGENTS[@]}"; do
     fi
 done
 
+# Agent frontmatter must be VALID YAML, not just present. The per-agent loop above greps for
+# `name:`/`description:`/... LINES, which passes even when the value is malformed — e.g. an
+# unquoted colon in a description (`description: ... Auto-activates on: security`) that strict
+# YAML, and the repo's own PyYAML skill validator, both reject. Parse each agent's frontmatter
+# and require name/description/tools/model. Repo-content check (runs regardless of HOME);
+# gap-tested by tests/gap/ (mutation 22-agent-invalid-frontmatter).
+if command -v python3 >/dev/null 2>&1; then
+    _agent_fm=$(python3 - <<'PYEOF' 2>/dev/null
+import glob, os, sys
+try:
+    import yaml
+except ImportError:
+    print("__NOYAML__"); sys.exit(0)
+bad = []
+for p in sorted(glob.glob(".claude/agents/*.md")):
+    name = os.path.basename(p)
+    t = open(p, encoding="utf-8").read()
+    if not t.startswith("---"):
+        bad.append(name + " (no frontmatter)"); continue
+    end = t.find("\n---", 3)
+    if end < 0:
+        bad.append(name + " (unterminated frontmatter)"); continue
+    try:
+        d = yaml.safe_load(t[3:end])
+    except Exception:
+        bad.append(name + " (invalid YAML)"); continue
+    if not isinstance(d, dict) or not all(d.get(k) for k in ("name", "description", "tools", "model")):
+        bad.append(name + " (missing name/description/tools/model)")
+print(" ".join(bad) if bad else "OK")
+PYEOF
+)
+    case "$_agent_fm" in
+        __NOYAML__) warn "Agent frontmatter: PyYAML not installed — cannot YAML-validate agent frontmatter (pip install pyyaml)" ;;
+        OK)         pass "Agent frontmatter: all agents parse as valid YAML with name/description/tools/model" ;;
+        "")         warn "Agent frontmatter: check did not run (python3 error)" ;;
+        *)          fail "Agent frontmatter: invalid YAML or missing keys — $_agent_fm" ;;
+    esac
+fi
+
 # ============================================================================
 # De-Anchoring Invariant (divergence capability)
 # ============================================================================
