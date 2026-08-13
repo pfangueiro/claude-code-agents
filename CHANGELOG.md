@@ -527,6 +527,13 @@ Carried forward deliberately, not silently. Each is reproduced and located; none
   `tests/gap/` mutation (21 → 22): inject an unquoted colon into an agent description → the guard FAILs, and
   `--prove` confirms it fires only with the defect. Full validate 245/0, mutation suite 22/22.
 
+### Documentation
+
+- **`SELF-HEALING.md` now documents the settings.json corrupt/non-object reseed** (262c002, 0c823cd) alongside
+  the existing `.hooks`-wipe and `.attribution` recoveries. The runbook previously covered a `.hooks` block wiped
+  to `{}` but not a `settings.json` that is unparseable or a valid-JSON non-object (`[]`/`123`/`"x"`/`true`) —
+  which `sync_hooks` now backs up to `settings.json.corrupt-<ts>` and reseeds from the template.
+
 ## [3.1.1] - 2026-08-02
 
 ### Changed
