@@ -1,29 +1,56 @@
-# Claude Agents - AI-Powered SDLC Agent System
+# SDLC Agents — Claude Code and Codex
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-3.2.0-blue.svg)](https://github.com/pfangueiro/claude-code-agents/releases)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://code.claude.com/docs/en/overview)
-[![Agents](https://img.shields.io/badge/Agents-13-orange.svg)](#-available-agents)
-[![Skills](https://img.shields.io/badge/Skills-27-green.svg)](#-skills-system)
+[![Codex](https://img.shields.io/badge/Codex-Compatible-blue.svg)](codex/README.md)
+[![Agents](https://img.shields.io/badge/Agents-13-orange.svg)](#available-agents)
+[![Skills](https://img.shields.io/badge/Source_Skills-27-green.svg)](#skills-system)
 [![MCP](https://img.shields.io/badge/MCP-4%20Servers-brightgreen.svg)](#-mcp-integration)
 
-**13 auto-activating AI agents for every phase of software development.** Just describe what you want to build — the right specialists engage automatically.
+**One framework repository, with an integration for each coding agent.** Share domain
+procedures and specialist roles; keep provider-specific runtime behavior in its adapter.
+Describe a task naturally or select a workflow explicitly. Selection uses model judgment.
 
-> Works with [Claude Code](https://code.claude.com/docs/en/overview) (Anthropic's CLI). No plugins, no configuration, no commands to memorize.
+| | Claude Code | Codex |
+|---|---|---|
+| User-global install | `./install.sh` | `./install-codex.sh --user` |
+| Skills | 27 source bundles | 39 workflows + 13 specialist guides = 52 bundles |
+| Specialists | 13 Markdown agent definitions | 13 TOML definitions plus guide fallbacks |
+| Instructions | `~/.claude/CLAUDE.md` and rules | Managed block in `~/.codex/AGENTS.md` and rules resource |
+| Runtime integration | Existing hooks, dashboard, statusline and watchdog | Opt-in native evidence hooks; [remaining gaps](codex/FEATURES.md) |
 
-**Requirements:** macOS or Linux with `bash` and `git`; `jq` and `npx` are optional (used for the statusline and MCP examples). See **[INSTALL.md](./INSTALL.md)** for updating, cross-machine migration, and the autonomous self-heal setup.
+**Requirements:** macOS/Linux, Bash and Git. Codex building/installing additionally
+needs Python 3.11+ and [PyYAML](codex/requirements.txt). Claude statusline/validation uses
+`jq`; MCP examples use `npx` where applicable. MCP connections are not auto-registered.
+See [INSTALL.md](INSTALL.md) for both installation paths and [codex/README.md](codex/README.md)
+for Codex ownership, updates, rollback and hook trust.
 
 ---
 
-## 30-Second Setup
+## User-global setup
 
 ```bash
 git clone https://github.com/pfangueiro/claude-code-agents.git
 cd claude-code-agents
+# Claude Code
+./install.sh --dry-run
 ./install.sh
+
+# Codex: use Python 3.11+ and this environment for installation/updates
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r codex/requirements.txt
+./install-codex.sh --user --dry-run
+./install-codex.sh --user
 ```
 
-Installs once, user-global to `~/.claude`. Now **every project on your machine has the agents** — open any project with Claude Code and talk naturally:
+Install the integration you use, or both. Claude loads from `~/.claude`; Codex loads
+skills from `~/.agents/skills` and definitions/state from `~/.codex`. No per-project
+copy is required with the default user profile. Project instructions, disabled skills,
+alternate profiles and host capabilities can affect effective behavior.
+
+Open a session in a project and describe the work:
 
 ```
 "Build a REST API with JWT authentication"
@@ -32,7 +59,10 @@ Installs once, user-global to `~/.claude`. Now **every project on your machine h
 "Deploy to production"
 ```
 
-Agents activate automatically based on your words.
+Codex examples include `$sdlc-execute`, `$sdlc-review-pr` and `$sdlc-agent-code-quality`.
+Native profile routing depends on the host; guides provide a fallback.
+[Cross-project and CLI validation](codex/GLOBAL-VALIDATION.md) confirmed global
+discovery and reviewer use for both integrations.
 
 > **Before you run it:** see [What the install does to your machine](#what-the-install-does-to-your-machine) for the exact
 > paths written, the background daemon, and how to reverse it. `./install.sh --dry-run` prints every
@@ -40,15 +70,15 @@ Agents activate automatically based on your words.
 
 ---
 
-## What You Get
+## Claude edition components
 
 | Component | Count | What It Does |
 |-----------|-------|--------------|
 | **Agents** | 13 | Auto-activating SDLC specialists (planning through production) |
 | **Skills** | 27 | Modular knowledge packages (git, Docker, CI/CD, K8s, SRE, IaC, observability, experiment-loop, scheduled-tasks, worktree-workflow, remote-triggers, context-escalation, diverge, etc.) |
-| **Slash Commands** | 13 | `/commit-pr`, `/review-pr`, `/security-scan`, `/compact`, `/new-feature`, `/create-jira`, `/build-fix`, `/tdd`, `/quality-gate`, `/checkpoint`, `/save-session`, `/resume-session`, `/optimize` |
+| **Command templates** | 12 | `/commit-pr`, `/review-pr`, `/compact`, `/new-feature`, `/create-jira`, `/build-fix`, `/tdd`, `/quality-gate`, `/checkpoint`, `/save-session`, `/resume-session`, `/optimize`; `/security-scan` comes from a skill |
 | **MCP Servers** | 4 | context7, sequential-thinking, playwright, github |
-| **Rules** | 6 | Auto-enforced security, code quality, fix quality, verification, framework integrity, and anti-anchoring standards |
+| **Rules** | 6 | Instructions for security, code quality, fix quality, verification, framework integrity, and anti-anchoring; native permissions/sandbox enforce access boundaries |
 | **Hooks** | 10 | Agent tracking, session lifecycle, permission auditing, file protection, auto-lint, debug detection, pre-compact snapshots, notifications |
 
 ---
@@ -71,7 +101,8 @@ Agents activate automatically based on your words.
 | **sre-specialist** | "SLO", "reliability", "on-call", "runbook" | SRE, SLOs, capacity, chaos eng | Sonnet |
 | **meta-agent** | "create an agent for..." | Generates new custom agents | Opus |
 
-**Cost optimization:** Haiku for docs (95% cheaper), Sonnet for dev work, Opus for security/emergencies.
+The model column describes the Claude source files. Codex inherits its active model;
+these aliases and provider pricing are not translated.
 
 ---
 
@@ -97,7 +128,10 @@ See [`.claude/lib/agent-coordination.md`](.claude/lib/agent-coordination.md) for
 
 ## Installation
 
-One install, user-global. Claude Code natively loads `~/.claude/{agents,skills,commands,rules}`, so a single install makes the agents available in **every** project on your machine — no per-project setup.
+The following commands and machine effects describe the **Claude installer**.
+For Codex use `./install-codex.sh --user`, then `--user --check` to verify or repeat
+`--user` to update. Removal is `--user --uninstall`; customized owned files cause a
+conflict rather than being overwritten. [Full Codex instructions](codex/README.md).
 
 | Command | What It Does |
 |---------|-------------|
@@ -113,6 +147,9 @@ One install, user-global. Claude Code natively loads `~/.claude/{agents,skills,c
 ```bash
 ./validate.sh
 # All validations passed! (full + --quick modes)
+
+# Codex installed state (use the installation's Python environment)
+./install-codex.sh --user --check
 ```
 
 Installed components live under `~/.claude/` — verify with `ls ~/.claude/agents ~/.claude/skills ~/.claude/commands ~/.claude/rules`.
@@ -130,7 +167,7 @@ Run `./install.sh --dry-run` first to see the same list resolved against your ac
 |---|---|---|
 | `~/.claude/agents/` | 13 agent `.md` files | Replaced (heals drift) |
 | `~/.claude/skills/` | 27 skill directories | Replaced per-skill (`rm -rf` then copy) |
-| `~/.claude/commands/` | 13 slash-command `.md` files | Replaced |
+| `~/.claude/commands/` | 12 executable templates + README (13 Markdown files) | Replaced |
 | `~/.claude/rules/` | 6 rule `.md` files | Replaced |
 | `~/.claude/lib/` | 4 reference files (templates, patterns, coordination, MCP guide) | Replaced |
 | `~/.claude/hooks/` | 9 hook `.sh` scripts (+`chmod +x`) and 2 reference `.json` configs | Replaced; orphans pruned |
@@ -360,7 +397,7 @@ Installed once, user-global under `~/.claude/` — Claude Code loads it in every
 ```
 ~/.claude/
 ├── agents/          # 13 auto-activating SDLC agents
-├── commands/        # 13 slash commands
+├── commands/        # 12 executable templates + README
 ├── skills/          # 27 modular knowledge packages
 ├── rules/           # 6 auto-enforced rule sets
 ├── lib/             # Templates, patterns, coordination protocol

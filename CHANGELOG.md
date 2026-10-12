@@ -1,11 +1,34 @@
 # Changelog
 
-All notable changes to Claude Agents will be documented in this file.
+All notable changes to the shared Claude Code/Codex framework will be documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+- Separate Codex adapter against Claude baseline `509d282a`: 39 namespaced workflow
+  skills (27 skills plus 12 executable command templates), 13 native TOML agents,
+  13 specialist-guide skill fallbacks for hosts without custom role routing,
+  handwritten runtime procedures, hash-owned project/user installation and optional
+  patch-aware native evidence hooks. Preserve personal configuration, original explicit
+  invocation policies and the Claude edition; disclose runtime parity gaps. Add isolated
+  acceptance/mutation checks and a complete researched compatibility matrix in `codex/`.
+
+- User-global laptop validation: Codex discovery across two unrelated repositories and
+  a nested directory, plus actual read-only Claude/Codex CLI reviews against the same
+  content-fingerprinted fixture. Record precise coverage in `codex/GLOBAL-VALIDATION.md`.
+
+### Changed
+
+- Reconciled remote documentation input `c4f343a` without rewriting history; updated
+  README, installation, contributor/security/extension/skill guides, CLAUDE.md, AGENTS.md
+  and public MEMORY.md for both integrations. Label historical skill integration notes;
+  correct executable command counts, broken links, standalone-installer recipes and
+  unconditional isolation claims. Remove machine-specific public evidence paths and
+  the generated template's contradictory AI-attribution trailer instruction.
 
 ### Added
 

@@ -105,11 +105,11 @@ Add MCP servers to your Claude Code settings (`.mcp.json` or settings):
 ## When to Use MCP
 
 - External data or API integrations
-- Sandboxed tool execution
+- External tools subject to actual host/server permission and isolation policy
 - Reusable capabilities across skills and agents
 - Up-to-date information from external sources
 
 ## Resources
 
-- [EXTENSIBILITY.md](../EXTENSIBILITY.md) — Complete extensibility guide
+- [EXTENSIBILITY.md](../../EXTENSIBILITY.md) — Complete extensibility guide
 - [MCP Documentation](https://modelcontextprotocol.io) — Official protocol docs

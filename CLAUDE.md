@@ -4,7 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Claude Agents** — enterprise AI agent system with 13 specialized SDLC/SSDLC agents, 27 skills, and 13 slash commands that auto-activate based on natural language. Automatically selects optimal Claude model (Haiku/Sonnet/Opus) per task complexity.
+**SDLC framework** — one repository with Claude Code and Codex integrations. The Claude
+edition has 13 specialized SDLC/SSDLC agents, 27 skills, and 12 executable command
+templates (13 command-directory Markdown files include README.md). Agent descriptions
+guide model judgment; Claude files specify Haiku/Sonnet/Opus roles.
+
+Read [AGENTS.md](AGENTS.md) for cross-engine maintenance rules and [MEMORY.md](MEMORY.md)
+for architecture and verified state. Codex builds from shared domain sources plus
+`codex/overrides/`: 39 workflows, 13 specialist guides and 13 native TOML definitions.
+It inherits the active Codex model and permission policy. User-global installation is
+`./install-codex.sh --user`; check with `--user --check`. See [codex/FEATURES.md](codex/FEATURES.md).
 
 ## Git & Commit Conventions
 
@@ -17,7 +26,9 @@ These apply to everyone committing to this repo. They live here in the repo (not
 
 ## IMPORTANT: Auto-Activation
 
-Agents activate automatically from natural language. Just describe what you want — the right specialist engages.
+Describe the task naturally or select the specialist explicitly. Descriptions guide
+model judgment; selection/delegation are not a deterministic keyword router. Codex
+may use `sdlc-agent-<name>` guides when native custom types are unavailable.
 
 ## Agents
 
@@ -114,6 +125,11 @@ MCP servers provide external tools that extend Claude Code. See `.claude/lib/mcp
 
 ## Testing the Guards
 
+Codex validation is separate: `python3 -m unittest discover -s tests/codex -v` and
+`python3 tests/codex/mutations.py`. Tests use disposable projects/homes and include
+native discovery when the CLI is installed. Keep both checks green at the publish SHA;
+never use `--heal` as an acceptance gate.
+
 `validate.sh`'s guards are themselves proven by an executable mutation suite: `bash tests/gap/run.sh`
 injects a real defect for each guard, asserts `validate.sh` FAILS with the expected message, and
 includes a baseline plus a negative control. It runs on every push (`gap-tests` job) — a guard whose
@@ -130,6 +146,9 @@ Built-in dashboard aggregating Claude Code JSONL session logs across all project
 **CRITICAL:** security-auditor and incident-commander ALWAYS use Opus. Security considerations are embedded in every agent following OWASP guidelines and DevSecOps best practices.
 
 ## Self-Healing
+
+This section applies to **Claude**. Codex uses hash ownership and explicit integrity/
+repair operations; no background self-healing or hook-trust bypass is installed.
 
 The framework auto-reconciles its user-global install at `~/.claude` — nothing to run by hand. **Full runbook: [SELF-HEALING.md](./SELF-HEALING.md)** — read it before any framework-infra change.
 

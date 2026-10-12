@@ -1,0 +1,24 @@
+# Optional fragment: review and merge selected entries into trusted Codex config.
+# The installer never activates servers, downloads packages or stores credentials.
+# Existing MCPs are independent of this fragment. Verify package versions before use.
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+enabled = false
+
+[mcp_servers.sequential-thinking]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-sequential-thinking@1.0.0"]
+enabled = false
+
+# Matches the framework's browser-testing examples; other Playwright servers expose
+# different schemas. Discover actual tools rather than copying an incompatible call.
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@executeautomation/playwright-mcp-server"]
+enabled = false
+
+[mcp_servers.github]
+url = "https://api.githubcopilot.com/mcp/"
+bearer_token_env_var = "GITHUB_PERSONAL_ACCESS_TOKEN"
+enabled = false

@@ -10,6 +10,21 @@ permissions:
   contents: read
 
 jobs:
+  codex-adapter:
+    name: Codex adapter acceptance and mutation checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install adapter parser dependency
+        run: python3 -m pip install -r codex/requirements.txt
+      - name: Test isolated project and user installs
+        run: python3 -m unittest discover -s tests/codex -v
+      - name: Prove ownership, rollback, patch and privacy guards
+        run: python3 tests/codex/mutations.py
+
   shell-syntax:
     name: shell syntax check
     runs-on: ubuntu-latest

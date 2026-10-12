@@ -2,6 +2,25 @@
 
 **The Complete Guide to Extending Claude Code with Skills, MCP, Slash Commands, and Subagents**
 
+This guide's detailed tool/configuration examples describe the **Claude edition**.
+The same repository supplies a Codex adapter; use [codex/README.md](codex/README.md)
+and [the feature matrix](codex/FEATURES.md) rather than sending these Claude APIs to Codex.
+
+## Codex extension points
+
+Shared domain procedures live in `.claude/skills`; provider-dependent Codex procedures
+live in `codex/overrides`. Building produces `sdlc-*` skill bundles with YAML name/description,
+complete resources and explicit-only policy where present. Skills do not automatically
+fork Codex. Native specialists use standalone TOML name/description/developer_instructions
+and supported sandbox settings; model/approval policy is inherited. `sdlc-agent-*` guides
+are fallbacks when a host does not expose custom agent types, not sandbox enforcement.
+
+Install user-global with `./install-codex.sh --user` and verify with `--user --check`.
+Adding a shared skill/role requires checking both editions. Run the Codex acceptance and
+mutation suites from CONTRIBUTING.md. Discover MCP/tool schemas before use; configuration,
+trust, scheduling and collaboration differ by host. Context isolation does not isolate
+files: parallel coding requires disjoint Git worktrees.
+
 Version: 3.2.0
 Last Updated: 2026-08-02
 
@@ -49,9 +68,9 @@ Claude Code provides four powerful mechanisms for extending its capabilities. Ea
 | Mechanism | Purpose | Loading | Isolation |
 |-----------|---------|---------|-----------|
 | **Skills** | Knowledge & methodology | Automatic | Shared context |
-| **MCP** | External tools & data | On-demand | Sandboxed |
+| **MCP** | External tools & data | On-demand | Host/server permissions; no blanket sandbox guarantee |
 | **Slash Commands** | User-triggered workflows | Manual | Shared context |
-| **Subagents** | Complex isolated tasks | Agent-triggered | Complete isolation |
+| **Subagents** | Complex isolated tasks | Agent-triggered | Separate context; files need explicit worktree isolation |
 
 ---
 
@@ -83,12 +102,12 @@ Claude Code provides four powerful mechanisms for extending its capabilities. Ea
 **How They Work**:
 - Connect to external services and APIs
 - Provide tools that Claude can invoke
-- Sandboxed execution for security
+- Execution and access boundaries depend on host/server configuration
 
 **Key Characteristics**:
 - 🟢 External integrations
 - 🟢 Tool-based invocation
-- 🟢 Sandboxed execution
+- 🟢 Host/server-defined permissions
 - 🟢 Can be used by skills and agents
 
 **Example**: `context7` MCP server fetches library documentation; `sequential-thinking` provides deep reasoning.
@@ -421,7 +440,8 @@ User: "Design a REST API for user authentication"
 ```markdown
 ---
 name: architecture-planner
-auto_activate_on: ["design", "architecture", "system", "blueprint"]
+description: "System design and architecture specialist; use for architecture, API contracts and planning."
+tools: Read, Write, Grep, Glob, Agent, LSP, TodoWrite
 model: sonnet
 ---
 
@@ -799,7 +819,7 @@ User: "API response time went from 200ms to 2s"
    - Specific deliverables
 
 2. **Model Selection**
-   - Haiku: Documentation (95% savings)
+   - Haiku: Documentation; compare current provider pricing before cost estimates
    - Sonnet: Standard development
    - Opus: Security & emergencies
 

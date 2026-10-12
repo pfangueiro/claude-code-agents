@@ -1,7 +1,12 @@
-# Contributing to Claude Agents
+# Contributing to the shared SDLC framework
 
 Thanks for considering a contribution. This framework is meant to be shared and
 improved by a team, so the contribution flow is intentionally light.
+
+One repository supplies both integrations. Claude domain sources remain in `.claude/`;
+Codex runtime replacements live in `codex/overrides/`. Read [AGENTS.md](AGENTS.md) and
+[MEMORY.md](MEMORY.md) before changing shared behavior. Generated installations are
+outputs, not checked-in canonical sources.
 
 > **Read [docs/FAILURE-MODES.md](./docs/FAILURE-MODES.md) before you write a check, a guard, a gate,
 > or a fix.** It documents the nine defect classes that actually shipped in this repository across
@@ -20,6 +25,11 @@ HOME="$(mktemp -d)" ./install.sh               # try a full install into a throw
 ```
 
 ## Branching + PRs
+
+For Codex development, use Python 3.11+ with `codex/requirements.txt`, then run
+`python3 -m unittest discover -s tests/codex -v` and `python3 tests/codex/mutations.py`.
+An isolated native CLI discovery test runs when Codex is installed; CI explicitly skips
+that native test when no CLI exists. Do not call that skip an end-to-end pass.
 
 - Branch off `main`. No long-lived feature branches.
 - Use a topic prefix matching the [conventional-commits](https://www.conventionalcommits.org/) scope you'll use in the commit:
@@ -83,7 +93,9 @@ If a defect genuinely cannot be guarded, say so explicitly in the PR and add it 
 
 ## What to test before opening a PR
 
-1. **`./validate.sh`** — must report `0 Errors`, `0 Warnings` (all checks Passed; count auto-discovered).
+1. **`./validate.sh`** — zero errors in the applicable environment. Fresh/CI environments
+   can warn that the user-global Claude install is absent; distinguish those expected
+   skips from a failing installed-state invariant. Also run `bash tests/gap/run.sh --prove --jobs 4`.
 2. **`bash -n` syntax check** — every shell file you touched:
    ```bash
    bash -n install.sh validate.sh quick-install.sh global-config/hooks/*.sh global-config/daemon/*.sh
@@ -130,6 +142,9 @@ If a defect genuinely cannot be guarded, say so explicitly in the PR and add it 
 | **Hook** | `global-config/hooks/<name>.sh` | Shell script; wire into `global-config/settings.json.template` `.hooks.<Event>`; document in CLAUDE.md Hooks section |
 
 After any of the above, run `./validate.sh` — it auto-discovers and validates the new component.
+For shared changes, verify Codex outputs too: native roles, skill metadata, explicit-only
+policy, resource references and runtime overrides. Do not translate Claude tool
+allowlists or model aliases into invented Codex settings.
 
 ## Updating an installation
 
@@ -137,6 +152,10 @@ The framework installs once, user-global, to `~/.claude`, so it applies to every
 project on the machine. After pulling a new version, run `./install.sh --update` to
 reconcile `~/.claude` — or let the self-healing watchdog / SessionStart healthcheck
 reconcile it automatically.
+
+For Codex, repeat `./install-codex.sh --user` in the installation's Python environment,
+then run `--user --check`. It reports customized/foreign files instead of overwriting
+them, preserves runtime configuration and does not install a self-healing daemon.
 
 ## Self-healing safety net
 

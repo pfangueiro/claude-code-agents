@@ -49,3 +49,11 @@ __pycache__/
 *.m4a
 *.aac
 *.ogg
+
+# Generated Codex project installation and local framework metadata
+.agents/skills/sdlc-*/
+.codex/framework/
+.codex/agents/
+.codex/hooks.json
+.sdlc-codex-install.lock
+.venv/

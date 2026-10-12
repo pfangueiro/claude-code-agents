@@ -25,7 +25,7 @@ Never modify code you haven't read. Never guess — ask when unsure.
 ## Git Workflow
 - Commit messages: conventional commits format (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`)
 - Include scope when relevant: `feat(ui):`, `fix(api):`, `fix(db):`
-- Co-author trailer: `Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>`
+- Do not add co-author or AI-attribution trailers; retain the maintainer's authorship
 - Never force push to main/master
 - Never amend commits unless explicitly asked
 - Never skip pre-commit hooks

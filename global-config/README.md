@@ -2,6 +2,10 @@
 
 Shareable Claude Code configuration files. These get installed to `~/.claude/` by `install.sh` (the canonical user-global install).
 
+This directory is **Claude-specific**. Codex's independent installer lives at
+`install-codex.sh`; it does not translate settings.json into config.toml or reuse
+the Claude watchdog/collector/statusline. [Codex setup](../codex/README.md).
+
 ## Files
 
 | File | Install Target | Purpose |
@@ -10,7 +14,6 @@ Shareable Claude Code configuration files. These get installed to `~/.claude/` b
 | `hooks/post-edit-lint.sh` | `~/.claude/hooks/post-edit-lint.sh` | Auto-lint TS/JS files after Write/Edit tool use |
 | `output-styles/concise.md` | `~/.claude/output-styles/concise.md` | Code-first, minimal prose output style |
 | `statusline.sh` | `~/.claude/statusline.sh` | Rich status bar: model, git branch, cost, context usage |
-| `keybindings.json` | `~/.claude/keybindings.json` | Keyboard shortcuts (Ctrl+S commit, Ctrl+P plan) |
 | `settings.json.template` | `~/.claude/settings.json` | Global settings: model, hooks, statusline, deny rules |
 | `CLAUDE.md.template` | `~/.claude/CLAUDE.md` | Personal coding preferences (name/email placeholders) |
 
@@ -29,3 +32,6 @@ Contains `__YOUR_NAME__` and `__YOUR_GIT_EMAIL__` placeholders. The installer re
 - `jq` (optional, for statusline and settings merge)
 - `npx` (optional, for MCP servers)
 - `notify-send` (Linux) or `osascript` (macOS) for desktop notifications
+
+MCP examples are connection templates, not automatic registrations. Do not infer
+Codex permission/model configuration from Claude aliases or hook types.

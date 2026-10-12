@@ -1,4 +1,42 @@
-# Claude Agents - Installation Guide
+# Installation — Claude Code and Codex
+
+Both integrations are user-global by default and apply across projects for that user.
+Choose one or install both from the same checkout; their runtime directories are separate.
+Project instructions and alternate profiles can change effective behavior.
+
+## Codex user-global installation
+
+Use Python 3.11+ and the same Python environment for later updates/checks:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -r codex/requirements.txt
+./install-codex.sh --user --dry-run
+./install-codex.sh --user
+./install-codex.sh --user --check
+```
+
+Writes 52 skill bundles to `~/.agents/skills`, 13 specialist TOML definitions to
+`~/.codex/agents`, resources/ownership metadata to `~/.codex/framework`, and a managed
+block in `~/.codex/AGENTS.md`. Existing config.toml, auth, MCP settings and personal
+instruction content are preserved. User installation currently requires default CODEX_HOME.
+
+| Operation | Codex command |
+|---|---|
+| Update after pulling source | `./install-codex.sh --user` |
+| Check owned output/instruction state | `./install-codex.sh --user --check` |
+| Remove unmodified owned output | `./install-codex.sh --user --uninstall` |
+| Optional local evidence hooks | `./install-codex.sh --user --hooks`, then native `/hooks` review/trust |
+| Explicit project-scoped alternative | `./install-codex.sh --project /absolute/path/to/project` |
+
+Foreign/modified files, ambiguous instruction blocks and symlink destinations fail closed.
+Updates do not silently heal owner customizations. MCP examples are disabled and hooks
+are optional; installation does not activate either or bypass native trust. There is no
+Codex watchdog/dashboard/statusline/snapshot parity claim. See [codex/README.md](codex/README.md),
+[feature coverage](codex/FEATURES.md) and [global validation](codex/GLOBAL-VALIDATION.md).
+
+The remainder describes the Claude installer and its existing runtime.
 
 ## Install (one command, user-global)
 
@@ -35,9 +73,9 @@ Most of it lands under `~/.claude/` and is loaded by Claude Code in every projec
 ```
 ~/.claude/
 ├── agents/                # 13 specialized agents
-├── commands/              # 13 slash commands
+├── commands/              # 12 executable templates + directory README
 ├── skills/                # 27 modular knowledge packages
-├── rules/                 # 6 auto-enforced rule sets
+├── rules/                 # 6 instruction sets; permissions/hooks are separate mechanisms
 ├── lib/                   # Templates, patterns, coordination protocol, MCP guide
 ├── hooks/                 # 9 command hooks + 2 reference configs
 ├── daemon/                # launchd watchdog — macOS only
@@ -316,10 +354,10 @@ chmod +x install.sh
 ```
 
 ### Network Issues
-Download the script locally:
+The installer needs its adjacent source directories, so download the complete checkout:
 ```bash
-curl -sSL https://raw.githubusercontent.com/pfangueiro/claude-code-agents/main/install.sh > install.sh
-chmod +x install.sh
+git clone https://github.com/pfangueiro/claude-code-agents.git
+cd claude-code-agents
 ./install.sh
 ```
 

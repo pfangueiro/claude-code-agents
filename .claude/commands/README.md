@@ -2,6 +2,12 @@
 
 This directory contains custom slash commands for streamlined development workflows.
 
+Inventory: 12 executable command templates; this README is documentation. Claude also
+exposes skill invocations such as `/security-scan`, which are not command files here.
+Codex converts the 12 templates to `$sdlc-<name>` skills. `commit-pr`, `create-jira` and
+`new-feature` retain explicit-only selection; publication/service workflows honor actual
+project configuration and authorization. [Codex behavior and limits](../../codex/FEATURES.md).
+
 ## Available Commands
 
 ### `/new-feature` - Create Feature Branch
@@ -270,5 +276,5 @@ To add a new command:
 ## Resources
 
 - [Claude Code Documentation](https://docs.claude.com/claude-code)
-- [CLAUDE.md](../CLAUDE.md) - Project context
+- [CLAUDE.md](../../CLAUDE.md) - Project context
 - [Slash Commands Guide](https://docs.claude.com/claude-code/slash-commands)

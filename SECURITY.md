@@ -1,5 +1,20 @@
 # Security Policy
 
+This policy covers both the Claude edition and Codex adapter. Codex security-sensitive
+surfaces include manifest ownership/paths, managed instruction blocks, atomic file
+replacement/rollback and optional native hook payloads.
+
+## Codex boundaries
+
+The installer does not change authentication, model, sandbox or approval settings.
+It rejects foreign/customized files and destination symlinks; instruction text is not
+an access-control boundary. Optional hooks require native trust review. The direct-patch
+credential guard handles add/update/delete/move destinations and aliases, but does not
+constrain arbitrary shell/MCP writes. Use native sandbox/execpolicy for that boundary.
+Logs retain allowlisted metadata rather than commands, patches or credentials. There is
+no permission auto-approval. Test these guards with `python3 tests/codex/mutations.py`.
+See [feature limits](codex/FEATURES.md) and [independent review](codex/REVIEW.md).
+
 ## Supported Versions
 
 The latest minor release line is the only supported one. Older releases do

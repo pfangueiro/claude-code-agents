@@ -1,5 +1,10 @@
 # Failure Modes
 
+The historical Claude examples below remain useful for both integrations. Codex
+ownership, rollback, patch and privacy guards are separately proven by
+`python3 tests/codex/mutations.py`; see [Codex review](../codex/REVIEW.md). Do not
+infer full runtime parity from a passing guard suite or schema-only check.
+
 A taxonomy of the defect classes that actually shipped in this repository, distilled from six
 rounds of execution-based stress testing across all 27 skills, the installer, the validator, the
 hooks, and the daemon.

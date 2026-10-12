@@ -1,5 +1,10 @@
 # Self-Healing — full runbook
 
+This describes the **Claude user-global runtime**. Codex uses the same source repository
+but has no watchdog, automatic snapshots or unattended reconciliation. Use
+`./install-codex.sh --user --check` and repeat `--user` for explicit repair/update;
+owner modifications remain conflicts. See [Codex coverage](codex/FEATURES.md).
+
 The framework reconciles its own user-global install at `~/.claude` (the single install that serves every project). Two paths, one diagnostic stream. CLAUDE.md carries only a summary of this; the operational detail — watchdog cadence/retention, the settings-sync-wipe recovery mechanism, the `--upgrade` consent flow, `.attribution` auto-heal, statusline glyph states, diagnostic-log capping, and every snapshot-restore command — lives here. **Read this before any framework-infra change.**
 
 ## Fast path — SessionStart hook (`global-config/hooks/session-start-healthcheck.sh`)
