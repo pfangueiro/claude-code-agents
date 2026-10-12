@@ -28,3 +28,11 @@ review fingerprints remain in REVIEW.md rather than being relabeled as current.
 This record certifies the reviewed implementation and local checks. GitHub branch/CI
 verification belongs to the exact subsequently pushed head and is reported separately;
 an older green run does not certify a newer commit. No release/tag is implied.
+
+The first GitHub run at `1debb1848b503861bedeb6fd8bbd5140436081d8` passed the four
+existing checks but failed Codex resource execution: the health checker imports Requests,
+which was not in the dependency manifest. Local system Python had masked the omission.
+The failure was independently reproduced in a clean Python 3.11 environment before
+repair. The correction declares the dependency and makes CI use a fresh virtualenv;
+the new resource mutation keeps the original failure path observable. Initial local
+acceptance above is historical, not a claim that the failed GitHub run was green.

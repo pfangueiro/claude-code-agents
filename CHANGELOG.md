@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Codex Linux CI dependency failure at `1debb18`: declare Requests 2.34.2 for the exported
+  health checker, run adapter CI in a clean Python environment, and prove the resource
+  dependency gate with an injected missing import and restored control. The same missing
+  Requests error was reproduced with the original manifest in a clean Python 3.11 env;
+  preserve the failing gate rather than skipping resource execution.
+
 ### Added
 
 - Separate Codex adapter against Claude baseline `509d282a`: 39 namespaced workflow

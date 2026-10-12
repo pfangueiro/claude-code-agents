@@ -9,7 +9,8 @@ directories: 39 workflows + 13 specialist guides**.
 It provides workflow portability, not complete Claude runtime parity. See
 [FEATURES.md](FEATURES.md) for every feature and remaining limitation.
 
-Requirements: Python 3.11+ and PyYAML 6.0.3. Use the same Python environment for
+Requirements: Python 3.11+, PyYAML 6.0.3 and Requests 2.34.2 (for the bundled health
+checker). Use the same Python environment for
 installation, updates and checks. A local environment avoids changing system Python:
 
 ```bash
@@ -113,6 +114,8 @@ rejection, rollback, native hook payloads and logging privacy. This is not an au
 end-to-end test across Codex desktop, IDE, CLI and cloud accounts.
 When the Codex CLI is installed, a native prompt-input smoke test checks skill discovery
 and managed instructions in an isolated home; otherwise that check is explicitly skipped.
+CI runs the suite in a fresh virtual environment populated only from requirements.txt,
+so undeclared resource dependencies cannot be hidden by the runner's installed packages.
 
 Official references checked for this adaptation:
 

@@ -21,7 +21,8 @@ Describe a task naturally or select a workflow explicitly. Selection uses model 
 | Runtime integration | Existing hooks, dashboard, statusline and watchdog | Opt-in native evidence hooks; [remaining gaps](codex/FEATURES.md) |
 
 **Requirements:** macOS/Linux, Bash and Git. Codex building/installing additionally
-needs Python 3.11+ and [PyYAML](codex/requirements.txt). Claude statusline/validation uses
+needs Python 3.11+ and [declared Python dependencies](codex/requirements.txt), including
+PyYAML and Requests for the bundled health checker. Claude statusline/validation uses
 `jq`; MCP examples use `npx` where applicable. MCP connections are not auto-registered.
 See [INSTALL.md](INSTALL.md) for both installation paths and [codex/README.md](codex/README.md)
 for Codex ownership, updates, rollback and hook trust.

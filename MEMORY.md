@@ -36,6 +36,9 @@ AGENTS.md and relevant source before relying on these notes.
 - Test failure/destructive paths in disposable homes/projects; `validate.sh --heal`
   repairs state and is not an acceptance gate. Real-machine validation requires the
   user's requested scope and preservation of personal configuration.
+- Validate Python resources in a clean virtual environment populated only from declared
+  dependencies. A passing system-Python run can hide missing dependencies; the first
+  Linux Codex CI run caught an undeclared Requests import in the bundled health checker.
 - Consult [FEATURES](codex/FEATURES.md), [review](codex/REVIEW.md) and
   [global validation](codex/GLOBAL-VALIDATION.md). Dashboard, watchdog, notifications,
   statusline, automatic linting and snapshots remain unported. MCP examples are

@@ -18,12 +18,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install adapter parser dependency
-        run: python3 -m pip install -r codex/requirements.txt
+      - name: Create clean Python environment and install declared dependencies
+        run: |
+          python3 -m venv .ci-codex-env
+          .ci-codex-env/bin/python -m pip install -r codex/requirements.txt
       - name: Test isolated project and user installs
-        run: python3 -m unittest discover -s tests/codex -v
+        run: .ci-codex-env/bin/python -m unittest discover -s tests/codex -v
       - name: Prove ownership, rollback, patch and privacy guards
-        run: python3 tests/codex/mutations.py
+        run: .ci-codex-env/bin/python tests/codex/mutations.py
 
   shell-syntax:
     name: shell syntax check

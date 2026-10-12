@@ -57,3 +57,4 @@ __pycache__/
 .codex/hooks.json
 .sdlc-codex-install.lock
 .venv/
+.ci-codex-env/

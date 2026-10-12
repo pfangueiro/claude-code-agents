@@ -44,6 +44,8 @@ def main():
          "path = STATE / 'events.jsonl'", "row['tool_input'] = event.get('tool_input')\n    path = STATE / 'events.jsonl'"),
         ('cross-skill invocation', 'f', acceptance.FrameworkAcceptance, 'test_generated_skill_invocations_resolve',
          "text = re.sub(rf'(?<![\\w])\\${re.escape(name)}\\b', '$' + PREFIX + name, text)", 'text = text'),
+        ('exported resource dependency', 'f', acceptance.FrameworkAcceptance, 'test_packaged_resources_retain_executable_behavior',
+         'data = resource.read_bytes()', "data = resource.read_bytes()\n                    if resource.name == 'health_check.py':\n                        data = data.replace(b'import requests', b'import codex_missing_dependency_probe')"),
     ]
     for label, attr, case_class, test, before, after in cases:
         original = getattr(acceptance, attr)

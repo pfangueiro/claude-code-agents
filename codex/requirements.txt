@@ -1,1 +1,3 @@
 PyYAML==6.0.3
+# Required by the exported deployment-runbook health_check.py resource.
+requests==2.34.2
