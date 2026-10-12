@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Independent publication acceptance at `aadd77c`: 21 Codex tests, eight mutation probes,
+  native skill discovery, isolated Claude validation and publication/privacy checks pass.
+  Record the exact implementation payload in `codex/PUBLICATION-REVIEW.md`; retain initial
+  audit fingerprints as historical and clarify install-manifest source provenance.
+
 - Reconciled remote documentation input `c4f343a` without rewriting history; updated
   README, installation, contributor/security/extension/skill guides, CLAUDE.md, AGENTS.md
   and public MEMORY.md for both integrations. Label historical skill integration notes;

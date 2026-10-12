@@ -1,6 +1,7 @@
 # Codex edition
 
-The Claude edition remains unchanged. This adapter builds **39 Codex workflow skills**
+The Claude runtime scripts are preserved; documentation and its instruction template
+now describe both integrations. This adapter builds **39 Codex workflow skills**
 (27 skills and 12 executable command templates) and **13 native custom agents** from
 the repository, with handwritten replacements for platform-dependent behavior.
 Each native specialist also has a role-guide skill fallback, giving **52 total skill
