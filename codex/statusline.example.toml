@@ -1,8 +1,15 @@
 # Optional fragment: merge only tui.status_line into the existing [tui] table of your
-# Codex config (or pick items live with /statusline). The installer never edits config.
-# Items are built-in Codex footer IDs; the host omits or clips them as width and runtime
-# data permit. The thread title shows "SDLC | <task>" only after framework guidance is
-# loaded and the model renamed the current task through a native title capability; it
-# does not mean checks, review or delivery passed. No cost or token estimates are listed.
+# Codex config (or pick, reorder and toggle items live with /statusline). The installer
+# never edits config. Items are built-in Codex footer IDs in priority order: the host
+# omits unavailable or zero values (used-tokens is hidden until tokens are used) and
+# clips trailing items on narrow terminals, so not every item shows at every width.
+# Token items are native session counters; limits are the native usage-limit windows.
+# The thread title shows "SDLC | <task>" only after framework guidance is loaded and the
+# model renamed the current task through a native title capability; it does not mean
+# checks, review or delivery passed. No cost or credit estimates are listed.
 [tui]
-status_line = ["thread-title", "model-with-reasoning", "git-branch", "context-used", "weekly-limit", "codex-version"]
+status_line = [
+  "thread-title", "model-with-reasoning", "context-remaining", "used-tokens",
+  "five-hour-limit", "weekly-limit", "git-branch", "current-dir",
+  "context-window-size", "total-input-tokens", "total-output-tokens", "codex-version",
+]

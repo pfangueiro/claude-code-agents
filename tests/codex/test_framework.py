@@ -61,14 +61,20 @@ class FrameworkAcceptance(unittest.TestCase):
         self.assertEqual(explicit, {'sdlc-commit-pr', 'sdlc-create-jira', 'sdlc-new-feature'})
         self.assertEqual(len(skills) - len(explicit), 52)
         tomllib.loads((self.root / '.codex/framework/mcp.example.toml').read_text())
-        # The footer fragment is one mergeable field of native IDs, with no inferred cost/token items.
+        # The footer fragment is one mergeable field of unique native IDs verified against the
+        # Codex CLI footer item list; cost/credit estimates and unknown IDs are rejected.
         footer = tomllib.loads((self.root / '.codex/framework/statusline.example.toml').read_text())
         self.assertEqual(set(footer), {'tui'})
         self.assertEqual(set(footer['tui']), {'status_line'})
         items = footer['tui']['status_line']
         self.assertTrue(items and all(isinstance(item, str) for item in items))
-        self.assertIn('thread-title', items)
-        self.assertFalse([item for item in items if re.search('cost|credit|token', item)])
+        self.assertEqual(len(items), len(set(items)))
+        self.assertEqual(items[0], 'thread-title')
+        native = {'thread-title', 'model-with-reasoning', 'context-remaining', 'used-tokens',
+                  'five-hour-limit', 'weekly-limit', 'git-branch', 'current-dir',
+                  'context-window-size', 'total-input-tokens', 'total-output-tokens', 'codex-version'}
+        self.assertLessEqual(set(items), native)
+        self.assertFalse([item for item in items if re.search('cost|credit', item)])
 
     def test_idempotence_dry_run_and_personal_preservation(self):
         personal = {'.codex/config.toml': b'model = "personal"\n[tui]\nstatus_line = ["model"]\n',
