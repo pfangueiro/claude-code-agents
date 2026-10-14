@@ -18,9 +18,10 @@ until a real tool call or process does it and its receipt is collected.
 
 ## Roles
 
-- Explicit roles from the user and owner or project policy prevail.
-- Where owner or project policy selects the paired default: Codex coordinates and
-  independently verifies; Claude implements.
+- Default: Codex coordinates and independently verifies; an actual Claude
+  execution implements. Only explicit owner or project instructions override it.
+- The default assigns roles; it does not start a dispatcher. A role is fulfilled
+  only when a real controller or CLI invocation runs it.
 - Never hardcode accounts, profiles, models or paths. Inherit configured CLI
   defaults and report the model actually observed.
 - An unavailable provider or reviewer stays a named gap, for example
@@ -33,8 +34,8 @@ until a real tool call or process does it and its receipt is collected.
 ## Workflow
 
 1. **Ground.** Read project instruction files and verify the request's premise
-   against source. Record the exact SHA, toolchain versions and dirty state. For an
-   unfamiliar repository run /repo-context first.
+   against source. Record the base identity: exact SHA, toolchain versions and
+   dirty state. For an unfamiliar repository run /repo-context first.
 2. **Contract.** Write one live outcome contract
    ([task contract](references/task-contract.md)). Amend it in place when scope
    changes; do not keep parallel copies.
@@ -45,20 +46,41 @@ until a real tool call or process does it and its receipt is collected.
    execution starts.
 5. **Execute and collect.** Gather actual terminal receipts (command, exit status,
    log location) with /verified-handoff. A pending, killed or timed-out run is not
-   a pass.
-6. **Reconcile.** Worktree diff, task result, report and PR must agree with the
-   manifest. Explain every difference or treat it as a defect.
+   a pass. See *Provider lifecycle* for when a provider run counts as complete.
+6. **Freeze and reconcile.** Freeze the result identity: the result commit SHA, or
+   a digest of the exact dirty bytes when uncommitted. Worktree diff, task result,
+   report and PR must agree with that result and the manifest. Explain every
+   difference or treat it as a defect.
 7. **Independent review.** The reviewer sees requirements, source, diff and raw
-   artifacts before any producer conclusions. A blocker states the violated
-   requirement and a reproduction; low-impact suggestions are labelled as such.
-8. **Remediate.** Preserve failure evidence; do not overwrite logs. After repeated
-   failure through the same mechanism, change strategy instead of retrying.
-9. **Publish.** Local checks and review complete before push or PR. Merge requires
-   the configured CI and approval at the exact head SHA, verified ancestry and
-   existing authorization. Report implemented, reviewed, merged and deployed as
-   distinct states.
+   artifacts before any producer conclusions. Findings and the verdict are bound
+   to the input revision, base identity and frozen result identity. A blocker
+   states the violated requirement and a reproduction; low-impact suggestions are
+   labelled as such.
+8. **Remediate.** Preserve failure evidence; do not overwrite logs. Remediation,
+   a new head or input drift invalidates the bound verdict: freeze the new result
+   and review it again. After repeated failure through the same mechanism, change
+   strategy instead of retrying.
+9. **Publish.** Required local checks pass and an independent verdict without
+   unresolved blockers covers the exact result before push or PR; otherwise hold.
+   Merge requires the configured CI and approval at the exact head SHA, verified
+   ancestry and existing authorization. Report implemented, reviewed, merged and
+   deployed as distinct states.
 10. **Continue.** Proceed through remaining authorized slices while attended. Do not
     create watchers, schedules or operational authority that was not granted.
+
+## Provider lifecycle
+
+- A child process exiting 0 is not completion. Completion also requires the
+  provider's own terminal result to report success (not an error, permission
+  denial or interruption) and no unresolved background task or later lifecycle
+  event.
+- Before cleanup or removing anything a run depends on, collect every predeclared
+  check's actual receipt and both complete logs: the child process output and the
+  provider event log.
+- Record child exit code or signal separately from the admission outcome (whether
+  the result is accepted as complete).
+- An interrupted or incomplete run keeps its recorded outcome. A later recovery is
+  a new boundary with its own receipts; it never relabels the earlier history.
 
 ## Recovery
 
@@ -76,7 +98,10 @@ Repository-specific policy (base branch, release, issue tracking, required check
 lives in that project's own instructions or adapter skill. Adapters add policy for
 their repository; they never become universal exceptions to this procedure.
 
+These procedures are guidance, not an enforcement engine; compliance is shown by
+the receipts, not assumed.
+
 ## Resources
 
-- `references/task-contract.md` — outcome contract, task card, receipt and final
-  report fields.
+- `references/task-contract.md` — outcome contract, task card, receipt, review
+  and final report fields.
