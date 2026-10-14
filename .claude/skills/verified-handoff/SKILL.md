@@ -10,7 +10,7 @@ first, run each one through the recorder, then verify the whole manifest.
 
 ## 1. Declare the checks
 
-Write a manifest outside the repository before running anything:
+Write `evidence/manifest.json` outside the repository before running anything:
 
 ```json
 {
@@ -20,14 +20,16 @@ Write a manifest outside the repository before running anything:
       "cwd": "../project",
       "command": {"executable": "python3", "args": ["-m", "unittest", "-v"]},
       "expectedSha": "<full 40- or 64-hex commit>",
-      "resultFile": "evidence/unit-tests/result.json"
+      "resultFile": "unit-tests/result.json"
     }
   ]
 }
 ```
 
-Relative paths resolve against the manifest's directory. Each check has exactly one
-of `expectedSha` or `sourceOnly` (a description of an archive or unversioned tree).
+`cwd` resolves against the manifest's directory. `resultFile` must be a relative path
+inside a subdirectory of the manifest's directory, with no `.` or `..` parts. Each
+check has exactly one of `expectedSha` or `sourceOnly` (a description of an archive
+or unversioned tree).
 
 ## 2. Run each check
 
@@ -39,9 +41,15 @@ python3 scripts/evidence.py run --cwd ../project --out-dir evidence/unit-tests \
 - The command is a literal argv; no shell is involved. Wrap in `sh -c` only when the
   manifest declares that.
 - `--out-dir` must not exist; it is created for this run and must be outside the input.
-- Committed runs are refused before launch when HEAD differs or the checkout has
-  tracked or untracked changes. A HEAD or tracked-file change during the run fails
-  the gate even if the child exited 0; the child status is kept separately.
+- Committed runs are refused before launch when HEAD differs, when the index or any
+  tracked file's content differs from HEAD, or when untracked files exist. Entries
+  hidden by skip-worktree/assume-unchanged flags (`index-flags-unsupported`),
+  submodules (`submodules-unsupported`) and tracked paths routed through a configured
+  content filter driver (`content-filters-unsupported`, because inspecting them would
+  run the driver's command) are refused rather than trusted. Use `--source-only` for
+  such trees.
+- A HEAD, index-flag or tracked-content change during the run fails the gate even if
+  the child exited 0; the child status is kept separately.
 - The child runs in its own process group. If the leader exits while group members
   remain, the recorder waits up to the timeout, then terminates only that group and
   fails the gate. On timeout the group receives SIGTERM, then SIGKILL.
@@ -56,7 +64,11 @@ python3 scripts/evidence.py verify --manifest evidence/manifest.json
 
 Read-only. Each check is `verified`, `pending` (no receipt yet) or `rejected` with
 fixed reason codes (`wrong-command`, `wrong-commit`, `input-mutated`,
-`child-nonzero-exit`, `stdout-log-altered`, `receipt-symlink`, ...). Exit `0` only when
+`child-nonzero-exit`, `invalid-timestamps`, `invalid-child-fields`,
+`stdout-log-altered`, `receipt-path-symlink`, ...). A receipt verifies only when every
+terminal field is present and correctly typed: ordered timestamps, finite duration and
+timeout, integer exit code `0`, explicit `null` signal, no signals sent and an empty
+process group. No component of the evidence path may be a symlink. Exit `0` only when
 every check is verified. Report pending and rejected checks as such; never summarize
 them as passing.
 

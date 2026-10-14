@@ -10,14 +10,18 @@ manifests with their declared toolchain and test declarations. Mixed repositorie
 report every ecosystem found.
 
 Guarantees:
-    - Nothing is executed except read-only `git` queries. Command candidates are
-      data derived from declarations; they are never run.
+    - Nothing is executed except read-only `git` queries, and no query that could run
+      a repository-configured command: when a tracked path is routed through a
+      configured content filter driver the dirty state is reported as unknown instead
+      of running `git status`, and
+      submodules are never recursed. Command candidates are data; they are never run.
     - Nothing is guessed: an undeclared package manager, default branch or CI gate
       is reported as unknown, not inferred from lockfiles or conventions.
-    - No credential, home-directory or environment enumeration; remote URLs are not
-      read. Only the repository tree is inspected and symlinks are not followed.
-    - Malformed declarations are reported as explicit unknowns with a fixed reason
-      code; their content is never echoed.
+    - No credential, home-directory or environment enumeration; Git configuration
+      values and remote URLs are not read. Only the repository tree is inspected, and
+      no symlink is followed at any path component.
+    - Malformed declarations and bounded-scan pruning are reported as explicit
+      unknowns with fixed reason codes; malformed content is never echoed.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
 import tomllib
@@ -45,6 +50,7 @@ PY_LOCKS = ('uv.lock', 'poetry.lock', 'Pipfile.lock', 'pdm.lock')
 CI_FILES = ('.gitlab-ci.yml', '.circleci/config.yml', 'azure-pipelines.yml',
             'Jenkinsfile', '.travis.yml', 'bitbucket-pipelines.yml')
 PACKAGE_MANAGER_RE = re.compile(r'^(npm|pnpm|yarn|bun)@[0-9][0-9A-Za-z.+-]*$')
+ENGINE_RANGE_RE = re.compile(r'^[0-9A-Za-z.*^~<>=|, +-]{1,100}$')
 MAKE_TARGET_RE = re.compile(r'^([A-Za-z0-9][A-Za-z0-9_.-]*)\s*:(?!=)', re.MULTILINE)
 GO_DIRECTIVE_RE = re.compile(r'^(module|go|toolchain)\s+(\S+)\s*$', re.MULTILINE)
 SAFE_TOKEN_RE = re.compile(r'^[A-Za-z0-9@._/+:-]{1,200}$')
@@ -56,15 +62,21 @@ GIT_SAFE = ['-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false']
 
 # ---------------------------------------------------------------- helpers
 
-def git(cwd: Path, *args: str) -> str | None:
+def git_proc(cwd: Path, *args: str) -> subprocess.CompletedProcess | None:
     env = {'PATH': os.environ.get('PATH', ''), 'GIT_OPTIONAL_LOCKS': '0',
            'HOME': os.environ.get('HOME', ''), 'LC_ALL': 'C'}
     try:
-        proc = subprocess.run(['git', *GIT_SAFE, '-C', str(cwd), *args], env=env,
+        return subprocess.run(['git', *GIT_SAFE, '-C', str(cwd), *args], env=env,
                               stdin=subprocess.DEVNULL, capture_output=True, check=False)
     except OSError:
         return None
-    return proc.stdout.decode('utf-8', 'replace') if proc.returncode == 0 else None
+
+
+def git(cwd: Path, *args: str) -> str | None:
+    proc = git_proc(cwd, *args)
+    if proc is None or proc.returncode != 0:
+        return None
+    return proc.stdout.decode('utf-8', 'replace')
 
 
 def safe_token(value) -> str | None:
@@ -72,10 +84,36 @@ def safe_token(value) -> str | None:
     return value if isinstance(value, str) and SAFE_TOKEN_RE.match(value) else None
 
 
-def read_regular(path: Path, unknowns: list, rel: str) -> bytes | None:
-    if path.is_symlink():
-        unknowns.append({'path': rel, 'reason': 'symlink-not-followed'})
+def path_kind(root: Path, rel: str, unknowns: list) -> str | None:
+    """'file' or 'dir' when every component under root is a real entry; None otherwise.
+
+    A symlink at ANY component is not followed and is recorded as a fixed unknown, so a
+    symlinked ancestor cannot redirect discovery outside the repository.
+    """
+    current = root
+    for part in rel.split('/'):
+        current = current / part
+        try:
+            info = current.lstat()
+        except OSError:
+            return None
+        if stat.S_ISLNK(info.st_mode):
+            unknowns.append({'path': current.relative_to(root).as_posix(),
+                             'reason': 'symlink-not-followed'})
+            return None
+    if stat.S_ISREG(info.st_mode):
+        return 'file'
+    return 'dir' if stat.S_ISDIR(info.st_mode) else None
+
+
+def rel_join(rel_dir: str, name: str) -> str:
+    return name if rel_dir == '.' else f'{rel_dir}/{name}'
+
+
+def read_regular(root: Path, rel: str, unknowns: list) -> bytes | None:
+    if path_kind(root, rel, unknowns) != 'file':
         return None
+    path = root / rel
     try:
         if path.stat().st_size > MAX_FILE_BYTES:
             unknowns.append({'path': rel, 'reason': 'too-large'})
@@ -86,15 +124,87 @@ def read_regular(path: Path, unknowns: list, rel: str) -> bytes | None:
         return None
 
 
-def file_fact(path: Path, root: Path) -> dict:
-    data = path.read_bytes() if path.stat().st_size <= MAX_FILE_BYTES else b''
-    return {'path': path.relative_to(root).as_posix(), 'bytes': path.stat().st_size,
-            'sha256': hashlib.sha256(data).hexdigest() if data else None}
+def file_fact(root: Path, rel: str) -> dict:
+    path = root / rel
+    size = path.lstat().st_size
+    digest = hashlib.sha256(path.read_bytes()).hexdigest() if size <= MAX_FILE_BYTES else None
+    return {'path': rel, 'bytes': size, 'sha256': digest}
 
 
 # ---------------------------------------------------------------- source identity
 
-def source_identity(cwd: Path) -> tuple[Path, dict]:
+def filters_active(root: Path) -> bool | None:
+    """Whether a tracked path's filter attribute names a configured driver command.
+
+    Driver names come from configuration key names; values are never read. Attribute
+    lookup (`check-attr`) runs nothing. None means the question could not be answered.
+    """
+    proc = git_proc(root, 'config', '--name-only', '--get-regexp',
+                    r'^filter\..*\.(clean|smudge|process)$')
+    if proc is None or proc.returncode not in (0, 1):
+        return None
+    if proc.returncode == 1:
+        return False
+    drivers = {key.split(b'.', 1)[1].rsplit(b'.', 1)[0] for key in proc.stdout.splitlines()}
+    listed = git_proc(root, 'ls-files', '-z')
+    if listed is None or listed.returncode != 0:
+        return None
+    if not listed.stdout:
+        return False
+    env = {'PATH': os.environ.get('PATH', ''), 'GIT_OPTIONAL_LOCKS': '0',
+           'HOME': os.environ.get('HOME', ''), 'LC_ALL': 'C'}
+    try:
+        attrs = subprocess.run(['git', *GIT_SAFE, '-C', str(root), 'check-attr', '--stdin',
+                                '-z', 'filter'], env=env, input=listed.stdout,
+                               capture_output=True, check=False)
+    except OSError:
+        return None
+    if attrs.returncode != 0:
+        return None
+    return any(value in drivers for value in attrs.stdout.split(b'\0')[2::3])
+
+
+def status_counts(root: Path) -> tuple[int, int] | None:
+    # Submodules are not recursed: their own configuration could run callbacks.
+    raw = git(root, 'status', '--porcelain=v1', '-z', '--untracked-files=normal',
+              '--ignore-submodules=all')
+    if raw is None:
+        return None
+    tracked = untracked = 0
+    fields = iter(raw.split('\0'))
+    for field in fields:
+        if len(field) < 4:
+            continue
+        if field.startswith('??'):
+            untracked += 1
+            continue
+        tracked += 1
+        if field[0] in 'RC' or field[1] in 'RC':
+            next(fields, None)  # a rename/copy source path is a separate field
+    return tracked, untracked
+
+
+def dirty_state(root: Path, unknowns: list) -> dict:
+    unknown = {'dirty': None, 'trackedChanges': None, 'untrackedFiles': None}
+    configured = filters_active(root)
+    if configured is not False:
+        # Inspecting content would run the configured filter commands: refuse instead.
+        unknowns.append({'path': '.', 'reason': 'dirty-state-uninspected-content-filters'
+                         if configured else 'dirty-state-unavailable'})
+        return unknown
+    counts = status_counts(root)
+    if counts is None:
+        unknowns.append({'path': '.', 'reason': 'dirty-state-unavailable'})
+        return unknown
+    index = git(root, 'ls-files', '-s', '-z') or ''
+    if any(entry.startswith('160000 ') for entry in index.split('\0')):
+        unknowns.append({'path': '.', 'reason': 'submodule-state-not-inspected'})
+    tracked, untracked = counts
+    return {'dirty': bool(tracked or untracked), 'trackedChanges': tracked,
+            'untrackedFiles': untracked}
+
+
+def source_identity(cwd: Path, unknowns: list) -> tuple[Path, dict]:
     top = git(cwd, 'rev-parse', '--show-toplevel')
     if top is None:
         return cwd, {'kind': 'archive-or-unversioned', 'gitRoot': None, 'head': None,
@@ -102,18 +212,14 @@ def source_identity(cwd: Path) -> tuple[Path, dict]:
                      'described explicitly (for example an archive name and digest)'}
     root = Path(top.strip()).resolve()
     head = git(root, 'rev-parse', '--verify', '-q', 'HEAD')
-    status = git(root, 'status', '--porcelain=v1', '-z', '--untracked-files=normal')
     branch = git(root, 'symbolic-ref', '-q', '--short', 'HEAD')
     origin_head = git(root, 'symbolic-ref', '-q', '--short', 'refs/remotes/origin/HEAD')
-    records = [r for r in (status or '').split('\0') if len(r) > 3 and r[2] == ' ']
     return root, {
         'kind': 'git',
         'gitRoot': str(root),
         'head': head.strip() if head else None,
         'branch': branch.strip() if branch else None,
-        'dirty': None if status is None else bool(records),
-        'trackedChanges': None if status is None else sum(not r.startswith('??') for r in records),
-        'untrackedFiles': None if status is None else sum(r.startswith('??') for r in records),
+        **dirty_state(root, unknowns),
         'defaultBranch': None,
         'localOriginHead': origin_head.strip() if origin_head else None,
         'note': 'defaultBranch is not determined locally; localOriginHead is a possibly '
@@ -123,52 +229,84 @@ def source_identity(cwd: Path) -> tuple[Path, dict]:
 
 # ---------------------------------------------------------------- tree walk
 
-def walk(root: Path) -> tuple[list[Path], bool]:
-    dirs_out: list[Path] = []
-    truncated = False
-    for current, dirs, _files in os.walk(root, followlinks=False):
+def walk(root: Path) -> tuple[list[tuple[Path, list[str]]], dict]:
+    """Bounded walk. Returns (directory, file names) pairs and the pruning facts."""
+    visited: list[tuple[Path, list[str]]] = []
+    scan = {'maxDepth': MAX_DEPTH, 'maxDirectories': MAX_DIRS, 'directoriesVisited': 0,
+            'depthPruned': 0, 'countTruncated': False, 'symlinkedDirectoriesNotFollowed': 0,
+            'skippedDirectoryNames': sorted(SKIP_DIRS)}
+    for current, dirs, files in os.walk(root, followlinks=False):
         here = Path(current)
         depth = len(here.relative_to(root).parts)
-        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and depth < MAX_DEPTH)
-        dirs_out.append(here)
-        if len(dirs_out) >= MAX_DIRS:
-            truncated = True
+        real = []
+        for name in sorted(dirs):
+            if name in SKIP_DIRS:
+                continue
+            if (here / name).is_symlink():
+                scan['symlinkedDirectoriesNotFollowed'] += 1
+            else:
+                real.append(name)
+        if depth >= MAX_DEPTH:
+            scan['depthPruned'] += len(real)
+            real = []
+        dirs[:] = real
+        visited.append((here, sorted(files)))
+        if len(visited) >= MAX_DIRS:
+            # Conservative: the budget is exhausted, so unvisited directories may remain.
+            scan['countTruncated'] = True
             break
-    return dirs_out, truncated
+    scan['directoriesVisited'] = len(visited)
+    return visited, scan
 
 
-def instruction_files(root: Path, cwd: Path, dirs: list[Path]) -> list[dict]:
+def instruction_files(root: Path, cwd: Path, dirs: list[Path], unknowns: list) -> list[dict]:
     found = []
-    chain = [root] + [root.joinpath(*cwd.relative_to(root).parts[:i + 1])
-                      for i in range(len(cwd.relative_to(root).parts))]
+    parts = cwd.relative_to(root).parts
+    chain = {root.joinpath(*parts[:i]) for i in range(len(parts) + 1)}
     for directory in dirs:
         scope = 'ancestor-or-cwd' if directory in chain else 'nested'
+        rel_dir = directory.relative_to(root).as_posix() or '.'
         for name in INSTRUCTION_NAMES + INSTRUCTION_NESTED:
-            path = directory / name
-            if path.is_file() and not path.is_symlink():
-                found.append({**file_fact(path, root), 'scope': scope})
+            rel = rel_join(rel_dir, name)
+            if path_kind(root, rel, unknowns) == 'file':
+                found.append({**file_fact(root, rel), 'scope': scope})
     for rule_dir in RULE_DIRS:
-        base = root / rule_dir
-        if base.is_dir() and not base.is_symlink():
-            for path in sorted(base.glob('*.md*')):
-                if path.is_file() and not path.is_symlink():
-                    found.append({**file_fact(path, root), 'scope': 'rules'})
+        if path_kind(root, rule_dir, unknowns) != 'dir':
+            continue
+        for path in sorted((root / rule_dir).iterdir()):
+            rel = f'{rule_dir}/{path.name}'
+            if '.md' in path.suffixes and path_kind(root, rel, unknowns) == 'file':
+                found.append({**file_fact(root, rel), 'scope': 'rules'})
     return found
 
 
 # ---------------------------------------------------------------- ecosystems
 
-def node_manifest(directory: Path, root: Path, unknowns: list) -> dict | None:
-    path = directory / 'package.json'
-    if not path.exists():
+def present(root: Path, rel_dir: str, names: tuple, unknowns: list) -> list[str]:
+    return [n for n in names if path_kind(root, rel_join(rel_dir, n), unknowns) == 'file']
+
+
+def node_engines(engines, rel: str, unknowns: list) -> dict:
+    declared = {}
+    for name, value in engines.items():
+        if not safe_token(name) or not isinstance(value, str):
+            unknowns.append({'path': rel, 'reason': 'invalid-engine-entry'})
+        elif ENGINE_RANGE_RE.match(value):
+            declared[name] = value
+        else:
+            unknowns.append({'path': rel, 'reason': 'unsupported-engine-range'})
+    return declared
+
+
+def node_manifest(root: Path, rel_dir: str, files: list, unknowns: list) -> dict | None:
+    rel = rel_join(rel_dir, 'package.json')
+    if 'package.json' not in files:
         return None
-    rel = path.relative_to(root).as_posix()
-    entry = {'manifest': rel, 'lockfiles': [n for n in NODE_LOCKS if (directory / n).is_file()],
+    entry = {'manifest': rel, 'lockfiles': present(root, rel_dir, NODE_LOCKS, unknowns),
              'packageManager': None, 'toolchain': {}, 'scripts': [], 'tests': [], 'commands': []}
-    for name in ('.nvmrc', '.node-version'):
-        if (directory / name).is_file():
-            entry['toolchain'][name] = 'declared-file'
-    raw = read_regular(path, unknowns, rel)
+    for name in present(root, rel_dir, ('.nvmrc', '.node-version'), unknowns):
+        entry['toolchain'][name] = 'declared-file'
+    raw = read_regular(root, rel, unknowns)
     if raw is None:
         return entry
     try:
@@ -179,17 +317,17 @@ def node_manifest(directory: Path, root: Path, unknowns: list) -> dict | None:
         unknowns.append({'path': rel, 'reason': 'invalid-json'})
         return entry
     declared = data.get('packageManager')
-    if declared is not None:
-        if isinstance(declared, str) and PACKAGE_MANAGER_RE.match(declared):
-            entry['packageManager'] = declared
-        else:
-            unknowns.append({'path': rel, 'reason': 'invalid-packageManager'})
-    else:
+    if declared is None:
         unknowns.append({'path': rel, 'reason': 'package-manager-not-declared'})
+    elif isinstance(declared, str) and PACKAGE_MANAGER_RE.match(declared):
+        entry['packageManager'] = declared
+    else:
+        unknowns.append({'path': rel, 'reason': 'invalid-packageManager'})
     engines = data.get('engines')
     if isinstance(engines, dict):
-        entry['toolchain']['engines'] = {k: safe_token(v) for k, v in engines.items()
-                                         if safe_token(k)}
+        entry['toolchain']['engines'] = node_engines(engines, rel, unknowns)
+    elif engines is not None:
+        unknowns.append({'path': rel, 'reason': 'invalid-engines'})
     scripts = data.get('scripts', {})
     if not isinstance(scripts, dict):
         unknowns.append({'path': rel, 'reason': 'invalid-scripts'})
@@ -203,7 +341,7 @@ def node_manifest(directory: Path, root: Path, unknowns: list) -> dict | None:
         if name == 'test' or name.startswith('test:'):
             entry['tests'].append(f'scripts.{name}')
             entry['commands'].append({
-                'cwd': directory.relative_to(root).as_posix() or '.',
+                'cwd': rel_dir,
                 'argv': [runner, 'run', name] if runner else None,
                 'basis': f'package.json scripts.{name}',
                 'blockedBy': None if runner else 'package-manager-not-declared',
@@ -211,9 +349,8 @@ def node_manifest(directory: Path, root: Path, unknowns: list) -> dict | None:
     return entry
 
 
-def load_toml(path: Path, root: Path, unknowns: list) -> dict | None:
-    rel = path.relative_to(root).as_posix()
-    raw = read_regular(path, unknowns, rel)
+def load_toml(root: Path, rel: str, unknowns: list) -> dict | None:
+    raw = read_regular(root, rel, unknowns)
     if raw is None:
         return None
     try:
@@ -223,9 +360,8 @@ def load_toml(path: Path, root: Path, unknowns: list) -> dict | None:
         return None
 
 
-def load_ini(path: Path, root: Path, unknowns: list) -> configparser.ConfigParser | None:
-    rel = path.relative_to(root).as_posix()
-    raw = read_regular(path, unknowns, rel)
+def load_ini(root: Path, rel: str, unknowns: list) -> configparser.ConfigParser | None:
+    raw = read_regular(root, rel, unknowns)
     if raw is None:
         return None
     parser = configparser.ConfigParser(interpolation=None)
@@ -237,47 +373,51 @@ def load_ini(path: Path, root: Path, unknowns: list) -> configparser.ConfigParse
     return parser
 
 
-def python_manifest(directory: Path, root: Path, unknowns: list) -> dict | None:
+def pyproject_facts(root: Path, rel_dir: str, entry: dict, unknowns: list) -> None:
+    data = load_toml(root, rel_join(rel_dir, 'pyproject.toml'), unknowns)
+    if data is None:
+        return
+    build = data.get('build-system', {})
+    entry['buildBackend'] = safe_token(build.get('build-backend')) if isinstance(build, dict) else None
+    project = data.get('project', {}) if isinstance(data.get('project'), dict) else {}
+    requires = project.get('requires-python')
+    if requires is not None:
+        entry['toolchain']['requires-python'] = requires if isinstance(requires, str) \
+            and len(requires) <= 100 else None
+    tool = data.get('tool', {}) if isinstance(data.get('tool'), dict) else {}
+    entry['toolSections'] = sorted(k for k in tool if safe_token(k))
+    pytest_cfg = tool.get('pytest')
+    if isinstance(pytest_cfg, dict) and 'ini_options' in pytest_cfg:
+        entry['tests'].append('pyproject.toml [tool.pytest.ini_options]')
+
+
+def python_manifest(root: Path, rel_dir: str, files: list, unknowns: list) -> dict | None:
     names = ('pyproject.toml', 'setup.py', 'setup.cfg', 'requirements.txt', 'Pipfile',
              'tox.ini', 'pytest.ini', 'noxfile.py')
-    present = [n for n in names if (directory / n).exists()]
-    if not present:
+    found = [n for n in names if n in files]
+    if not found:
         return None
-    rel_dir = directory.relative_to(root).as_posix() or '.'
-    entry = {'manifests': [f'{rel_dir}/{n}' if rel_dir != '.' else n for n in present],
-             'lockfiles': [n for n in PY_LOCKS if (directory / n).is_file()],
+    entry = {'manifests': [rel_join(rel_dir, n) for n in found],
+             'lockfiles': present(root, rel_dir, PY_LOCKS, unknowns),
              'buildBackend': None, 'toolchain': {}, 'tests': [], 'commands': []}
-    if (directory / '.python-version').is_file():
+    if present(root, rel_dir, ('.python-version',), unknowns):
         entry['toolchain']['.python-version'] = 'declared-file'
-    if 'pyproject.toml' in present:
-        data = load_toml(directory / 'pyproject.toml', root, unknowns)
-        if data is not None:
-            build = data.get('build-system', {})
-            entry['buildBackend'] = safe_token(build.get('build-backend')) if isinstance(build, dict) else None
-            project = data.get('project', {}) if isinstance(data.get('project'), dict) else {}
-            requires = project.get('requires-python')
-            if requires is not None:
-                entry['toolchain']['requires-python'] = requires if isinstance(requires, str) \
-                    and len(requires) <= 100 else None
-            tool = data.get('tool', {}) if isinstance(data.get('tool'), dict) else {}
-            entry['toolSections'] = sorted(k for k in tool if safe_token(k))
-            pytest_cfg = tool.get('pytest')
-            if isinstance(pytest_cfg, dict) and 'ini_options' in pytest_cfg:
-                entry['tests'].append('pyproject.toml [tool.pytest.ini_options]')
-    if 'pytest.ini' in present:
+    if 'pyproject.toml' in found:
+        pyproject_facts(root, rel_dir, entry, unknowns)
+    if 'pytest.ini' in found:
         entry['tests'].append('pytest.ini')
-    if 'setup.cfg' in present:
-        cfg = load_ini(directory / 'setup.cfg', root, unknowns)
+    if 'setup.cfg' in found:
+        cfg = load_ini(root, rel_join(rel_dir, 'setup.cfg'), unknowns)
         if cfg is not None and cfg.has_section('tool:pytest'):
             entry['tests'].append('setup.cfg [tool:pytest]')
-    if 'tox.ini' in present:
-        cfg = load_ini(directory / 'tox.ini', root, unknowns)
+    if 'tox.ini' in found:
+        cfg = load_ini(root, rel_join(rel_dir, 'tox.ini'), unknowns)
         if cfg is not None:
             entry['tests'].append('tox.ini')
             if cfg.has_section('pytest'):
                 entry['tests'].append('tox.ini [pytest]')
             entry['commands'].append(command(rel_dir, ['tox'], 'tox.ini declared'))
-    if 'noxfile.py' in present:
+    if 'noxfile.py' in found:
         entry['tests'].append('noxfile.py')
         entry['commands'].append(command(rel_dir, ['nox'], 'noxfile.py declared'))
     if any(t.startswith(('pyproject', 'pytest.ini', 'setup.cfg', 'tox.ini [pytest]'))
@@ -287,14 +427,13 @@ def python_manifest(directory: Path, root: Path, unknowns: list) -> dict | None:
     return entry
 
 
-def go_manifest(directory: Path, root: Path, unknowns: list) -> dict | None:
-    path = directory / 'go.mod'
-    if not path.exists():
+def go_manifest(root: Path, rel_dir: str, files: list, unknowns: list,
+                test_counts: dict) -> dict | None:
+    if 'go.mod' not in files:
         return None
-    rel = path.relative_to(root).as_posix()
-    rel_dir = directory.relative_to(root).as_posix() or '.'
+    rel = rel_join(rel_dir, 'go.mod')
     entry = {'manifest': rel, 'module': None, 'toolchain': {}, 'tests': [], 'commands': []}
-    raw = read_regular(path, unknowns, rel)
+    raw = read_regular(root, rel, unknowns)
     if raw is None:
         return entry
     try:
@@ -302,7 +441,7 @@ def go_manifest(directory: Path, root: Path, unknowns: list) -> dict | None:
     except UnicodeDecodeError:
         unknowns.append({'path': rel, 'reason': 'invalid-go-mod'})
         return entry
-    directives = {k: v for k, v in GO_DIRECTIVE_RE.findall(text)}
+    directives = dict(GO_DIRECTIVE_RE.findall(text))
     module = safe_token(directives.get('module'))
     if module is None:
         unknowns.append({'path': rel, 'reason': 'invalid-go-mod'})
@@ -311,85 +450,113 @@ def go_manifest(directory: Path, root: Path, unknowns: list) -> dict | None:
     for key in ('go', 'toolchain'):
         if safe_token(directives.get(key)):
             entry['toolchain'][key] = directives[key]
-    test_files = count_go_tests(directory)
-    if test_files:
-        entry['tests'].append(f'{test_files} _test.go file(s)')
+    tests = test_counts.get(rel_dir, 0)
+    if tests:
+        entry['tests'].append(f'{tests} _test.go file(s) within the bounded scan')
         entry['commands'].append(command(rel_dir, ['go', 'test', './...'],
                                          'go.mod with _test.go files'))
     return entry
 
 
-def count_go_tests(directory: Path) -> int:
-    total = 0
-    for current, dirs, files in os.walk(directory, followlinks=False):
-        here = Path(current)
-        # A nested go.mod starts a different module.
-        dirs[:] = [d for d in dirs if d not in SKIP_DIRS and not (here / d / 'go.mod').exists()]
-        total += sum(1 for f in files if f.endswith('_test.go'))
-    return total
+def go_test_counts(root: Path, visited: list) -> dict[str, int]:
+    """Attribute _test.go files from the bounded walk to their nearest enclosing module."""
+    modules = {d for d, files in visited if 'go.mod' in files}
+    counts: dict[str, int] = {}
+    for directory, files in visited:
+        tests = sum(1 for f in files if f.endswith('_test.go'))
+        if not tests:
+            continue
+        owner = next((p for p in (directory, *directory.parents) if p in modules), None)
+        if owner is not None:
+            key = owner.relative_to(root).as_posix() or '.'
+            counts[key] = counts.get(key, 0) + tests
+    return counts
 
 
-def make_targets(directory: Path, root: Path, unknowns: list) -> dict | None:
-    path = directory / 'Makefile'
-    if not path.exists():
+def make_targets(root: Path, rel_dir: str, files: list, unknowns: list) -> dict | None:
+    if 'Makefile' not in files:
         return None
-    rel = path.relative_to(root).as_posix()
-    raw = read_regular(path, unknowns, rel)
+    rel = rel_join(rel_dir, 'Makefile')
+    raw = read_regular(root, rel, unknowns)
     if raw is None:
-        return {'manifest': rel, 'targets': []}
+        return {'manifest': rel, 'targets': [], 'commands': []}
     targets = sorted(set(MAKE_TARGET_RE.findall(raw.decode('utf-8', 'replace'))))
-    rel_dir = directory.relative_to(root).as_posix() or '.'
     return {'manifest': rel, 'targets': targets,
             'commands': [command(rel_dir, ['make', t], f'Makefile target {t}')
-                         for t in targets if t == 'test' or t.startswith('test')]}
+                         for t in targets if t.startswith('test')]}
 
 
 def command(cwd: str, argv: list[str], basis: str) -> dict:
     return {'cwd': cwd, 'argv': argv, 'basis': basis, 'blockedBy': None, 'executed': False}
 
 
-def ci_files(root: Path) -> list[str]:
-    found = [n for n in CI_FILES if (root / n).is_file()]
-    workflows = root / '.github' / 'workflows'
-    if workflows.is_dir() and not workflows.is_symlink():
-        found += sorted(p.relative_to(root).as_posix() for p in workflows.iterdir()
-                        if p.suffix in ('.yml', '.yaml') and p.is_file())
+def ci_files(root: Path, unknowns: list) -> list[str]:
+    found = [n for n in CI_FILES if path_kind(root, n, unknowns) == 'file']
+    if path_kind(root, '.github/workflows', unknowns) == 'dir':
+        for path in sorted((root / '.github' / 'workflows').iterdir()):
+            rel = f'.github/workflows/{path.name}'
+            if path.suffix in ('.yml', '.yaml') and path_kind(root, rel, unknowns) == 'file':
+                found.append(rel)
     return found
 
 
 # ---------------------------------------------------------------- report
 
+def scan_unknowns(scan: dict) -> list[dict]:
+    reasons = []
+    if scan['depthPruned']:
+        reasons.append({'path': '.', 'reason': 'directory-scan-depth-limit'})
+    if scan['countTruncated']:
+        reasons.append({'path': '.', 'reason': 'directory-scan-count-limit'})
+    return reasons
+
+
 def discover(cwd: Path) -> dict:
-    root, identity = source_identity(cwd)
-    dirs, truncated = walk(root)
     unknowns: list[dict] = []
+    root, identity = source_identity(cwd, unknowns)
+    visited, scan = walk(root)
+    unknowns.extend(scan_unknowns(scan))
+    test_counts = go_test_counts(root, visited)
     ecosystems = {'node': [], 'python': [], 'go': [], 'make': []}
-    for directory in dirs:
-        for key, probe in (('node', node_manifest), ('python', python_manifest),
-                           ('go', go_manifest), ('make', make_targets)):
-            found = probe(directory, root, unknowns)
+    for directory, files in visited:
+        rel_dir = directory.relative_to(root).as_posix() or '.'
+        probes = (('node', node_manifest(root, rel_dir, files, unknowns)),
+                  ('python', python_manifest(root, rel_dir, files, unknowns)),
+                  ('go', go_manifest(root, rel_dir, files, unknowns, test_counts)),
+                  ('make', make_targets(root, rel_dir, files, unknowns)))
+        for key, found in probes:
             if found is not None:
                 ecosystems[key].append(found)
-    if truncated:
-        unknowns.append({'path': '.', 'reason': 'directory-scan-truncated'})
     languages = sorted(k for k in ('node', 'python', 'go') if ecosystems[k])
     candidates = [c for group in ecosystems.values() for e in group for c in e.get('commands', [])]
-    ci = ci_files(root)
+    instructions = instruction_files(root, cwd, [d for d, _ in visited], unknowns)
+    ci = ci_files(root, unknowns)
     return {
         'schema': 'repo-context/v1',
         'cwd': str(cwd),
         'scanRoot': str(root),
         'source': identity,
-        'instructions': instruction_files(root, cwd, dirs),
+        'scan': scan,
+        'instructions': instructions,
         'languages': languages,
         'mixed': len(languages) > 1,
         'ecosystems': ecosystems,
         'commandCandidates': candidates,
         'ci': {'files': ci, 'gates': None,
                'note': 'CI files are listed, not interpreted; required gates are unknown'},
-        'unknowns': unknowns,
+        'unknowns': dedupe(unknowns),
         'executionStillNeeded': still_needed(identity, ecosystems, candidates, ci, unknowns),
     }
+
+
+def dedupe(unknowns: list[dict]) -> list[dict]:
+    seen, unique = set(), []
+    for item in unknowns:
+        key = (item['path'], item['reason'])
+        if key not in seen:
+            seen.add(key)
+            unique.append(item)
+    return unique
 
 
 def still_needed(identity: dict, ecosystems: dict, candidates: list, ci: list,
@@ -397,6 +564,9 @@ def still_needed(identity: dict, ecosystems: dict, candidates: list, ci: list,
     needed = ['reconcile these facts with the instruction files; instructions win on conflicts']
     if identity['kind'] != 'git':
         needed.append('record an explicit source description for this unversioned tree')
+    elif identity['dirty'] is None:
+        needed.append('dirty state was not inspected; establish it by a means that runs no '
+                      'repository-configured command')
     elif identity['dirty']:
         needed.append('decide how to handle uncommitted changes before recording evidence')
     if any(c['blockedBy'] for c in candidates):

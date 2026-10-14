@@ -11,6 +11,7 @@ to test staged copies; by default the skill sources in this repository are used.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -500,6 +501,249 @@ class RepoContextTests(Sandbox):
         report = self.discover(root)
         self.assertIn({'path': 'package.json', 'reason': 'symlink-not-followed'}, report['unknowns'])
         self.assertNotIn(SENTINEL, json.dumps(report))
+
+
+class CommittedIdentityRegressionTests(Sandbox):
+    """Committed input must equal HEAD content, and inspection must run no repository callback."""
+
+    run_evidence = EvidenceTests.run_evidence
+    manifest = EvidenceTests.manifest
+    check_entry = EvidenceTests.check_entry
+    verify = EvidenceTests.verify
+    py = EvidenceTests.py
+
+    def child_marker(self, name: str) -> tuple[Path, list[str]]:
+        marker = self.tmp / name
+        return marker, self.py(f'open({str(marker)!r}, "w").close()')
+
+    def test_index_flags_hiding_modifications_are_refused_before_launch(self):
+        for flag in ('--skip-worktree', '--assume-unchanged'):
+            with self.subTest(flag=flag):
+                root, sha = self.make_repo({'a': 'one\n'}, name='flag' + flag)
+                self.git(root, 'update-index', flag, 'a')
+                (root / 'a').write_text('hidden dirty\n')
+                self.assertEqual(self.git(root, 'status', '--porcelain'), '')
+                marker, command = self.child_marker('launched' + flag)
+                code, receipt, _ = self.run_evidence(root, 'flag' + flag, command, sha=sha)
+                self.assertEqual(code, 3)
+                self.assertEqual(receipt['gate']['reasons'], ['index-flags-unsupported'])
+                self.assertFalse(marker.exists())
+
+    def test_child_setting_index_flag_fails_gate(self):
+        root, sha = self.make_repo({'a': 'one\n'})
+        code, receipt, _ = self.run_evidence(
+            root, 'set-flag', ['git', 'update-index', '--skip-worktree', 'a'], sha=sha)
+        self.assertEqual(code, 1)
+        self.assertEqual(receipt['child']['exitCode'], 0)
+        self.assertIn('tracked-input-changed', receipt['gate']['reasons'])
+
+    def test_configured_content_filter_is_refused_without_running_it(self):
+        root, sha = self.make_repo({'.gitattributes': 'app.txt filter=probe\n', 'app.txt': 'initial\n'})
+        filter_marker = self.tmp / 'filter-ran'
+        self.git(root, 'config', 'filter.probe.clean', f'touch "{filter_marker}"; cat')
+        self.git(root, 'config', 'filter.probe.smudge', 'cat')
+        (root / 'app.txt').write_text('changed\n')
+        marker, command = self.child_marker('launched-filter')
+        code, receipt, _ = self.run_evidence(root, 'filtered', command, sha=sha)
+        self.assertEqual(code, 3)
+        self.assertEqual(receipt['gate']['reasons'], ['content-filters-unsupported'])
+        self.assertFalse(filter_marker.exists())
+        self.assertFalse(marker.exists())
+
+    def test_unreferenced_filter_driver_does_not_block_committed_run(self):
+        root, sha = self.make_repo({'a': 'one\n'})
+        filter_marker = self.tmp / 'unused-filter-ran'
+        self.git(root, 'config', 'filter.unused.clean', f'touch "{filter_marker}"; cat')
+        code, receipt, _ = self.run_evidence(root, 'unused-filter', self.py('print(1)'), sha=sha)
+        self.assertEqual(code, 0, receipt['gate'])
+        self.assertFalse(filter_marker.exists())
+
+    def test_builtin_eol_attributes_remain_supported(self):
+        root, sha = self.make_repo({'.gitattributes': '*.txt text eol=lf\n', 'notes.txt': 'line\n'})
+        code, receipt, _ = self.run_evidence(root, 'eol', self.py('print("ok")'), sha=sha)
+        self.assertEqual(code, 0, receipt['gate'])
+
+
+class ReceiptIntegrityRegressionTests(Sandbox):
+    """Verifier must reject incomplete, mistyped or redirected terminal evidence."""
+
+    run_evidence = EvidenceTests.run_evidence
+    manifest = EvidenceTests.manifest
+    check_entry = EvidenceTests.check_entry
+    verify = EvidenceTests.verify
+    py = EvidenceTests.py
+
+    def passing_receipt(self, label: str) -> tuple[Path, str, list[str], Path]:
+        root, sha = self.make_repo({'a': '1'}, name='repo-' + label)
+        command = self.py('print("x")')
+        code, _, out = self.run_evidence(root, label, command, sha=sha)
+        self.assertEqual(code, 0)
+        return root, sha, command, out
+
+    def test_incomplete_or_mistyped_receipts_are_rejected(self):
+        def drop(*keys):
+            def apply(receipt):
+                target = receipt
+                for key in keys[:-1]:
+                    target = target[key]
+                del target[keys[-1]]
+            return apply
+
+        def put(value, *keys):
+            def apply(receipt):
+                target = receipt
+                for key in keys[:-1]:
+                    target = target[key]
+                target[keys[-1]] = value
+            return apply
+
+        mutations = {
+            'no-startedAt': drop('startedAt'), 'no-endedAt': drop('endedAt'),
+            'no-duration': drop('durationSeconds'), 'no-timeout': drop('timeoutSeconds'),
+            'no-signal': drop('child', 'signal'), 'no-pid': drop('child', 'pid'),
+            'exit-false': put(False, 'child', 'exitCode'), 'exit-float': put(0.0, 'child', 'exitCode'),
+            'exit-null': put(None, 'child', 'exitCode'), 'timeout-true': put(True, 'timeoutSeconds'),
+            'duration-nan': put(float('nan'), 'durationSeconds'),
+            'duration-negative': put(-1.0, 'durationSeconds'),
+            'ended-before-started': put('2000-01-01T00:00:00.000Z', 'endedAt'),
+            'bad-timestamp': put('yesterday', 'startedAt'),
+            'tracked-false': put(False, 'input', 'after', 'trackedChanges'),
+            'signals-sent': put(['SIGTERM'], 'child', 'signalsSent'),
+            'log-bytes-true': put(True, 'logs', 'stderr', 'bytes'),
+        }
+        root, sha, command, out = self.passing_receipt('intact')
+        manifest = self.manifest([self.check_entry('intact', root, command, sha=sha)])
+        code, report, _ = self.verify(manifest)
+        self.assertEqual((code, report['outcome']), (0, 'verified'))  # negative control
+        pristine = (out / 'result.json').read_text()
+        for name, mutate in mutations.items():
+            with self.subTest(mutation=name):
+                receipt = json.loads(pristine)
+                mutate(receipt)
+                (out / 'result.json').write_text(json.dumps(receipt))
+                code, report, _ = self.verify(manifest)
+                self.assertEqual((code, report['checks'][0]['status']), (1, 'rejected'))
+        (out / 'result.json').write_text(pristine)
+        self.assertEqual(self.verify(manifest)[0], 0)
+
+    def test_symlinked_evidence_directory_is_rejected(self):
+        root, sha = self.make_repo({'a': '1'})
+        command = self.py('print("x")')
+        store = self.tmp / 'store'
+        store.mkdir()
+        code, _, _ = self.run_evidence(root, 'linked', command, sha=sha, out_dir=store / 'linked')
+        self.assertEqual(code, 0)
+        (self.evidence_root / 'linked').symlink_to(store / 'linked', target_is_directory=True)
+        code, report, _ = self.verify(self.manifest([self.check_entry('linked', root, command, sha=sha)]))
+        self.assertEqual(code, 1)
+        self.assertEqual(report['checks'][0]['reasons'], ['receipt-path-symlink'])
+
+    def test_result_paths_must_stay_under_manifest_directory(self):
+        root, sha = self.make_repo({'a': '1'})
+        for result in ('../outside/result.json', '/abs/result.json', 'result.json'):
+            with self.subTest(result=result):
+                entry = self.check_entry('escape', root, ['true'], sha=sha)
+                entry['resultFile'] = result
+                code, report, _ = self.verify(self.manifest([entry]))
+                self.assertEqual((code, report['reason']), (2, 'invalid-result-path'))
+
+
+class DiscoverySafetyRegressionTests(Sandbox):
+    """Discovery must run no repository callback, follow no symlink and report pruning."""
+
+    discover = RepoContextTests.discover
+
+    def test_configured_filters_are_never_executed(self):
+        for key in ('clean', 'process'):
+            with self.subTest(driver=key):
+                root, _ = self.make_repo({'.gitattributes': 'app.txt filter=probe\n',
+                                          'app.txt': 'initial\n'}, name='filter-' + key)
+                marker = self.tmp / f'filter-ran-{key}'
+                self.git(root, 'config', f'filter.probe.{key}', f'touch "{marker}"; cat')
+                (root / 'app.txt').write_text('changed\n')
+                report = self.discover(root)
+                self.assertFalse(marker.exists())
+                self.assertIsNone(report['source']['dirty'])
+                self.assertIn({'path': '.', 'reason': 'dirty-state-uninspected-content-filters'},
+                              report['unknowns'])
+
+    def test_unreferenced_filter_driver_keeps_dirty_state(self):
+        root, _ = self.make_repo({'app.txt': 'initial\n'})
+        marker = self.tmp / 'unused-discovery-filter'
+        self.git(root, 'config', 'filter.unused.clean', f'touch "{marker}"; cat')
+        (root / 'app.txt').write_text('changed\n')
+        report = self.discover(root)
+        self.assertTrue(report['source']['dirty'])
+        self.assertFalse(marker.exists())
+
+    def test_builtin_attributes_still_report_dirty_state(self):
+        root, _ = self.make_repo({'.gitattributes': '*.txt text eol=lf\n', 'app.txt': 'initial\n'})
+        (root / 'app.txt').write_text('changed\n')
+        report = self.discover(root)
+        self.assertTrue(report['source']['dirty'])
+        self.assertEqual(report['source']['trackedChanges'], 1)
+
+    def test_submodules_are_not_recursed(self):
+        root, sha = self.make_repo({'a': '1'})
+        self.git(root, 'update-index', '--add', '--cacheinfo', f'160000,{sha},vendored')
+        report = self.discover(root)
+        self.assertIn({'path': '.', 'reason': 'submodule-state-not-inspected'}, report['unknowns'])
+
+    def test_symlinked_instruction_ancestors_are_not_followed(self):
+        outside = self.tmp / 'outside'
+        (outside / 'workflows').mkdir(parents=True)
+        (outside / 'CLAUDE.md').write_text(SENTINEL)
+        (outside / 'workflows' / 'ci.yml').write_text(SENTINEL)
+        root, _ = self.make_repo({'README.md': 'x\n'})
+        (root / '.claude').symlink_to(outside, target_is_directory=True)
+        (root / '.github').symlink_to(outside, target_is_directory=True)
+        report = self.discover(root)
+        paths = {i['path'] for i in report['instructions']}
+        self.assertNotIn('.claude/CLAUDE.md', paths)
+        self.assertEqual(report['ci']['files'], [])
+        self.assertIn({'path': '.claude', 'reason': 'symlink-not-followed'}, report['unknowns'])
+        self.assertIn({'path': '.github', 'reason': 'symlink-not-followed'}, report['unknowns'])
+        outside_hash = hashlib.sha256(SENTINEL.encode()).hexdigest()
+        self.assertNotIn(outside_hash, json.dumps(report))
+
+    def test_real_nested_instruction_file_is_still_found(self):
+        root, _ = self.make_repo({'.claude/CLAUDE.md': 'project notes\n'})
+        report = self.discover(root)
+        self.assertIn('.claude/CLAUDE.md', {i['path'] for i in report['instructions']})
+
+    def test_depth_pruning_is_reported(self):
+        tree = self.tmp / 'deep'
+        (tree / 'a/b/c/d/e').mkdir(parents=True)
+        (tree / 'a/b/c/d/e/package.json').write_text('{"name": "deep"}')
+        report = self.discover(tree)
+        self.assertEqual(report['languages'], [])
+        self.assertIn({'path': '.', 'reason': 'directory-scan-depth-limit'}, report['unknowns'])
+        self.assertGreaterEqual(report['scan']['depthPruned'], 1)
+
+    def test_declaration_at_depth_limit_is_found_without_pruning(self):
+        tree = self.tmp / 'shallow'
+        (tree / 'a/b/c/d').mkdir(parents=True)
+        (tree / 'a/b/c/d/package.json').write_text('{"name": "edge"}')
+        report = self.discover(tree)
+        self.assertEqual(report['languages'], ['node'])
+        self.assertNotIn('directory-scan-depth-limit', {u['reason'] for u in report['unknowns']})
+
+    def test_node_engine_ranges_are_preserved_or_reported(self):
+        root, _ = self.make_repo({
+            'package.json': json.dumps({'name': 'web', 'packageManager': 'npm@10.0.0',
+                                        'engines': {'node': '>=20', 'npm': '^10.0.0 || >=11'}}),
+            'odd/package.json': json.dumps({'name': 'odd', 'packageManager': 'npm@10.0.0',
+                                            'engines': {'node': SENTINEL + ' $(x)'}}),
+        })
+        proc = subprocess.run([sys.executable, str(REPO_CONTEXT), '--cwd', str(root)],
+                              env=self.env, capture_output=True, text=True, timeout=60)
+        self.assertNotIn(SENTINEL, proc.stdout)
+        report = json.loads(proc.stdout)
+        nodes = {n['manifest']: n for n in report['ecosystems']['node']}
+        self.assertEqual(nodes['package.json']['toolchain']['engines'],
+                         {'node': '>=20', 'npm': '^10.0.0 || >=11'})
+        self.assertIn({'path': 'odd/package.json', 'reason': 'unsupported-engine-range'},
+                      report['unknowns'])
 
 
 if __name__ == '__main__':

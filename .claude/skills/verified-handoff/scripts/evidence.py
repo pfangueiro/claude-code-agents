@@ -11,17 +11,20 @@ run
     Launches COMMAND as a literal argv (never through a shell) in its own process
     group. --out-dir must not exist; it is created for this run only and receives
     stdout.log, stderr.log and an atomically written result.json.
-    --expected-sha: the cwd must be a clean Git checkout whose HEAD is FULLSHA; dirty
-    or mismatched input is refused BEFORE the child is launched. A HEAD change or a
+    --expected-sha: the cwd must be a Git checkout whose HEAD is FULLSHA and whose
+    index and tracked worktree content equal that commit, with no untracked files.
+    Skip-worktree/assume-unchanged entries, submodules and tracked paths routed through
+    a configured content filter driver are refused (inspecting them would run
+    repository-configured commands). All refusals happen BEFORE the child is launched. A HEAD change or a
     tracked-source change during the run fails the gate even when the child exits 0.
     --source-only: for archives and other unversioned trees; DESCRIPTION records what
     the source is. Pre-existing files are fingerprinted before and after the run.
 
 verify
     Read-only. Compares receipts with predeclared checks. A missing receipt is
-    pending; a wrong identity, failed gate, mutated input, non-regular/aliased log
-    or altered log hash is rejected. Diagnostics are fixed codes and never echo
-    untrusted manifest or receipt content.
+    pending; a wrong identity, incomplete or mistyped receipt, failed gate, mutated
+    input, symlinked evidence path, non-regular/aliased log or altered log hash is
+    rejected. Diagnostics are fixed codes and never echo untrusted content.
 
 Exit codes:
     run:    0 gate passed, 1 child ran and the gate failed, 2 usage error,
@@ -45,6 +48,7 @@ import argparse
 import errno
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -54,16 +58,19 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 SCHEMA = 'verified-handoff/evidence-receipt/v1'
 LABEL_RE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$')
 SHA_RE = re.compile(r'^(?:[0-9a-f]{40}|[0-9a-f]{64})$')
+HEX64_RE = re.compile(r'^[0-9a-f]{64}$')
+TIME_RE = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$')
 LOG_NAMES = ('stdout.log', 'stderr.log')
 DEFAULT_TIMEOUT = 900.0
 MAX_TIMEOUT = 86400.0
 TERM_GRACE_SECONDS = 5.0
 POLL_SECONDS = 0.05
+CLOCK_SLACK_SECONDS = 1.0
 MAX_DESCRIPTION = 500
 MAX_RECEIPT_BYTES = 4 * 1024 * 1024
 GIT_SAFE = ['-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false']
@@ -106,9 +113,13 @@ def is_within(child: Path, parent: Path) -> bool:
 # ---------------------------------------------------------------- input state
 
 def git(root: Path, *args: str) -> bytes:
+    return git_input(root, b'', *args)
+
+
+def git_input(root: Path, data: bytes, *args: str) -> bytes:
     env = dict(os.environ, GIT_OPTIONAL_LOCKS='0')
-    proc = subprocess.run(['git', *GIT_SAFE, '-C', str(root), *args], env=env,
-                          stdin=subprocess.DEVNULL, capture_output=True, check=False)
+    proc = subprocess.run(['git', *GIT_SAFE, '-C', str(root), *args], env=env, input=data,
+                          capture_output=True, check=False)
     if proc.returncode != 0:
         raise Refusal('git-query-failed')
     return proc.stdout
@@ -122,6 +133,34 @@ def git_root(cwd: Path) -> Path | None:
     if proc.returncode != 0:
         return None
     return Path(proc.stdout.decode().strip()).resolve()
+
+
+def configured_filter_drivers(root: Path) -> set[bytes]:
+    """Names of filter drivers with a configured command; config values are never read."""
+    env = dict(os.environ, GIT_OPTIONAL_LOCKS='0')
+    proc = subprocess.run(['git', *GIT_SAFE, '-C', str(root), 'config', '--name-only',
+                           '--get-regexp', r'^filter\..*\.(clean|smudge|process)$'],
+                          env=env, stdin=subprocess.DEVNULL, capture_output=True, check=False)
+    if proc.returncode not in (0, 1):
+        raise Refusal('git-query-failed')
+    keys = proc.stdout.splitlines() if proc.returncode == 0 else []
+    return {key.split(b'.', 1)[1].rsplit(b'.', 1)[0] for key in keys}
+
+
+def content_filters_active(root: Path) -> bool:
+    """True when a tracked path's filter attribute names a configured driver.
+
+    Only then could inspecting content run a repository-configured command. Attribute
+    lookup (`check-attr`) itself runs nothing.
+    """
+    drivers = configured_filter_drivers(root)
+    if not drivers:
+        return False
+    paths = git(root, 'ls-files', '-z')
+    if not paths:
+        return False
+    fields = git_input(root, paths, 'check-attr', '--stdin', '-z', 'filter').split(b'\0')
+    return any(value in drivers for value in fields[2::3])
 
 
 def entry_digest(path: Path) -> str:
@@ -146,21 +185,104 @@ def tree_digest(root: Path, rel_paths: list[str]) -> str:
     return digest.hexdigest()
 
 
+def status_counts(root: Path) -> tuple[int, int]:
+    # Submodules are not recursed: their own configuration could run callbacks.
+    raw = git(root, 'status', '--porcelain=v1', '-z', '--untracked-files=all',
+              '--ignore-submodules=all')
+    tracked = untracked = 0
+    fields = iter(raw.split(b'\0'))
+    for field in fields:
+        if len(field) < 4:
+            continue
+        if field.startswith(b'??'):
+            untracked += 1
+            continue
+        tracked += 1
+        if field[:1] in b'RC' or field[1:2] in b'RC':
+            next(fields, None)  # a rename/copy source path is a separate field
+    return tracked, untracked
+
+
+def parse_entries(raw: bytes, sha_field: int) -> dict[bytes, tuple[bytes, bytes, bytes]]:
+    """Map path -> (mode, object id, stage) for ls-tree (sha_field 2) or ls-files -s (1)."""
+    entries = {}
+    for record in raw.split(b'\0'):
+        if b'\t' not in record:
+            continue
+        meta, path = record.split(b'\t', 1)
+        parts = meta.split(b' ')
+        stage = parts[2] if sha_field == 1 else b'0'
+        entries[path] = (parts[0], parts[sha_field], stage)
+    return entries
+
+
+def worktree_blob_ids(root: Path, entries: dict) -> dict[bytes, bytes | None]:
+    """Blob id of each tracked worktree entry, or None when its kind or mode differs.
+
+    Only called after filter drivers are excluded, so `hash-object` applies built-in
+    conversions only and runs no repository-configured command. Nothing is written.
+    """
+    ids: dict[bytes, bytes | None] = {}
+    regular: list[bytes] = []
+    for path, (mode, _oid, _stage) in entries.items():
+        ids[path] = None
+        local = root / os.fsdecode(path)
+        try:
+            info = local.lstat()
+        except OSError:
+            continue
+        if mode in (b'100644', b'100755') and stat.S_ISREG(info.st_mode) and b'\n' not in path:
+            if (mode == b'100755') == bool(info.st_mode & stat.S_IXUSR):
+                regular.append(path)
+        elif mode == b'120000' and stat.S_ISLNK(info.st_mode):
+            target = os.fsencode(os.readlink(local))
+            ids[path] = git_input(root, target, 'hash-object', '--no-filters', '--stdin').strip()
+    if regular:
+        output = git_input(root, b'\n'.join(regular) + b'\n', 'hash-object', '--stdin-paths')
+        ids.update(zip(regular, output.split()))
+    return ids
+
+
+def head_content_mismatches(root: Path, head: str, index_raw: bytes) -> tuple[int, int]:
+    """Count index or worktree entries that differ from HEAD, and count gitlinks."""
+    tree = parse_entries(git(root, 'ls-tree', '-r', '-z', '--full-tree', head), 2)
+    index = parse_entries(index_raw, 1)
+    mismatches = len(set(tree) ^ set(index))
+    gitlinks = sum(1 for mode, _oid, _stage in tree.values() if mode == b'160000')
+    shared = {p: index[p] for p in tree.keys() & index.keys()}
+    mismatches += sum(1 for p, entry in shared.items()
+                      if entry[2] != b'0' or entry[:2] != tree[p][:2])
+    files = {p: e for p, e in shared.items() if e[0] != b'160000'}
+    actual = worktree_blob_ids(root, files)
+    mismatches += sum(1 for p, entry in files.items() if actual.get(p) != entry[1])
+    return mismatches, gitlinks
+
+
 def git_state(root: Path) -> dict:
-    status = git(root, 'status', '--porcelain=v1', '-z', '--untracked-files=all')
-    entries = [e for e in status.split(b'\0') if e]
-    # Rename/copy records carry the source path as an extra NUL-separated field.
-    records = [e for e in entries if len(e) > 3 and e[2:3] == b' ']
-    tracked = sum(1 for e in records if not e.startswith(b'??'))
-    untracked = sum(1 for e in records if e.startswith(b'??'))
+    """Committed-input identity, compared with HEAD content rather than trusted status.
+
+    Tracked paths routed through a configured filter driver are refused instead of
+    inspected, because inspecting them would execute that driver's command.
+    """
+    if content_filters_active(root):
+        raise Refusal('content-filters-unsupported')
+    head = git(root, 'rev-parse', '--verify', 'HEAD').decode().strip()
+    flags = git(root, 'ls-files', '-v', '-z')
+    # ls-files -v tags: 'S' marks skip-worktree; a lowercase tag marks assume-unchanged.
+    flagged = sum(1 for e in flags.split(b'\0') if e and (e[:1] == b'S' or e[:1].islower()))
+    tracked, untracked = status_counts(root)
     index = git(root, 'ls-files', '-s', '-z')
-    paths = [os.fsdecode(e.split(b'\t', 1)[1]) for e in index.split(b'\0') if b'\t' in e]
+    mismatches, gitlinks = head_content_mismatches(root, head, index)
+    paths = [os.fsdecode(p) for p in parse_entries(index, 1)]
     return {
-        'head': git(root, 'rev-parse', '--verify', 'HEAD').decode().strip(),
+        'head': head,
         'trackedChanges': tracked,
         'untrackedFiles': untracked,
+        'flaggedIndexEntries': flagged,
+        'headContentMismatches': mismatches,
+        'gitlinks': gitlinks,
         'trackedCount': len(paths),
-        'indexFingerprint': hashlib.sha256(index).hexdigest(),
+        'indexFingerprint': hashlib.sha256(index + b'\0flags\0' + flags).hexdigest(),
         'trackedFingerprint': tree_digest(root, paths),
     }
 
@@ -283,6 +405,13 @@ def write_receipt(out_dir: Path, receipt: dict) -> None:
     os.replace(temp, out_dir / 'result.json')
 
 
+def committed_input_changed(before: dict, after: dict) -> bool:
+    return bool(after['trackedChanges'] or after['flaggedIndexEntries']
+                or after['headContentMismatches'] or after['gitlinks']
+                or after['indexFingerprint'] != before['indexFingerprint']
+                or after['trackedFingerprint'] != before['trackedFingerprint'])
+
+
 def gate_reasons(child: dict, mode: str, before: dict, after: dict, expected: str | None) -> list[str]:
     reasons: list[str] = []
     if child['timedOut']:
@@ -298,8 +427,7 @@ def gate_reasons(child: dict, mode: str, before: dict, after: dict, expected: st
     elif mode == 'committed':
         if after['head'] != expected:
             reasons.append('head-changed')
-        if after['trackedChanges'] or after['indexFingerprint'] != before['indexFingerprint'] \
-                or after['trackedFingerprint'] != before['trackedFingerprint']:
+        if committed_input_changed(before, after):
             reasons.append('tracked-input-changed')
     elif after['fingerprint'] != before['fingerprint']:
         reasons.append('source-input-changed')
@@ -319,7 +447,11 @@ def prepare_input(args: argparse.Namespace, cwd: Path, out_dir: Path):
         before = git_state(root)
         if before['head'] != args.expected_sha:
             raise Refusal('head-mismatch')
-        if before['trackedChanges'] or before['untrackedFiles']:
+        if before['flaggedIndexEntries']:
+            raise Refusal('index-flags-unsupported')
+        if before['gitlinks']:
+            raise Refusal('submodules-unsupported')
+        if before['trackedChanges'] or before['untrackedFiles'] or before['headContentMismatches']:
             raise Refusal('dirty-input')
         return 'committed', before, lambda: git_state(root)
     if is_within(out_dir, cwd):
@@ -412,22 +544,42 @@ class ManifestError(Exception):
         self.code, self.index = code, index
 
 
+def reject_constant(_name: str):
+    raise ValueError('non-finite JSON constant')
+
+
+def load_json(path: Path):
+    """Strict JSON: NaN/Infinity are rejected rather than parsed as floats."""
+    return json.loads(path.read_text(encoding='utf-8'), parse_constant=reject_constant)
+
+
 def load_manifest(path: Path) -> list[dict]:
     try:
-        data = json.loads(path.read_text(encoding='utf-8'))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        base = path.resolve(strict=True).parent
+        data = load_json(path)
+    except (OSError, UnicodeDecodeError, ValueError):
         raise ManifestError('manifest-unreadable') from None
     if not isinstance(data, dict) or not isinstance(data.get('checks'), list) or not data['checks']:
         raise ManifestError('manifest-checks-missing')
     checks, labels, results = [], set(), set()
     for idx, raw in enumerate(data['checks']):
-        check = normalize_check(raw, idx, path.parent)
-        if check['label'] in labels or check['resultFile'] in results:
+        check = normalize_check(raw, idx, base)
+        if check['label'] in labels or check['resultParts'] in results:
             raise ManifestError('duplicate-check', idx)
         labels.add(check['label'])
-        results.add(check['resultFile'])
+        results.add(check['resultParts'])
         checks.append(check)
     return checks
+
+
+def result_parts(raw: str) -> tuple[str, ...] | None:
+    """A result path must be relative to the manifest directory with no '..' or '.' parts."""
+    if '\\' in raw or raw.startswith('/'):
+        return None
+    parts = tuple(raw.split('/'))
+    if len(parts) < 2 or any(p in ('', '.', '..') for p in parts):
+        return None
+    return parts
 
 
 def normalize_check(raw, idx: int, base: Path) -> dict:
@@ -438,6 +590,9 @@ def normalize_check(raw, idx: int, base: Path) -> dict:
         raise ManifestError('invalid-label', idx)
     if not isinstance(cwd, str) or not cwd or not isinstance(result, str) or not result:
         raise ManifestError('invalid-path', idx)
+    parts = result_parts(result)
+    if parts is None:
+        raise ManifestError('invalid-result-path', idx)
     if not isinstance(command, dict) or not isinstance(command.get('executable'), str) \
             or not command['executable'] or not isinstance(command.get('args'), list) \
             or not all(isinstance(a, str) for a in command['args']):
@@ -452,7 +607,26 @@ def normalize_check(raw, idx: int, base: Path) -> dict:
     return {'label': label, 'cwd': str((base / cwd).resolve()),
             'command': {'executable': command['executable'], 'args': list(command['args'])},
             'expectedSha': sha, 'sourceOnly': source,
-            'resultFile': str((base / result).absolute())}
+            'base': base, 'resultParts': parts}
+
+
+def evidence_dir_problem(base: Path, parts: tuple[str, ...]) -> str | None:
+    """Every directory between the manifest directory and the receipt must be a real
+    directory: a symlinked component anywhere would redirect the evidence."""
+    current = base
+    for part in parts[:-1]:
+        current = current / part
+        try:
+            info = current.lstat()
+        except FileNotFoundError:
+            return 'missing'
+        except OSError:
+            return 'unreadable'
+        if stat.S_ISLNK(info.st_mode):
+            return 'path-symlink'
+        if not stat.S_ISDIR(info.st_mode):
+            return 'path-not-directory'
+    return None
 
 
 def regular_file_problem(path: Path) -> str | None:
@@ -479,6 +653,69 @@ def as_dict(value) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+def is_int(value) -> bool:
+    """JSON integers only: booleans are not integers here."""
+    return type(value) is int
+
+
+def is_zero(value) -> bool:
+    return is_int(value) and value == 0
+
+
+def is_number(value) -> bool:
+    return type(value) in (int, float) and math.isfinite(value)
+
+
+def parse_time(value) -> datetime | None:
+    if not isinstance(value, str) or not TIME_RE.match(value):
+        return None
+    try:
+        return datetime.strptime(value, '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def timing_reasons(receipt: dict) -> list[str]:
+    reasons = []
+    started, ended = parse_time(receipt.get('startedAt')), parse_time(receipt.get('endedAt'))
+    if started is None or ended is None or ended < started:
+        reasons.append('invalid-timestamps')
+    timeout = receipt.get('timeoutSeconds')
+    if not is_number(timeout) or not 0 < timeout <= MAX_TIMEOUT:
+        reasons.append('invalid-timeout')
+        timeout = None
+    duration = receipt.get('durationSeconds')
+    if not is_number(duration) or duration < 0 \
+            or (timeout is not None and duration > timeout + CLOCK_SLACK_SECONDS) \
+            or (not reasons and duration > (ended - started).total_seconds() + CLOCK_SLACK_SECONDS):
+        reasons.append('invalid-duration')
+    return reasons
+
+
+CHILD_FIELDS = {'launched': bool, 'pid': int, 'timedOut': bool, 'signalsSent': list,
+                'descendantsObservedAfterExit': bool, 'descendantsOutlivedDeadline': bool,
+                'groupEmptyAtReceipt': bool}
+
+
+def child_reasons(child: dict) -> list[str]:
+    reasons = []
+    if any(type(child.get(k)) is not t for k, t in CHILD_FIELDS.items()) \
+            or 'exitCode' not in child or 'signal' not in child \
+            or not all(isinstance(s, str) for s in child.get('signalsSent', [None])):
+        reasons.append('invalid-child-fields')
+    if child.get('launched') is not True:
+        reasons.append('child-not-launched')
+    if 'signal' not in child or child['signal'] is not None:
+        reasons.append('child-signalled')
+    if not is_zero(child.get('exitCode')):
+        reasons.append('child-nonzero-exit')
+    if child.get('timedOut') is not False or child.get('groupEmptyAtReceipt') is not True \
+            or child.get('descendantsOutlivedDeadline') is not False \
+            or child.get('signalsSent') != []:
+        reasons.append('child-not-cleanly-finished')
+    return reasons
+
+
 def identity_reasons(check: dict, receipt: dict) -> list[str]:
     reasons = []
     if receipt.get('schema') != SCHEMA:
@@ -498,32 +735,35 @@ def identity_reasons(check: dict, receipt: dict) -> list[str]:
     return reasons
 
 
-def outcome_reasons(check: dict, receipt: dict) -> list[str]:
-    reasons = []
-    gate, child = as_dict(receipt.get('gate')), as_dict(receipt.get('child'))
-    if gate.get('outcome') != 'pass' or gate.get('reasons') != []:
-        reasons.append('gate-not-passed')
-    if child.get('launched') is not True:
-        reasons.append('child-not-launched')
-    if child.get('signal') is not None:
-        reasons.append('child-signalled')
-    if child.get('exitCode') != 0:
-        reasons.append('child-nonzero-exit')
-    if child.get('timedOut') is not False or child.get('groupEmptyAtReceipt') is not True:
-        reasons.append('child-not-cleanly-finished')
+COMMITTED_ZERO_FIELDS = ('trackedChanges', 'flaggedIndexEntries', 'headContentMismatches', 'gitlinks')
+
+
+def input_reasons(check: dict, receipt: dict) -> list[str]:
     data = as_dict(receipt.get('input'))
     before, after = as_dict(data.get('before')), as_dict(data.get('after'))
     if check['expectedSha']:
+        reasons = []
         if before.get('head') != check['expectedSha'] or after.get('head') != check['expectedSha']:
             reasons.append('wrong-commit')
-        keys = ('indexFingerprint', 'trackedFingerprint')
-        if before.get('trackedChanges') != 0 or before.get('untrackedFiles') != 0 \
-                or after.get('trackedChanges') != 0 \
-                or any(not before.get(k) or before.get(k) != after.get(k) for k in keys):
+        fingerprints = ('indexFingerprint', 'trackedFingerprint')
+        if not is_zero(before.get('untrackedFiles')) \
+                or not all(is_zero(s.get(k)) for s in (before, after) for k in COMMITTED_ZERO_FIELDS) \
+                or any(not HEX64_RE.match(str(before.get(k))) or before.get(k) != after.get(k)
+                       for k in fingerprints):
             reasons.append('input-mutated')
-    elif not before.get('fingerprint') or before.get('fingerprint') != after.get('fingerprint'):
-        reasons.append('input-mutated')
-    return reasons
+        return reasons
+    fingerprint = before.get('fingerprint')
+    if not HEX64_RE.match(str(fingerprint)) or fingerprint != after.get('fingerprint'):
+        return ['input-mutated']
+    return []
+
+
+def outcome_reasons(check: dict, receipt: dict) -> list[str]:
+    gate = as_dict(receipt.get('gate'))
+    reasons = [] if gate.get('outcome') == 'pass' and gate.get('reasons') == [] \
+        else ['gate-not-passed']
+    return reasons + timing_reasons(receipt) + child_reasons(as_dict(receipt.get('child'))) \
+        + input_reasons(check, receipt)
 
 
 def log_reasons(result_dir: Path, receipt: dict) -> list[str]:
@@ -546,7 +786,7 @@ def log_reasons(result_dir: Path, receipt: dict) -> list[str]:
             reasons.append(f'{key}-log-unreadable')
             continue
         if record.get('file') != name or record.get('sha256') != actual \
-                or record.get('bytes') != info.st_size:
+                or not is_int(record.get('bytes')) or record.get('bytes') != info.st_size:
             reasons.append(f'{key}-log-altered')
     if len(inodes) == 1 and not reasons:
         reasons.append('logs-aliased')
@@ -554,7 +794,12 @@ def log_reasons(result_dir: Path, receipt: dict) -> list[str]:
 
 
 def verify_check(check: dict) -> tuple[str, list[str]]:
-    result_path = Path(check['resultFile'])
+    problem = evidence_dir_problem(check['base'], check['resultParts'])
+    if problem == 'missing':
+        return 'pending', ['receipt-missing']
+    if problem:
+        return 'rejected', [f'receipt-{problem}']
+    result_path = check['base'].joinpath(*check['resultParts'])
     problem = regular_file_problem(result_path)
     if problem == 'missing':
         return 'pending', ['receipt-missing']
@@ -563,8 +808,8 @@ def verify_check(check: dict) -> tuple[str, list[str]]:
     try:
         if result_path.stat().st_size > MAX_RECEIPT_BYTES:
             return 'rejected', ['receipt-too-large']
-        receipt = json.loads(result_path.read_text(encoding='utf-8'))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        receipt = load_json(result_path)
+    except (OSError, UnicodeDecodeError, ValueError):
         return 'rejected', ['receipt-unparseable']
     if not isinstance(receipt, dict):
         return 'rejected', ['receipt-unparseable']
