@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tests/codex` discovery now loads every test in `tests/delivery/test_resources.py`
   through a bridge, runs the delivery installer suite in disposable source/home layouts,
   and executes the exported Codex delivery scripts from an installed bundle.
+- Codex status bar counterpart: the adapter exports an opt-in
+  `.codex/framework/statusline.example.toml` (`tui.status_line` built-in footer IDs:
+  thread title, model, Git branch, context used, weekly limit, version; no cost or
+  token items) and never edits `config.toml`. The managed AGENTS block asks the model to
+  title only the current task `SDLC | <short task>` when a native rename capability
+  exists, without replacing owner titles. The marker means guidance loaded, not checks
+  passed; Claude's renderer, health, duration and cost output remain unported.
 
 ### Changed
 
