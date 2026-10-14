@@ -34,7 +34,7 @@ Do not describe this as complete runtime parity.
 | Compaction hooks | Lifecycle evidence | Automatic git/conversation snapshots remain unported |
 | Prompt/agent hook handlers | Not installed | Current Codex parses but skips these handler types |
 | Desktop notifications | Unported | Claude Notification event absent from current supported list |
-| Custom statusline / output styles | Unported runtime UI | Claude executable input protocol differs; no status config changed |
+| Custom statusline / output styles | Opt-in native footer example (`tui.status_line` built-in IDs) and `SDLC \| <task>` title guidance for the current task | Claude renderer, health, duration and cost output unported; installer never edits config; title marker is model judgment where a native rename capability exists and means guidance loaded, not checks passed |
 | Claude dashboard/cost collector | Unported | Claude JSONL schema/pricing cannot be reused for Codex |
 | Auto-heal/watchdog/snapshot retention | Unported | Drift check and explicit repair only; no background daemon installed |
 | Validation/CI | Separate Codex acceptance/mutation job | Existing Claude suite remains independent |

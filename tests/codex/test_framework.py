@@ -61,9 +61,18 @@ class FrameworkAcceptance(unittest.TestCase):
         self.assertEqual(explicit, {'sdlc-commit-pr', 'sdlc-create-jira', 'sdlc-new-feature'})
         self.assertEqual(len(skills) - len(explicit), 52)
         tomllib.loads((self.root / '.codex/framework/mcp.example.toml').read_text())
+        # The footer fragment is one mergeable field of native IDs, with no inferred cost/token items.
+        footer = tomllib.loads((self.root / '.codex/framework/statusline.example.toml').read_text())
+        self.assertEqual(set(footer), {'tui'})
+        self.assertEqual(set(footer['tui']), {'status_line'})
+        items = footer['tui']['status_line']
+        self.assertTrue(items and all(isinstance(item, str) for item in items))
+        self.assertIn('thread-title', items)
+        self.assertFalse([item for item in items if re.search('cost|credit|token', item)])
 
     def test_idempotence_dry_run_and_personal_preservation(self):
-        personal = {'.codex/config.toml': b'model = "personal"\n', '.codex/auth.json': b'{"private":true}',
+        personal = {'.codex/config.toml': b'model = "personal"\n[tui]\nstatus_line = ["model"]\n',
+                    '.codex/auth.json': b'{"private":true}',
                     '.agents/skills/personal/SKILL.md': b'personal', '.claude/settings.json': b'{"owned":"claude"}',
                     'AGENTS.md': b'Owner instructions without trailing newline'}
         for name, data in personal.items():
@@ -113,6 +122,7 @@ class FrameworkAcceptance(unittest.TestCase):
         expected = names - {'sdlc-commit-pr', 'sdlc-create-jira', 'sdlc-new-feature'}
         self.assertEqual({n for n in names if n in text}, expected)
         self.assertIn('SDLC framework for Codex', text)
+        self.assertIn('SDLC | <short task>', text)
 
     def test_modified_owned_file_survives_update_and_uninstall(self):
         f.install(self.root)

@@ -94,6 +94,21 @@ activate MCPs. Browser examples target ExecuteAutomation's Playwright server; ot
 servers can expose different APIs. Most domain examples are carried from the Claude
 edition and are not an audit of every underlying library/version.
 
+Status line (opt-in): Claude's custom statusline renderer reads Claude-specific JSON
+on stdin and is not ported. Codex's terminal footer uses built-in item IDs instead;
+the installed `.codex/framework/statusline.example.toml` lists thread title, model,
+Git branch, context used, weekly limit and Codex version. Merge only its
+`status_line` field into your existing `[tui]` table (do not add a second `[tui]`
+and keep your other settings), or choose items live with `/statusline`; start a new
+terminal session if the footer does not refresh. The installer never edits
+`config.toml`. The managed instructions ask the model, when the host exposes a native
+task-title rename capability, to title only the current task `SDLC | <short task>`
+without replacing an owner-chosen title; this is model judgment, not a guaranteed
+native event, and hosts without that capability keep their normal title. The marker
+means framework guidance was loaded, not that checks, review or delivery passed.
+Claude's health, duration and cost status output remains unported; no persistent
+custom desktop status bar is claimed.
+
 Optional hooks:
 
 ```bash

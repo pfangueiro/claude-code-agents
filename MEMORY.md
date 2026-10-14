@@ -52,8 +52,11 @@ AGENTS.md and relevant source before relying on these notes.
   Linux Codex CI run caught an undeclared Requests import in the bundled health checker.
 - Consult [FEATURES](codex/FEATURES.md), [review](codex/REVIEW.md) and
   [global validation](codex/GLOBAL-VALIDATION.md). Dashboard, watchdog, notifications,
-  statusline, automatic linting and snapshots remain unported. MCP examples are
-  disabled and Codex hooks are opt-in.
+  the Claude statusline renderer, automatic linting and snapshots remain unported. MCP
+  examples are disabled and Codex hooks are opt-in. The status bar counterpart is an
+  opt-in `tui.status_line` example of built-in footer IDs (never auto-merged into
+  config) plus instruction guidance to title the current task `SDLC | <task>` where a
+  native rename capability exists; the marker means guidance loaded, not checks passed.
 
 ## Evidence and publishing
 

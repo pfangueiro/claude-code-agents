@@ -155,6 +155,7 @@ def build() -> dict[str, bytes]:
     files['.codex/framework/rules.md'] = rules.encode()
     files['.codex/framework/inventory.json'] = (json.dumps(inv, indent=2) + '\n').encode()
     files['.codex/framework/mcp.example.toml'] = (REPO / 'codex/mcp.example.toml').read_bytes()
+    files['.codex/framework/statusline.example.toml'] = (REPO / 'codex/statusline.example.toml').read_bytes()
     files['.codex/framework/hook.py'] = (REPO / 'codex/hook.py').read_bytes()
     return files
 
@@ -219,8 +220,13 @@ for a user install, resolve it under the configured Codex home.
 Discover tools/MCP schemas before use. Keep coupled work sequential, parallel writes
 in disjoint worktrees, and reviewers independent. Inherit model and approval policy.
 The adapter does not grant permission for deployment, messages or live-data writes.
-Optional hooks require native /hooks trust review. Claude runtime facilities such
-as statusline, notifications, dashboard and unattended self-heal are not installed.
+Optional hooks require native /hooks trust review.
+If the host exposes a native task-title rename capability (discover its schema),
+title only the current task `SDLC | <short task>` once; never rename other threads
+or replace an owner-chosen title. Without it, keep the normal title and say so.
+The marker means framework guidance loaded, not that checks, review or delivery
+passed. Claude's custom statusline renderer, notifications, dashboard and
+unattended self-heal are not installed; native footer items are an opt-in example.
 {END}
 '''.encode()
 
