@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Delivery workflow integration: the portable `delivery`, `repo-context` and
+  `verified-handoff` skills and the `delivery` rule ship in both editions. Source inventory
+  is 30 skills, 12 command templates and 13 specialists; Codex builds 42 workflows plus
+  13 specialist guides (55 bundles, 52 implicit, 3 explicit-only). Workflows are
+  procedures plus receipts, not enforced gates; no watcher, daemon, auto-merge or hook
+  trust is added.
+- `scripts/install-delivery.py`: incremental stdlib update of only the delivery skills,
+  rule and `commit-pr` command in an existing Claude home (`CLAUDE_CONFIG_DIR`,
+  `~/.claude` or `--claude-home`) without the broad installer. Hash-owned manifest with
+  source commit, `--dry-run`/`--check`/`--uninstall`, refusal of dirty sources, foreign or
+  customized files and symlinked destinations before writes, locked writes with caught-error
+  rollback, and explicit `--baseline` adoption that restores original bytes on uninstall.
+- `tests/codex` discovery now loads every test in `tests/delivery/test_resources.py`
+  through a bridge, runs the delivery installer suite in disposable source/home layouts,
+  and executes the exported Codex delivery scripts from an installed bundle.
+
+### Changed
+
+- `$sdlc-commit-pr` is built from the provider-neutral `.claude/commands/commit-pr.md`.
+  The Codex-only override, which still ran tests and review before the commit and so let
+  a later commit bypass the exact-candidate verdict, is removed; a test requires the
+  exported body to match the canonical command. Explicit-only invocation is unchanged.
+
 ### Fixed
 
 - Codex Linux CI dependency failure at `1debb18`: declare Requests 2.34.2 for the exported
