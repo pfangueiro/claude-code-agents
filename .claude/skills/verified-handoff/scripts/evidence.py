@@ -42,7 +42,9 @@ Limits (stated in every receipt):
     cryptographically authenticated. Input fingerprints are taken before and after
     the run, so a change reverted during the run is not detected. Descendants that
     leave the run's process group (for example via a new session) are not observed.
-    The environment is inherited by the child and is not recorded.
+    The environment is inherited by the child and is not recorded. Input-identity
+    Git queries instead drop inherited GIT_* repository selectors and injected
+    configuration, so ambient Git context cannot bind a receipt to another checkout.
 """
 
 from __future__ import annotations
@@ -77,6 +79,7 @@ CLOCK_SLACK_SECONDS = 1.0
 MAX_DESCRIPTION = 500
 MAX_RECEIPT_BYTES = 4 * 1024 * 1024
 GIT_SAFE = ['-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false']
+GIT_CONFIG_FILE_ENV = frozenset({'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM'})
 LIMITATIONS = (
     'necessary evidence only: not producer identity, honest predeclaration, '
     'semantic coverage, review, CI or deployment',
@@ -119,9 +122,22 @@ def git(root: Path, *args: str) -> bytes:
     return git_input(root, b'', *args)
 
 
+def query_env() -> dict[str, str]:
+    """Environment for every input-identity Git query; the child keeps its own.
+
+    Inherited GIT_* variables can select another repository, work tree, index or
+    object store, or inject configuration (GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT),
+    so all are dropped except the config-file selectors that carry no more authority
+    than HOME's global configuration.
+    """
+    env = {key: value for key, value in os.environ.items()
+           if not key.startswith('GIT_') or key in GIT_CONFIG_FILE_ENV}
+    env['GIT_OPTIONAL_LOCKS'] = '0'
+    return env
+
+
 def git_input(root: Path, data: bytes, *args: str) -> bytes:
-    env = dict(os.environ, GIT_OPTIONAL_LOCKS='0')
-    proc = subprocess.run(['git', *GIT_SAFE, '-C', str(root), *args], env=env, input=data,
+    proc = subprocess.run(['git', *GIT_SAFE, '-C', str(root), *args], env=query_env(), input=data,
                           capture_output=True, check=False)
     if proc.returncode != 0:
         raise Refusal('git-query-failed')
@@ -129,21 +145,26 @@ def git_input(root: Path, data: bytes, *args: str) -> bytes:
 
 
 def git_root(cwd: Path) -> Path | None:
+    """Top level of the checkout owning cwd; a top level not containing cwd is refused."""
     if shutil.which('git') is None:
         raise Refusal('git-unavailable')
     proc = subprocess.run(['git', *GIT_SAFE, '-C', str(cwd), 'rev-parse', '--show-toplevel'],
-                          stdin=subprocess.DEVNULL, capture_output=True, check=False)
+                          env=query_env(), stdin=subprocess.DEVNULL, capture_output=True,
+                          check=False)
     if proc.returncode != 0:
         return None
-    return Path(proc.stdout.decode().strip()).resolve()
+    root = Path(proc.stdout.decode().strip()).resolve()
+    if not is_within(cwd, root):
+        raise Refusal('git-root-not-owning-cwd')
+    return root
 
 
 def configured_filter_drivers(root: Path) -> set[bytes]:
     """Names of filter drivers with a configured command; config values are never read."""
-    env = dict(os.environ, GIT_OPTIONAL_LOCKS='0')
     proc = subprocess.run(['git', *GIT_SAFE, '-C', str(root), 'config', '--name-only',
                            '--get-regexp', r'^filter\..*\.(clean|smudge|process)$'],
-                          env=env, stdin=subprocess.DEVNULL, capture_output=True, check=False)
+                          env=query_env(), stdin=subprocess.DEVNULL, capture_output=True,
+                          check=False)
     if proc.returncode not in (0, 1):
         raise Refusal('git-query-failed')
     keys = proc.stdout.splitlines() if proc.returncode == 0 else []

@@ -95,5 +95,9 @@ pending and rejected checks as such; never summarize them as passing.
 - Transient input changes reverted during the run, or descendants that leave the
   process group (for example by starting a new session).
 
-The child inherits the environment; it is not recorded. Keep receipts and logs outside
+The child inherits the environment; it is not recorded. Input-identity Git queries do
+not: they drop inherited `GIT_*` repository selectors and injected configuration (only
+the `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`/`GIT_CONFIG_NOSYSTEM` file selectors are
+kept), and a checkout whose top level does not contain `--cwd` is refused, so ambient
+Git context cannot bind a receipt to another repository. Keep receipts and logs outside
 public source when they may contain private output.

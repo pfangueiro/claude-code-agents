@@ -567,6 +567,83 @@ class CommittedIdentityRegressionTests(Sandbox):
         self.assertEqual(code, 0, receipt['gate'])
 
 
+class AmbientGitContextRegressionTests(Sandbox):
+    """Inherited Git repository selectors must not bind a receipt to another checkout."""
+
+    run_evidence = EvidenceTests.run_evidence
+    py = EvidenceTests.py
+
+    def ambient_variants(self, foreign: Path) -> dict[str, dict[str, str]]:
+        git_dir = str(foreign / '.git')
+        return {
+            'dir-and-work-tree': {'GIT_DIR': git_dir, 'GIT_WORK_TREE': str(foreign)},
+            'dir-only': {'GIT_DIR': git_dir},
+            'common-dir': {'GIT_COMMON_DIR': git_dir},
+            'index-and-objects': {'GIT_INDEX_FILE': str(foreign / '.git' / 'index'),
+                                  'GIT_OBJECT_DIRECTORY': str(foreign / '.git' / 'objects')},
+            'config-count': {'GIT_CONFIG_COUNT': '1', 'GIT_CONFIG_KEY_0': 'core.worktree',
+                             'GIT_CONFIG_VALUE_0': str(foreign)},
+            'config-parameters': {'GIT_CONFIG_PARAMETERS': f"'core.worktree'='{foreign}'"},
+        }
+
+    def run_with(self, ambient: dict[str, str], *args, **kwargs):
+        base = self.env
+        self.env = dict(base, **ambient)
+        try:
+            return self.run_evidence(*args, **kwargs)
+        finally:
+            self.env = base
+
+    def test_foreign_ambient_repository_cannot_bind_or_hide_actual_mutation(self):
+        actual, actual_sha = self.make_repo({'input.txt': 'actual\n', 'sub/keep.txt': 'k\n'},
+                                            name='actual')
+        foreign, foreign_sha = self.make_repo({'input.txt': 'foreign\n'}, name='foreign')
+        self.assertNotEqual(actual_sha, foreign_sha)
+        target = actual / 'input.txt'
+        for name, ambient in self.ambient_variants(foreign).items():
+            with self.subTest(variant=name):
+                self.git(actual, 'checkout', '--', 'input.txt')  # isolate variants from each other
+                marker = self.tmp / f'launched-{name}'
+                mutate = self.py(f'open({str(marker)!r}, "w").close(); '
+                                 f'open({str(target)!r}, "w").write("mutated\\n")')
+                code, receipt, _ = self.run_with(ambient, actual, f'foreign-{name}', mutate,
+                                                 sha=foreign_sha)
+                self.assertEqual(code, 3, receipt['gate'])
+                self.assertEqual(receipt['gate']['outcome'], 'refused')
+                self.assertFalse(receipt['child']['launched'])
+                self.assertFalse(marker.exists())
+                self.assertEqual(target.read_text(), 'actual\n')
+
+                code, receipt, _ = self.run_with(ambient, actual, f'actual-{name}', mutate,
+                                                 sha=actual_sha)
+                self.assertEqual(code, 1, receipt['gate'])
+                self.assertTrue(marker.exists())
+                self.assertEqual(receipt['input']['before']['head'], actual_sha)
+                self.assertIn('tracked-input-changed', receipt['gate']['reasons'])
+                self.git(actual, 'checkout', '--', 'input.txt')
+
+                keys = sorted(ambient)
+                echo = self.py(f'import json, os; print(json.dumps({{k: os.environ.get(k) '
+                               f'for k in {keys!r}}}))')
+                code, receipt, out = self.run_with(ambient, actual / 'sub', f'nested-{name}', echo,
+                                                   sha=actual_sha)
+                self.assertEqual(code, 0, receipt['gate'])
+                self.assertEqual(receipt['input']['after']['head'], actual_sha)
+                self.assertEqual(json.loads((out / 'stdout.log').read_text()), ambient)
+
+    def test_checkout_whose_work_tree_excludes_cwd_is_refused(self):
+        actual, sha = self.make_repo({'input.txt': 'actual\n'}, name='actual')
+        elsewhere = self.tmp / 'elsewhere'
+        elsewhere.mkdir()
+        self.git(actual, 'config', 'core.worktree', str(elsewhere))
+        marker = self.tmp / 'launched-elsewhere'
+        code, receipt, _ = self.run_evidence(actual, 'elsewhere',
+                                             self.py(f'open({str(marker)!r}, "w").close()'), sha=sha)
+        self.assertEqual(code, 3)
+        self.assertEqual(receipt['gate']['reasons'], ['git-root-not-owning-cwd'])
+        self.assertFalse(marker.exists())
+
+
 class ReceiptIntegrityRegressionTests(Sandbox):
     """Verifier must reject incomplete, mistyped or redirected terminal evidence."""
 
