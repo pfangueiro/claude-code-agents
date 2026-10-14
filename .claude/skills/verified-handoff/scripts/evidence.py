@@ -22,9 +22,12 @@ run
 
 verify
     Read-only. Compares receipts with predeclared checks. A missing receipt is
-    pending; a wrong identity, incomplete or mistyped receipt, failed gate, mutated
-    input, symlinked evidence path, non-regular/aliased log or altered log hash is
-    rejected. Diagnostics are fixed codes and never echo untrusted content.
+    pending. Every receipt is first validated against the closed v1 schema (all
+    emitted fields required with exact JSON types, no unknown fields); only then are
+    identity, gate, timing, input and logs compared. A wrong identity, schema
+    violation, failed gate, mutated input, symlinked manifest or evidence path,
+    non-regular/aliased log or altered log hash is rejected. Diagnostics are fixed
+    codes and never echo untrusted content.
 
 Exit codes:
     run:    0 gate passed, 1 child ran and the gate failed, 2 usage error,
@@ -549,11 +552,27 @@ def reject_constant(_name: str):
 
 
 def load_json(path: Path):
-    """Strict JSON: NaN/Infinity are rejected rather than parsed as floats."""
+    """Strict JSON: NaN/Infinity are rejected rather than parsed as floats. Integers
+    beyond the interpreter's digit limit raise ValueError and are rejected too."""
     return json.loads(path.read_text(encoding='utf-8'), parse_constant=reject_constant)
 
 
 def load_manifest(path: Path) -> list[dict]:
+    """Load checks. The manifest file itself must be a regular file, not a symlink.
+
+    Trust boundary: the manifest's directory is canonicalized once and becomes the
+    evidence root; directories ABOVE it are the caller's choice of location (common
+    temporary roots are themselves symlinks on some systems). Every component BELOW
+    the evidence root is checked without following links (evidence_dir_problem).
+    """
+    try:
+        info = path.lstat()
+    except OSError:
+        raise ManifestError('manifest-unreadable') from None
+    if stat.S_ISLNK(info.st_mode):
+        raise ManifestError('manifest-symlink')
+    if not stat.S_ISREG(info.st_mode):
+        raise ManifestError('manifest-unreadable')
     try:
         base = path.resolve(strict=True).parent
         data = load_json(path)
@@ -649,25 +668,173 @@ def regular_file_problem(path: Path) -> str | None:
     return None
 
 
-def as_dict(value) -> dict:
-    return value if isinstance(value, dict) else {}
+# ---------------------------------------------------------------- receipt schema v1
+#
+# A receipt is validated against this closed schema BEFORE any semantic comparison.
+# Every field the recorder emits for a launched child is required, with an exact JSON
+# type: booleans are not integers, numbers are never coerced from strings, hashes are
+# lowercase hexadecimal strings, and unknown fields are rejected (a new field requires
+# a new schema version). Problems are reported as fixed codes built from schema paths,
+# never from receipt content.
+
+MAX_COUNT = 2 ** 63 - 1
+MAX_SECONDS = 10 ** 9
+SIGNAL_NAME_RE = re.compile(r'SIG[A-Z0-9]{1,12}')
 
 
-def is_int(value) -> bool:
-    """JSON integers only: booleans are not integers here."""
-    return type(value) is int
+def full(pattern: re.Pattern, value) -> bool:
+    return type(value) is str and pattern.fullmatch(value) is not None
 
 
-def is_zero(value) -> bool:
-    return is_int(value) and value == 0
+def is_count(value) -> bool:
+    return type(value) is int and 0 <= value <= MAX_COUNT
 
 
-def is_number(value) -> bool:
-    return type(value) in (int, float) and math.isfinite(value)
+def is_positive(value) -> bool:
+    return type(value) is int and 0 < value <= MAX_COUNT
 
+
+def is_seconds(value) -> bool:
+    # Integers are range-checked as integers, so a huge value never reaches float().
+    if type(value) is int:
+        return 0 <= value <= MAX_SECONDS
+    return type(value) is float and math.isfinite(value) and 0 <= value <= MAX_SECONDS
+
+
+def is_text(value) -> bool:
+    return type(value) is str and value != ''
+
+
+def is_absolute(value) -> bool:
+    return is_text(value) and os.path.isabs(value) and '\0' not in value
+
+
+def is_bool(value) -> bool:
+    return type(value) is bool
+
+
+def is_null(value) -> bool:
+    return value is None
+
+
+def is_exit_code(value) -> bool:
+    return value is None or (type(value) is int and 0 <= value <= 255)
+
+
+def is_signal_name(value) -> bool:
+    return full(SIGNAL_NAME_RE, value)
+
+
+def list_of(predicate):
+    return lambda value: type(value) is list and all(predicate(item) for item in value)
+
+
+def is_arg(value) -> bool:
+    return type(value) is str
+
+
+def is_timestamp(value) -> bool:
+    return parse_time(value) is not None
+
+
+def is_description(value) -> bool:
+    return is_text(value) and len(value) <= MAX_DESCRIPTION
+
+
+def is_signal_sent(value) -> bool:
+    return type(value) is str and (is_signal_name(value) or
+                                   (value.endswith('-denied') and is_signal_name(value[:-7])))
+
+
+def constant(expected):
+    return lambda value: type(value) is type(expected) and value == expected
+
+
+def one_of(*allowed):
+    return lambda value: type(value) is str and value in allowed
+
+
+class AnyOf(tuple):
+    """Alternative object shapes for one position."""
+
+
+LOG_RECORD = {'file': is_text, 'bytes': is_count, 'sha256': lambda v: full(HEX64_RE, v)}
+COMMITTED_STATE = {
+    'head': lambda v: full(SHA_RE, v), 'trackedChanges': is_count, 'untrackedFiles': is_count,
+    'flaggedIndexEntries': is_count, 'headContentMismatches': is_count, 'gitlinks': is_count,
+    'trackedCount': is_count, 'indexFingerprint': lambda v: full(HEX64_RE, v),
+    'trackedFingerprint': lambda v: full(HEX64_RE, v),
+}
+SOURCE_STATE = {'fileCount': is_count, 'fingerprint': lambda v: full(HEX64_RE, v)}
+UNAVAILABLE_STATE = {'error': is_text}
+CHILD = {
+    'launched': is_bool, 'pid': is_positive, 'timedOut': is_bool,
+    'descendantsObservedAfterExit': is_bool, 'descendantsOutlivedDeadline': is_bool,
+    'groupEmptyAtReceipt': is_bool, 'signalsSent': list_of(is_signal_sent),
+    'exitCode': is_exit_code, 'signal': lambda v: v is None or is_signal_name(v),
+}
+
+
+def receipt_schema(mode: str) -> dict:
+    committed = mode == 'committed'
+    state = COMMITTED_STATE if committed else SOURCE_STATE
+    return {
+        'schema': constant(SCHEMA),
+        'label': lambda v: full(LABEL_RE, v),
+        'cwd': is_absolute,
+        'mode': constant(mode),
+        'expectedSha': (lambda v: full(SHA_RE, v)) if committed else is_null,
+        'sourceOnly': is_null if committed else is_description,
+        'command': {'executable': is_text, 'args': list_of(is_arg),
+                    'resolvedExecutable': is_absolute,
+                    'executableSha256': lambda v: full(HEX64_RE, v)},
+        'timeoutSeconds': is_seconds,
+        'limitations': constant(list(LIMITATIONS)),
+        'startedAt': is_timestamp,
+        'endedAt': is_timestamp,
+        'durationSeconds': is_seconds,
+        'child': CHILD,
+        'logs': {'stdout': LOG_RECORD, 'stderr': LOG_RECORD},
+        'input': {'before': state, 'after': AnyOf((state, UNAVAILABLE_STATE))},
+        'gate': {'outcome': one_of('pass', 'fail'), 'reasons': list_of(is_text)},
+    }
+
+
+def schema_problems(value, spec, path: str) -> list[str]:
+    if isinstance(spec, AnyOf):
+        if any(not schema_problems(value, option, path) for option in spec):
+            return []
+        return [f'receipt-schema-invalid:{path}']
+    if isinstance(spec, dict):
+        if type(value) is not dict:
+            return [f'receipt-schema-invalid:{path}']
+        problems = []
+        if set(value) - set(spec):
+            problems.append(f'receipt-schema-unknown-field:{path}')
+        for key, child_spec in spec.items():
+            child_path = key if path == '.' else f'{path}/{key}'
+            if key not in value:
+                problems.append(f'receipt-schema-missing:{child_path}')
+            else:
+                problems.extend(schema_problems(value[key], child_spec, child_path))
+        return problems
+    return [] if spec(value) else [f'receipt-schema-invalid:{path}']
+
+
+def receipt_schema_problems(receipt) -> list[str]:
+    if type(receipt) is not dict:
+        return ['receipt-schema-invalid:.']
+    mode = receipt.get('mode')
+    if mode not in ('committed', 'source-only'):
+        return ['receipt-schema-invalid:mode']
+    return schema_problems(receipt, receipt_schema(mode), '.')
+
+
+# ---------------------------------------------------------------- semantic checks
+# These run only on a schema-valid receipt, so every field has its exact type.
 
 def parse_time(value) -> datetime | None:
-    if not isinstance(value, str) or not TIME_RE.match(value):
+    if not full(TIME_RE, value):
         return None
     try:
         return datetime.strptime(value, '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=timezone.utc)
@@ -677,98 +844,81 @@ def parse_time(value) -> datetime | None:
 
 def timing_reasons(receipt: dict) -> list[str]:
     reasons = []
-    started, ended = parse_time(receipt.get('startedAt')), parse_time(receipt.get('endedAt'))
-    if started is None or ended is None or ended < started:
+    started, ended = parse_time(receipt['startedAt']), parse_time(receipt['endedAt'])
+    if ended < started:
         reasons.append('invalid-timestamps')
-    timeout = receipt.get('timeoutSeconds')
-    if not is_number(timeout) or not 0 < timeout <= MAX_TIMEOUT:
+    timeout, duration = receipt['timeoutSeconds'], receipt['durationSeconds']
+    if not 0 < timeout <= MAX_TIMEOUT:
         reasons.append('invalid-timeout')
-        timeout = None
-    duration = receipt.get('durationSeconds')
-    if not is_number(duration) or duration < 0 \
-            or (timeout is not None and duration > timeout + CLOCK_SLACK_SECONDS) \
-            or (not reasons and duration > (ended - started).total_seconds() + CLOCK_SLACK_SECONDS):
+    if duration > timeout + CLOCK_SLACK_SECONDS \
+            or duration > (ended - started).total_seconds() + CLOCK_SLACK_SECONDS:
         reasons.append('invalid-duration')
     return reasons
 
 
-CHILD_FIELDS = {'launched': bool, 'pid': int, 'timedOut': bool, 'signalsSent': list,
-                'descendantsObservedAfterExit': bool, 'descendantsOutlivedDeadline': bool,
-                'groupEmptyAtReceipt': bool}
-
-
 def child_reasons(child: dict) -> list[str]:
     reasons = []
-    if any(type(child.get(k)) is not t for k, t in CHILD_FIELDS.items()) \
-            or 'exitCode' not in child or 'signal' not in child \
-            or not all(isinstance(s, str) for s in child.get('signalsSent', [None])):
-        reasons.append('invalid-child-fields')
-    if child.get('launched') is not True:
+    if child['launched'] is not True:
         reasons.append('child-not-launched')
-    if 'signal' not in child or child['signal'] is not None:
+    if child['signal'] is not None:
         reasons.append('child-signalled')
-    if not is_zero(child.get('exitCode')):
+    if child['exitCode'] != 0:
         reasons.append('child-nonzero-exit')
-    if child.get('timedOut') is not False or child.get('groupEmptyAtReceipt') is not True \
-            or child.get('descendantsOutlivedDeadline') is not False \
-            or child.get('signalsSent') != []:
+    if child['timedOut'] or not child['groupEmptyAtReceipt'] \
+            or child['descendantsOutlivedDeadline'] or child['signalsSent']:
         reasons.append('child-not-cleanly-finished')
     return reasons
 
 
 def identity_reasons(check: dict, receipt: dict) -> list[str]:
     reasons = []
-    if receipt.get('schema') != SCHEMA:
-        reasons.append('wrong-schema')
-    if receipt.get('label') != check['label']:
+    if receipt['label'] != check['label']:
         reasons.append('wrong-label')
-    if receipt.get('cwd') != check['cwd']:
+    if receipt['cwd'] != check['cwd']:
         reasons.append('wrong-cwd')
-    command = as_dict(receipt.get('command'))
-    if command.get('executable') != check['command']['executable'] \
-            or command.get('args') != check['command']['args']:
+    command = receipt['command']
+    if command['executable'] != check['command']['executable'] \
+            or command['args'] != check['command']['args']:
         reasons.append('wrong-command')
     expected_mode = 'committed' if check['expectedSha'] else 'source-only'
-    if receipt.get('mode') != expected_mode or receipt.get('expectedSha') != check['expectedSha'] \
-            or receipt.get('sourceOnly') != check['sourceOnly']:
+    if receipt['mode'] != expected_mode or receipt['expectedSha'] != check['expectedSha'] \
+            or receipt['sourceOnly'] != check['sourceOnly']:
         reasons.append('wrong-source-identity')
     return reasons
 
 
-COMMITTED_ZERO_FIELDS = ('trackedChanges', 'flaggedIndexEntries', 'headContentMismatches', 'gitlinks')
+CLEAN_BEFORE = ('trackedChanges', 'untrackedFiles', 'flaggedIndexEntries',
+                'headContentMismatches', 'gitlinks')
+CLEAN_AFTER = ('trackedChanges', 'flaggedIndexEntries', 'headContentMismatches', 'gitlinks')
+STABLE_COMMITTED = ('head', 'trackedCount', 'indexFingerprint', 'trackedFingerprint')
 
 
 def input_reasons(check: dict, receipt: dict) -> list[str]:
-    data = as_dict(receipt.get('input'))
-    before, after = as_dict(data.get('before')), as_dict(data.get('after'))
-    if check['expectedSha']:
+    before, after = receipt['input']['before'], receipt['input']['after']
+    if 'error' in after:
+        return ['input-state-unavailable']
+    if receipt['mode'] == 'committed':
         reasons = []
-        if before.get('head') != check['expectedSha'] or after.get('head') != check['expectedSha']:
+        if before['head'] != check['expectedSha'] or after['head'] != check['expectedSha']:
             reasons.append('wrong-commit')
-        fingerprints = ('indexFingerprint', 'trackedFingerprint')
-        if not is_zero(before.get('untrackedFiles')) \
-                or not all(is_zero(s.get(k)) for s in (before, after) for k in COMMITTED_ZERO_FIELDS) \
-                or any(not HEX64_RE.match(str(before.get(k))) or before.get(k) != after.get(k)
-                       for k in fingerprints):
+        if any(before[k] for k in CLEAN_BEFORE) or any(after[k] for k in CLEAN_AFTER) \
+                or any(before[k] != after[k] for k in STABLE_COMMITTED):
             reasons.append('input-mutated')
         return reasons
-    fingerprint = before.get('fingerprint')
-    if not HEX64_RE.match(str(fingerprint)) or fingerprint != after.get('fingerprint'):
+    if before != after:
         return ['input-mutated']
     return []
 
 
 def outcome_reasons(check: dict, receipt: dict) -> list[str]:
-    gate = as_dict(receipt.get('gate'))
-    reasons = [] if gate.get('outcome') == 'pass' and gate.get('reasons') == [] \
-        else ['gate-not-passed']
-    return reasons + timing_reasons(receipt) + child_reasons(as_dict(receipt.get('child'))) \
+    gate = receipt['gate']
+    reasons = [] if gate['outcome'] == 'pass' and gate['reasons'] == [] else ['gate-not-passed']
+    return reasons + timing_reasons(receipt) + child_reasons(receipt['child']) \
         + input_reasons(check, receipt)
 
 
 def log_reasons(result_dir: Path, receipt: dict) -> list[str]:
     reasons = []
-    logs = as_dict(receipt.get('logs'))
     inodes = set()
     for name in LOG_NAMES:
         key = name.split('.')[0]
@@ -779,14 +929,13 @@ def log_reasons(result_dir: Path, receipt: dict) -> list[str]:
             continue
         info = path.lstat()
         inodes.add((info.st_dev, info.st_ino))
-        record = as_dict(logs.get(key))
+        record = receipt['logs'][key]
         try:
             actual = sha256_file(path)
         except OSError:
             reasons.append(f'{key}-log-unreadable')
             continue
-        if record.get('file') != name or record.get('sha256') != actual \
-                or not is_int(record.get('bytes')) or record.get('bytes') != info.st_size:
+        if record['file'] != name or record['sha256'] != actual or record['bytes'] != info.st_size:
             reasons.append(f'{key}-log-altered')
     if len(inodes) == 1 and not reasons:
         reasons.append('logs-aliased')
@@ -809,10 +958,11 @@ def verify_check(check: dict) -> tuple[str, list[str]]:
         if result_path.stat().st_size > MAX_RECEIPT_BYTES:
             return 'rejected', ['receipt-too-large']
         receipt = load_json(result_path)
-    except (OSError, UnicodeDecodeError, ValueError):
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError):
         return 'rejected', ['receipt-unparseable']
-    if not isinstance(receipt, dict):
-        return 'rejected', ['receipt-unparseable']
+    problems = receipt_schema_problems(receipt)
+    if problems:
+        return 'rejected', problems
     reasons = identity_reasons(check, receipt) + outcome_reasons(check, receipt) \
         + log_reasons(result_path.parent, receipt)
     return ('rejected', reasons) if reasons else ('verified', [])

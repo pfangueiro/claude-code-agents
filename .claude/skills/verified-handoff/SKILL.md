@@ -63,14 +63,27 @@ python3 scripts/evidence.py verify --manifest evidence/manifest.json
 ```
 
 Read-only. Each check is `verified`, `pending` (no receipt yet) or `rejected` with
-fixed reason codes (`wrong-command`, `wrong-commit`, `input-mutated`,
-`child-nonzero-exit`, `invalid-timestamps`, `invalid-child-fields`,
-`stdout-log-altered`, `receipt-path-symlink`, ...). A receipt verifies only when every
-terminal field is present and correctly typed: ordered timestamps, finite duration and
-timeout, integer exit code `0`, explicit `null` signal, no signals sent and an empty
-process group. No component of the evidence path may be a symlink. Exit `0` only when
-every check is verified. Report pending and rejected checks as such; never summarize
-them as passing.
+fixed reason codes. Every receipt is first validated against the closed v1 schema:
+every field the recorder emits is required with its exact JSON type (booleans are not
+integers, hashes are lowercase 64-character hex strings, numbers are never parsed
+from strings, huge or non-finite numbers are rejected) and unknown fields are refused.
+Schema violations are reported as `receipt-schema-missing:<path>`,
+`receipt-schema-invalid:<path>` or `receipt-schema-unknown-field:<path>`, where
+`<path>` is a schema path, never receipt content. Only a schema-valid receipt is then
+compared: `wrong-command`, `wrong-commit`, `input-mutated`, `child-nonzero-exit`,
+`invalid-timestamps`, `stdout-log-altered`, `receipt-path-symlink`, ...
+
+A receipt verifies only with ordered timestamps, a duration within the timeout,
+integer exit code `0`, an explicit `null` signal, no signals sent, an empty process
+group, a positive PID, a resolved executable path with its SHA-256, and unchanged
+input. Schema validity is structural: the recorded executable digest is not
+re-checked against the current file.
+
+The manifest file must be a regular file, not a symlink (`manifest-symlink`). Its
+canonical directory is the evidence root: no component below it may be a symlink,
+while the directories above it are your choice of location (some systems' temporary
+roots are themselves symlinks). Exit `0` only when every check is verified. Report
+pending and rejected checks as such; never summarize them as passing.
 
 ## What a receipt does not prove
 

@@ -12,6 +12,7 @@ to test staged copies; by default the skill sources in this repository are used.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -744,6 +745,232 @@ class DiscoverySafetyRegressionTests(Sandbox):
                          {'node': '>=20', 'npm': '^10.0.0 || >=11'})
         self.assertIn({'path': 'odd/package.json', 'reason': 'unsupported-engine-range'},
                       report['unknowns'])
+
+
+SHARED_RECEIPT_FIELDS = (
+    'child:object', 'child/descendantsObservedAfterExit:bool', 'child/descendantsOutlivedDeadline:bool',
+    'child/exitCode:int', 'child/groupEmptyAtReceipt:bool', 'child/launched:bool', 'child/pid:int',
+    'child/signal:null', 'child/signalsSent:list', 'child/timedOut:bool', 'command:object',
+    'command/args:list', 'command/executable:str', 'command/executableSha256:str',
+    'command/resolvedExecutable:str', 'cwd:str', 'durationSeconds:float', 'endedAt:str',
+    'gate:object', 'gate/outcome:str', 'gate/reasons:list', 'input:object', 'input/after:object',
+    'input/before:object', 'label:str', 'limitations:list', 'logs:object', 'logs/stderr:object',
+    'logs/stderr/bytes:int', 'logs/stderr/file:str', 'logs/stderr/sha256:str', 'logs/stdout:object',
+    'logs/stdout/bytes:int', 'logs/stdout/file:str', 'logs/stdout/sha256:str', 'mode:str',
+    'schema:str', 'startedAt:str', 'timeoutSeconds:float',
+)
+COMMITTED_STATE_FIELDS = ('flaggedIndexEntries:int', 'gitlinks:int', 'head:str',
+                          'headContentMismatches:int', 'indexFingerprint:str', 'trackedChanges:int',
+                          'trackedCount:int', 'trackedFingerprint:str', 'untrackedFiles:int')
+# Frozen inventory of every field the recorder emits for a passing run, per input mode.
+EMITTED_RECEIPT_FIELDS = {
+    'committed': frozenset(SHARED_RECEIPT_FIELDS + ('expectedSha:str', 'sourceOnly:null') + tuple(
+        f'input/{side}/{field}' for side in ('before', 'after') for field in COMMITTED_STATE_FIELDS)),
+    'source-only': frozenset(SHARED_RECEIPT_FIELDS + ('expectedSha:null', 'sourceOnly:str') + tuple(
+        f'input/{side}/{field}' for side in ('before', 'after')
+        for field in ('fileCount:int', 'fingerprint:str'))),
+}
+HUGE = 10 ** 1000
+WRONG_VALUES = {
+    'str': (1, int('1' * 64), None, True, [], {}),
+    'int': ('0', True, False, None, [], -1, HUGE, 0.5),
+    'float': ('1.0', True, None, [], -1.0, HUGE, float('inf'), float('nan')),
+    'bool': (0, 1, 'false', None),
+    'null': ('', 0, False, []),
+    'list': ({}, 'x', None, [1]),
+    'object': ('x', [], None),
+}
+JSON_TYPES = {bool: 'bool', int: 'int', float: 'float', str: 'str', type(None): 'null',
+              list: 'list', dict: 'object'}
+
+
+def field_inventory(value, prefix: str = '') -> set[str]:
+    fields = set()
+    for key, child in value.items():
+        path = f'{prefix}{key}'
+        fields.add(f'{path}:{JSON_TYPES[type(child)]}')
+        if isinstance(child, dict):
+            fields |= field_inventory(child, path + '/')
+    return fields
+
+
+def mutate(receipt: dict, path: str, value=None, *, delete: bool = False) -> dict:
+    copy = json.loads(json.dumps(receipt))
+    *parents, last = path.split('/')
+    target = copy
+    for key in parents:
+        target = target[key]
+    if delete:
+        del target[last]
+    else:
+        target[last] = value
+    return copy
+
+
+def load_evidence_module():
+    """Import the script under test without writing bytecode beside it."""
+    previous = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec = importlib.util.spec_from_file_location('evidence_under_test', EVIDENCE)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
+    return module
+
+
+class ReceiptSchemaRegressionTests(Sandbox):
+    """Every emitted success-receipt field is required with its exact JSON type."""
+
+    run_evidence = EvidenceTests.run_evidence
+    manifest = EvidenceTests.manifest
+    check_entry = EvidenceTests.check_entry
+    verify = EvidenceTests.verify
+    py = EvidenceTests.py
+
+    def real_receipts(self) -> dict:
+        root, sha = self.make_repo({'a': '1'})
+        archive = self.tmp / 'archive'
+        archive.mkdir()
+        (archive / 'data.txt').write_text('payload\n')
+        command = self.py('print("ok")')
+        cases = {}
+        for mode, kwargs, cwd in (('committed', {'sha': sha}, root),
+                                  ('source-only', {'source': 'fixture archive'}, archive)):
+            label = 'schema-' + mode
+            code, receipt, out = self.run_evidence(cwd, label, command, **kwargs)
+            self.assertEqual(code, 0, receipt)
+            manifest = self.evidence_root / f'{label}.json'
+            entry = self.check_entry(label, cwd, command, **kwargs)
+            manifest.write_text(json.dumps({'checks': [entry]}))
+            cases[mode] = {'receipt': receipt, 'out': out, 'manifest': manifest}
+        return cases
+
+    def test_emitted_field_inventory_is_frozen(self):
+        for mode, case in self.real_receipts().items():
+            with self.subTest(mode=mode):
+                self.assertEqual(field_inventory(case['receipt']), EMITTED_RECEIPT_FIELDS[mode])
+
+    def test_every_omission_wrong_type_and_unknown_field_is_rejected(self):
+        module = load_evidence_module()
+        for mode, case in self.real_receipts().items():
+            check = module.load_manifest(case['manifest'])[0]
+            result = case['out'] / 'result.json'
+            pristine = case['receipt']
+
+            def status_of(receipt) -> tuple:
+                result.write_text(json.dumps(receipt))
+                try:
+                    return module.verify_check(check)
+                except Exception as exc:  # an exception is a defect, not a rejection
+                    return 'raised', [type(exc).__name__]
+
+            self.assertEqual(status_of(pristine), ('verified', []))  # negative control
+            mutations = []
+            for field in sorted(EMITTED_RECEIPT_FIELDS[mode]):
+                path, kind = field.rsplit(':', 1)
+                mutations.append((f'omit {path}', mutate(pristine, path, delete=True)))
+                mutations += [(f'{path}={value!r:.40}', mutate(pristine, path, value))
+                              for value in WRONG_VALUES[kind]]
+                if kind == 'object':
+                    extra = mutate(pristine, f'{path}/unexpectedField', 'x')
+                    mutations.append((f'unknown field in {path}', extra))
+            mutations.append(('unknown top-level field', mutate(pristine, 'unexpectedField', 1)))
+            for name, receipt in mutations:
+                with self.subTest(mode=mode, mutation=name):
+                    status, reasons = status_of(receipt)
+                    self.assertEqual(status, 'rejected', reasons)
+                    self.assertTrue(reasons)
+            self.assertEqual(status_of(pristine), ('verified', []))
+
+    def test_reviewer_reproductions_are_rejected_through_the_cli(self):
+        case = self.real_receipts()['committed']
+        pristine, result = case['receipt'], case['out'] / 'result.json'
+        numeric = int('1' * 64)
+        fingerprints = pristine
+        for side in ('before', 'after'):
+            for key in ('indexFingerprint', 'trackedFingerprint'):
+                fingerprints = mutate(fingerprints, f'input/{side}/{key}', numeric)
+        reproductions = {
+            'integer-fingerprints': fingerprints,
+            'no-resolved-executable': mutate(pristine, 'command/resolvedExecutable', delete=True),
+            'no-executable-digest': mutate(pristine, 'command/executableSha256', delete=True),
+            'integer-executable-digest': mutate(pristine, 'command/executableSha256', numeric),
+            'no-tracked-count': mutate(pristine, 'input/before/trackedCount', delete=True),
+            'after-untracked-missing': mutate(pristine, 'input/after/untrackedFiles', delete=True),
+            'no-pid': mutate(pristine, 'child/pid', delete=True),
+            'negative-pid': mutate(pristine, 'child/pid', -1),
+            'huge-duration': mutate(pristine, 'durationSeconds', HUGE),
+            'huge-timeout': mutate(pristine, 'timeoutSeconds', HUGE),
+            'huge-count': mutate(pristine, 'input/after/trackedChanges', HUGE),
+            'month-13': mutate(pristine, 'startedAt', '2026-13-01T00:00:00.000Z'),
+            'no-millis': mutate(pristine, 'endedAt', '2026-01-01T00:00:00Z'),
+            'trailing-newline-time': mutate(pristine, 'endedAt', pristine['endedAt'] + '\n'),
+            'uppercase-log-hash': mutate(pristine, 'logs/stdout/sha256',
+                                         pristine['logs']['stdout']['sha256'].upper()),
+        }
+        code, report, _ = self.verify(case['manifest'])
+        self.assertEqual((code, report['outcome']), (0, 'verified'))  # negative control
+        for name, receipt in reproductions.items():
+            with self.subTest(reproduction=name):
+                result.write_text(json.dumps(receipt))
+                proc = subprocess.run([sys.executable, str(EVIDENCE), 'verify', '--manifest',
+                                       str(case['manifest'])], env=self.env, capture_output=True,
+                                      text=True, timeout=60)
+                self.assertNotIn('Traceback', proc.stderr)
+                self.assertEqual(proc.returncode, 1, proc.stdout)
+                report = json.loads(proc.stdout)
+                self.assertEqual(report['checks'][0]['status'], 'rejected')
+                self.assertTrue(all(r.startswith('receipt-schema-') for r in report['checks'][0]['reasons']))
+        result.write_text(json.dumps(pristine))
+        self.assertEqual(self.verify(case['manifest'])[0], 0)
+
+
+class ManifestBoundaryTests(Sandbox):
+    """The manifest file must not be a symlink; its canonical directory is the evidence root."""
+
+    run_evidence = EvidenceTests.run_evidence
+    check_entry = EvidenceTests.check_entry
+    py = EvidenceTests.py
+
+    def verified_setup(self) -> tuple[Path, Path, list[str], str]:
+        root, sha = self.make_repo({'a': '1'})
+        command = self.py('print("x")')
+        code, _, _ = self.run_evidence(root, 'boundary', command, sha=sha)
+        self.assertEqual(code, 0)
+        manifest = self.evidence_root / 'manifest.json'
+        manifest.write_text(json.dumps({'checks': [self.check_entry('boundary', root, command, sha=sha)]}))
+        return root, manifest, command, sha
+
+    def run_verify(self, manifest: Path) -> tuple[int, dict]:
+        proc = subprocess.run([sys.executable, str(EVIDENCE), 'verify', '--manifest', str(manifest)],
+                              env=self.env, capture_output=True, text=True, timeout=60)
+        return proc.returncode, json.loads(proc.stdout)
+
+    def test_symlinked_manifest_file_is_rejected_before_reading(self):
+        _, manifest, _, _ = self.verified_setup()
+        link = self.evidence_root / 'manifest-link.json'
+        link.symlink_to(manifest)
+        self.assertEqual(self.run_verify(manifest)[0], 0)  # negative control
+        code, report = self.run_verify(link)
+        self.assertEqual((code, report['reason']), (2, 'manifest-symlink'))
+
+    def test_canonical_manifest_directory_is_the_evidence_root(self):
+        root, manifest, command, sha = self.verified_setup()
+        alias = self.tmp / 'alias'
+        alias.symlink_to(self.evidence_root, target_is_directory=True)
+        # Directories above the manifest are the caller's location choice: allowed.
+        self.assertEqual(self.run_verify(alias / 'manifest.json'), (0, self.run_verify(manifest)[1]))
+        # Components below the canonical root are still checked when reached via the alias.
+        store = self.tmp / 'store'
+        store.mkdir()
+        code, _, _ = self.run_evidence(root, 'below', command, sha=sha, out_dir=store / 'below')
+        self.assertEqual(code, 0)
+        (self.evidence_root / 'below').symlink_to(store / 'below', target_is_directory=True)
+        manifest.write_text(json.dumps({'checks': [self.check_entry('below', root, command, sha=sha)]}))
+        code, report = self.run_verify(alias / 'manifest.json')
+        self.assertEqual((code, report['checks'][0]['reasons']), (1, ['receipt-path-symlink']))
 
 
 if __name__ == '__main__':
