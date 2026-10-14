@@ -96,8 +96,13 @@ edition and are not an audit of every underlying library/version.
 
 Status line (opt-in): Claude's custom statusline renderer reads Claude-specific JSON
 on stdin and is not ported. Codex's terminal footer uses built-in item IDs instead;
-the installed `.codex/framework/statusline.example.toml` lists thread title, model,
-Git branch, context used, weekly limit and Codex version. Merge only its
+the installed `.codex/framework/statusline.example.toml` lists, in priority order,
+thread title, model with reasoning, context remaining, used tokens, five-hour and
+weekly limits, Git branch, current directory, context window size, total input and
+output tokens and Codex version. Token items are native session counters (used tokens
+is the session total and is omitted while zero); unavailable values are omitted and
+trailing items clip on narrow terminals, so not every item shows at every width. Use
+`/statusline` to reorder or toggle items. Merge only its
 `status_line` field into your existing `[tui]` table (do not add a second `[tui]`
 and keep your other settings), or choose items live with `/statusline`; start a new
 terminal session if the footer does not refresh. The installer never edits

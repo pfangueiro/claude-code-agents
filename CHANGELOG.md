@@ -27,13 +27,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Codex status bar counterpart: the adapter exports an opt-in
   `.codex/framework/statusline.example.toml` (`tui.status_line` built-in footer IDs:
   thread title, model, Git branch, context used, weekly limit, version; no cost or
-  token items) and never edits `config.toml`. The managed AGENTS block asks the model to
+  credit items) and never edits `config.toml`. The managed AGENTS block asks the model to
   title only the current task `SDLC | <short task>` when a native rename capability
   exists, without replacing owner titles. The marker means guidance loaded, not checks
   passed; Claude's renderer, health, duration and cost output remain unported.
 
 ### Changed
 
+- Codex footer example now lists native IDs in priority order: thread title, model,
+  context remaining (replacing context used), used tokens, five-hour and weekly limits,
+  Git branch, current directory, context window size, total input/output tokens and
+  version. Token items are native session counters; used tokens is hidden while zero,
+  input/output totals may display zero, unavailable values are omitted and trailing
+  items clip on narrow terminals. The consumer test now requires unique,
+  verified native IDs and still rejects cost, credit and unknown items.
 - `$sdlc-commit-pr` is built from the provider-neutral `.claude/commands/commit-pr.md`.
   The Codex-only override, which still ran tests and review before the commit and so let
   a later commit bypass the exact-candidate verdict, is removed; a test requires the

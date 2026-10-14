@@ -54,8 +54,9 @@ AGENTS.md and relevant source before relying on these notes.
   [global validation](codex/GLOBAL-VALIDATION.md). Dashboard, watchdog, notifications,
   the Claude statusline renderer, automatic linting and snapshots remain unported. MCP
   examples are disabled and Codex hooks are opt-in. The status bar counterpart is an
-  opt-in `tui.status_line` example of built-in footer IDs (never auto-merged into
-  config) plus instruction guidance to title the current task `SDLC | <task>` where a
+  opt-in `tui.status_line` example of built-in footer IDs (context remaining, native
+  session token counters, usage limits, branch/directory; never auto-merged into
+  config; width clips trailing items) plus instruction guidance to title the current task `SDLC | <task>` where a
   native rename capability exists; the marker means guidance loaded, not checks passed.
 
 ## Evidence and publishing
