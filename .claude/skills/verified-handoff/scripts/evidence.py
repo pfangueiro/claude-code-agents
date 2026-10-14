@@ -567,7 +567,7 @@ def load_manifest(path: Path) -> list[dict]:
     """
     try:
         info = path.lstat()
-    except OSError:
+    except (OSError, ValueError):
         raise ManifestError('manifest-unreadable') from None
     if stat.S_ISLNK(info.st_mode):
         raise ManifestError('manifest-symlink')
@@ -607,7 +607,8 @@ def normalize_check(raw, idx: int, base: Path) -> dict:
     label, cwd, command, result = (raw.get(k) for k in ('label', 'cwd', 'command', 'resultFile'))
     if not isinstance(label, str) or not LABEL_RE.match(label):
         raise ManifestError('invalid-label', idx)
-    if not isinstance(cwd, str) or not cwd or not isinstance(result, str) or not result:
+    if not isinstance(cwd, str) or not cwd or not isinstance(result, str) or not result \
+            or '\0' in cwd or '\0' in result:
         raise ManifestError('invalid-path', idx)
     parts = result_parts(result)
     if parts is None:

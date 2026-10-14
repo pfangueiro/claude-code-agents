@@ -96,8 +96,14 @@ choose another existing profile deliberately. It manages only `skills/delivery`,
 `CLAUDE.md` or daemons. Installed bytes come from the Git objects of the source `HEAD`
 commit, not the working tree. A managed path that differs from `HEAD`, carries an
 assume-unchanged or skip-worktree flag, or has an untracked or ignored file beside it
-(Python caches aside) marks the source dirty: `--dry-run` reports it and installation
-refuses. Symlinked source resources and committed symlinks or submodules are refused in
+(Python caches aside) marks the consumed source dirty: `--dry-run` reports it and
+installation refuses. Only those consumed paths are inspected, so provenance is scoped:
+the manifest records `source_sha`, `consumed_source_dirty`, `consumed_source_scopes` and
+`whole_tree_state: "not-inspected"`, and the CLI says the rest of the working tree was not
+inspected. An uncommitted edit elsewhere in the repository neither blocks installation
+nor is claimed clean. Manifests written by earlier versions carried an unqualified
+`source_dirty` flag; the next install rewrites them in the scoped format, and `--check`
+reports that rewrite as drift until then. Symlinked source resources and committed symlinks or submodules are refused in
 every mode; source inspection runs no fsmonitor, filter or hook. Foreign or customized
 files and symlinked destinations are refused before writing. A `commit-pr.md` copied by
 an earlier full install is adopted only with `--baseline <full commit SHA>` whose

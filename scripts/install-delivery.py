@@ -5,10 +5,12 @@ Manages only the delivery, repo-context and verified-handoff skills, the deliver
 rule and the provider-neutral commit-pr command. It never runs the broad Claude
 installer and never touches settings, hooks, credentials, models, CLAUDE.md or
 daemons. Installed bytes are read from the Git objects of the source HEAD commit,
-never from the working tree; the working tree is only compared against them. Any
-consumed path that differs, carries an assume-unchanged or skip-worktree flag, or
-has an extra file beside it marks the source dirty, and dirty sources are refused
-for installation. Symlinked source resources and committed entries that are not
+never from the working tree; only the consumed scopes of the working tree are
+compared against them. Any consumed path that differs, carries an assume-unchanged
+or skip-worktree flag, or has an extra file beside it marks the consumed source
+dirty, and such sources are refused for installation. Paths outside the consumed
+scopes are never inspected, so provenance records the whole working-tree state as
+not inspected rather than clean. Symlinked source resources and committed entries that are not
 regular files are refused in every mode. Source Git commands run with fsmonitor
 and replace objects disabled and never invoke filters or hooks. Ownership is
 recorded as per-file hashes in a manifest; foreign or customized files and
@@ -181,9 +183,15 @@ def read_source(source: Path, *, require_payload: bool) -> tuple[str, dict[str, 
     return sha, files, deviations
 
 
+def origin_record(sha: str, deviations: list[str]) -> dict:
+    """Provenance limited to the consumed scopes; the rest of the working tree is never inspected."""
+    return {'sha': sha, 'consumed_source_dirty': bool(deviations),
+            'consumed_source_scopes': list(SCOPES), 'whole_tree_state': 'not-inspected'}
+
+
 def provenance(source: Path) -> dict:
     sha, _, deviations = read_source(source, require_payload=False)
-    return {'sha': sha, 'dirty': bool(deviations)}
+    return origin_record(sha, deviations)
 
 
 def baseline_blob(source: Path, baseline: str, rel: str) -> bytes | None:
@@ -256,7 +264,7 @@ def plan(home: Path, source: Path, *, uninstall: bool,
     """Return writes, expected current bytes, the old manifest, source provenance and source deviations."""
     old = load_manifest(home)
     sha, committed, deviations = read_source(source, require_payload=not uninstall)
-    origin = {'sha': sha, 'dirty': bool(deviations)}
+    origin = origin_record(sha, deviations)
     desired = {} if uninstall else committed
     adopted = {} if uninstall else dict(old['adopted'])
     writes: dict[str, bytes | None] = {}
@@ -287,7 +295,10 @@ def plan(home: Path, source: Path, *, uninstall: bool,
     if uninstall:
         manifest = None
     else:
-        manifest = (json.dumps({'version': 1, 'source_sha': origin['sha'], 'source_dirty': origin['dirty'],
+        manifest = (json.dumps({'version': 1, 'source_sha': origin['sha'],
+                                'consumed_source_dirty': origin['consumed_source_dirty'],
+                                'consumed_source_scopes': origin['consumed_source_scopes'],
+                                'whole_tree_state': origin['whole_tree_state'],
                                 'files': {rel: digest(data) for rel, data in desired.items()},
                                 'adopted': adopted, 'dirs': dirs}, indent=2, sort_keys=True) + '\n').encode()
     manifest_path = reject_symlinks(home, MANIFEST)
@@ -392,7 +403,7 @@ def run(home: Path, source: Path, *, dry_run: bool = False, check: bool = False,
         return changes, origin
     if dry_run or not changes:
         return changes, origin
-    if origin['dirty'] and not uninstall:
+    if origin['consumed_source_dirty'] and not uninstall:
         raise InstallError('source has uncommitted delivery changes; commit them before installing: '
                            + ', '.join(deviations))
     transaction(home, writes, expected, old['dirs'] if uninstall else [])
@@ -420,8 +431,9 @@ def main() -> int:
         print(f'FAIL: {err}', file=sys.stderr)
         return 1
     verb = 'Would change' if args.dry_run else ('Checked' if args.check else 'Changed')
-    dirty = ' (dirty working tree; compared committed HEAD bytes)' if origin['dirty'] else ''
-    print(f'source {origin["sha"]}{dirty}; target {home}')
+    consumed = ('consumed delivery paths deviate from HEAD; compared committed HEAD bytes'
+                if origin['consumed_source_dirty'] else 'consumed delivery paths match HEAD')
+    print(f'source {origin["sha"]} ({consumed}; rest of working tree not inspected); target {home}')
     print(f'{verb} {len(changes)} paths')
     for rel in changes:
         print(rel)

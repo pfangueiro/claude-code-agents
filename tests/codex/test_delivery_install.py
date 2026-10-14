@@ -22,6 +22,8 @@ _spec.loader.exec_module(installer)
 
 OLD_COMMAND = b'---\ndescription: previously shipped publication command\n---\n\nCommit, then test.\n'
 NEW_COMMAND = b'---\ndescription: neutral publication command\n---\n\nCommit, check, review, publish.\n'
+CONSUMED_SCOPES = ['.claude/skills/delivery', '.claude/skills/repo-context', '.claude/skills/verified-handoff',
+                   '.claude/rules/delivery.md', '.claude/commands/commit-pr.md']
 PERSONAL = {'settings.json': b'{"model": "personal"}\n', 'CLAUDE.md': b'Personal instructions\n',
             'skills/personal/SKILL.md': b'personal skill', 'commands/mine.md': b'personal command',
             'rules/personal.md': b'personal rule', 'hooks/guard.sh': b'#!/bin/sh\n'}
@@ -76,6 +78,20 @@ class DeliveryInstall(unittest.TestCase):
     def install(self, **options):
         return installer.run(self.home, self.source, **options)[0]
 
+    def origin(self, consumed_dirty):
+        return {'sha': self.head, 'consumed_source_dirty': consumed_dirty,
+                'consumed_source_scopes': CONSUMED_SCOPES, 'whole_tree_state': 'not-inspected'}
+
+    def assert_manifest_provenance(self, consumed_dirty=False):
+        """The manifest records scoped provenance and never an unqualified source cleanliness flag."""
+        manifest = json.loads((self.home / installer.MANIFEST).read_text())
+        self.assertNotIn('source_dirty', manifest)
+        self.assertNotIn('dirty', manifest)
+        recorded = {key: manifest[key] for key in ('consumed_source_dirty', 'consumed_source_scopes',
+                                                   'whole_tree_state')}
+        self.assertEqual(dict(recorded, sha=manifest['source_sha']), self.origin(consumed_dirty))
+        return manifest
+
     def personalize(self):
         self.write(self.home, PERSONAL)
         return snapshot(self.home)
@@ -97,8 +113,7 @@ class DeliveryInstall(unittest.TestCase):
         for rel in set(installed) - set(before):
             self.assertTrue(installer.allowed(rel) or installer.allowed_dir(rel)
                             or rel.startswith(installer.STATE_DIR), rel)
-        manifest = json.loads((self.home / installer.MANIFEST).read_text())
-        self.assertEqual((manifest['source_sha'], manifest['source_dirty']), (self.head, False))
+        self.assert_manifest_provenance()
         self.assertEqual(self.install(), [])
         self.assertEqual(snapshot(self.home), installed)
         self.install(check=True)
@@ -214,12 +229,53 @@ class DeliveryInstall(unittest.TestCase):
         before = snapshot(self.home)
         changes, origin = installer.run(self.home, self.source, dry_run=True)
         self.assertTrue(changes)
-        self.assertEqual(origin, {'sha': self.head, 'dirty': True})
+        self.assertEqual(origin, self.origin(True))
         with self.assertRaisesRegex(installer.InstallError, 'uncommitted'):
             self.install()
         self.write(self.source, {'.claude/skills/delivery/untracked.md': b'new\n'})
-        self.assertTrue(installer.provenance(self.source)['dirty'])
+        self.assertTrue(installer.provenance(self.source)['consumed_source_dirty'])
         self.assertEqual(snapshot(self.home), before)
+
+    def test_unrelated_tracked_edit_is_outside_scope_and_whole_tree_is_not_claimed_clean(self):
+        self.write(self.source, {'README.md': b'unrelated uncommitted edit\n'})
+        self.assertIn('README.md', self.git('status', '--porcelain'))  # fixture: the whole tree really is dirty
+        self.assertEqual(installer.provenance(self.source), self.origin(False))
+        result = self.cli()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f'source {self.head} (consumed delivery paths match HEAD; rest of working tree not inspected)',
+                      result.stdout)
+        self.assertNotIn('dirty', result.stdout)
+        manifest = self.assert_manifest_provenance()
+        self.assertNotIn('README.md', manifest['files'])
+        self.assertEqual(self.cli('--check').returncode, 0)
+        # Control: altering a consumed source path is still detected and refused.
+        self.write(self.source, {'.claude/rules/delivery.md': b'altered consumed rule\n'})
+        self.assertEqual(installer.provenance(self.source), self.origin(True))
+        self.write(self.source, {'.claude/skills/delivery/SKILL.md': b'altered consumed skill\n'})
+        before = snapshot(self.home)
+        refused = self.cli()
+        self.assertEqual(refused.returncode, 1)
+        self.assertIn('uncommitted', refused.stderr)
+        self.assertIn('.claude/rules/delivery.md', refused.stderr)
+        self.assertEqual(snapshot(self.home), before)
+        dry = self.cli('--dry-run')
+        self.assertEqual(dry.returncode, 0, dry.stderr)
+        self.assertIn('consumed delivery paths deviate from HEAD; compared committed HEAD bytes; '
+                      'rest of working tree not inspected', dry.stdout)
+        self.assertEqual(snapshot(self.home), before)
+
+    def test_legacy_unscoped_manifest_is_reported_then_rewritten_scoped(self):
+        self.install()
+        path = self.home / installer.MANIFEST
+        legacy = json.loads(path.read_text())
+        for key in ('consumed_source_dirty', 'consumed_source_scopes', 'whole_tree_state'):
+            del legacy[key]
+        path.write_text(json.dumps(dict(legacy, source_dirty=False), indent=2, sort_keys=True) + '\n')
+        with self.assertRaisesRegex(installer.InstallError, f'drift: {installer.MANIFEST}$'):
+            self.install(check=True)
+        self.assertEqual(self.install(), [installer.MANIFEST])
+        self.assert_manifest_provenance()
+        self.install(check=True)
 
     def test_held_lock_and_corrupt_manifest_refuse_without_changes(self):
         (self.home / installer.LOCK).write_text('held')
@@ -252,8 +308,7 @@ class DeliveryInstall(unittest.TestCase):
                 self.assertEqual(self.git('status', '--porcelain'), '')
                 before = snapshot(self.home)
                 try:
-                    self.assertEqual(installer.run(self.home, self.source, dry_run=True)[1],
-                                     {'sha': self.head, 'dirty': True})
+                    self.assertEqual(installer.run(self.home, self.source, dry_run=True)[1], self.origin(True))
                     with self.assertRaisesRegex(installer.InstallError, f'uncommitted.*{rel}'):
                         self.install()
                     self.write(self.source, {f'.claude/{rel}': self.committed(rel)})
@@ -265,8 +320,7 @@ class DeliveryInstall(unittest.TestCase):
                     self.write(self.source, {f'.claude/{rel}': self.committed(rel)})
         self.install()
         self.assertEqual((self.home / rel).read_bytes(), self.committed(rel))
-        manifest = json.loads((self.home / installer.MANIFEST).read_text())
-        self.assertEqual((manifest['source_sha'], manifest['source_dirty']), (self.head, False))
+        self.assert_manifest_provenance()
 
     def test_source_git_callbacks_never_run(self):
         markers = self.tmp / 'markers'
@@ -304,7 +358,7 @@ class DeliveryInstall(unittest.TestCase):
                 self.write(self.source, {f'.claude/{extra}': b'not reviewed\n'})
                 before = snapshot(self.home)
                 try:
-                    self.assertTrue(installer.run(self.home, self.source, dry_run=True)[1]['dirty'])
+                    self.assertTrue(installer.run(self.home, self.source, dry_run=True)[1]['consumed_source_dirty'])
                     with self.assertRaisesRegex(installer.InstallError, f'uncommitted.*{extra}'):
                         self.install()
                     self.assertEqual(snapshot(self.home), before)
@@ -327,7 +381,7 @@ class DeliveryInstall(unittest.TestCase):
                 finally:
                     real.unlink()
                     shutil.move(outside, real)
-        self.assertFalse(installer.provenance(self.source)['dirty'])
+        self.assertEqual(installer.provenance(self.source), self.origin(False))
 
     def test_unsafe_committed_entries_refused_in_every_mode(self):
         (self.source / '.claude/skills/delivery/link.md').symlink_to('../../../README.md')
@@ -350,11 +404,10 @@ class DeliveryInstall(unittest.TestCase):
     def test_committed_source_with_generated_caches_installs_committed_blobs(self):
         (self.source / '.git/info/exclude').write_text('__pycache__/\n')
         self.write(self.source, {'.claude/skills/repo-context/scripts/__pycache__/repo_context.pyc': b'cache'})
-        self.assertFalse(installer.provenance(self.source)['dirty'])
+        self.assertEqual(installer.provenance(self.source), self.origin(False))
         self.install()
         self.assertFalse((self.home / 'skills/repo-context/scripts/__pycache__').exists())
-        manifest = json.loads((self.home / installer.MANIFEST).read_text())
-        self.assertEqual((manifest['source_sha'], manifest['source_dirty']), (self.head, False))
+        manifest = self.assert_manifest_provenance()
         scopes = ([f'.claude/skills/{name}' for name in installer.SKILLS]
                   + [f'.claude/{rel}' for rel in installer.SINGLE_FILES])
         tracked = self.git('ls-tree', '-r', '--name-only', 'HEAD', '--', *scopes).splitlines()

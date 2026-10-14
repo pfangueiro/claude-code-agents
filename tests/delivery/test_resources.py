@@ -11,8 +11,10 @@ to test staged copies; by default the skill sources in this repository are used.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import shutil
@@ -971,6 +973,30 @@ class ManifestBoundaryTests(Sandbox):
         manifest.write_text(json.dumps({'checks': [self.check_entry('below', root, command, sha=sha)]}))
         code, report = self.run_verify(alias / 'manifest.json')
         self.assertEqual((code, report['checks'][0]['reasons']), (1, ['receipt-path-symlink']))
+
+    def test_nul_in_manifest_paths_is_a_structured_rejection(self):
+        root, manifest, command, sha = self.verified_setup()
+        self.assertEqual(self.run_verify(manifest)[0], 0)  # negative control: the genuine check verifies
+        valid = self.check_entry('boundary', root, command, sha=sha)
+        cases = {'cwd': dict(valid, cwd=f'{root}\0{SENTINEL}'),
+                 'resultFile': dict(valid, resultFile=f'boundary/result.json\0{SENTINEL}'),
+                 'resultFile-ancestor': dict(valid, resultFile=f'boundary\0{SENTINEL}/result.json')}
+        for name, check in cases.items():
+            with self.subTest(field=name):
+                manifest.write_text(json.dumps({'checks': [check]}))
+                proc = subprocess.run([sys.executable, str(EVIDENCE), 'verify', '--manifest', str(manifest)],
+                                      env=self.env, capture_output=True, text=True, timeout=60)
+                self.assertEqual(proc.returncode, 2, proc.stderr)
+                self.assertEqual(proc.stderr, '')
+                self.assertEqual(json.loads(proc.stdout),
+                                 {'outcome': 'manifest-invalid', 'reason': 'invalid-path', 'checkIndex': 0})
+                self.assertNotIn(SENTINEL, proc.stdout)
+        # An exec argument cannot carry NUL; the in-process entry point must still answer structurally.
+        module, stdout = load_evidence_module(), io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            code = module.main(['verify', '--manifest', f'{manifest}\0{SENTINEL}'])
+        self.assertEqual((code, json.loads(stdout.getvalue())),
+                         (2, {'outcome': 'manifest-invalid', 'reason': 'manifest-unreadable', 'checkIndex': None}))
 
 
 if __name__ == '__main__':
