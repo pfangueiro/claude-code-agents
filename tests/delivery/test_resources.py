@@ -532,6 +532,38 @@ class CommittedIdentityRegressionTests(Sandbox):
                 self.assertEqual(receipt['gate']['reasons'], ['index-flags-unsupported'])
                 self.assertFalse(marker.exists())
 
+    def test_replace_ref_substituted_content_is_refused_before_launch(self):
+        root, base = self.make_repo({'input.txt': 'original\n'}, name='replaced')
+        (root / 'input.txt').write_text('replacement\n')
+        self.git(root, 'commit', '-qam', 'replacement')
+        second = self.git(root, 'rev-parse', 'HEAD')
+        self.git(root, 'reset', '-q', '--hard', base)
+        self.git(root, 'replace', base, second)
+        self.git(root, 'read-tree', second)
+        self.git(root, 'checkout-index', '-f', '-a')
+        self.assertEqual((root / 'input.txt').read_text(), 'replacement\n')
+        self.assertEqual(self.git(root, 'rev-parse', 'HEAD'), base)
+        self.assertEqual(self.git(root, 'status', '--porcelain'), '')  # the replace ref hides it
+        marker = self.tmp / 'launched-replaced'
+        command = self.py(f'import shutil; shutil.copyfile("input.txt", {str(marker)!r})')
+        code, receipt, _ = self.run_evidence(root, 'replaced', command, sha=base)
+        self.assertEqual(code, 3, receipt['gate'])
+        self.assertEqual(receipt['gate']['reasons'], ['dirty-input'])
+        self.assertFalse(receipt['child']['launched'])
+        self.assertFalse(marker.exists())
+
+        # Positive control: without the replace ref and with base content restored, it binds.
+        self.git(root, 'replace', '-d', base)
+        self.git(root, 'read-tree', base)
+        self.git(root, 'checkout-index', '-f', '-a')
+        self.assertEqual(self.git(root, 'status', '--porcelain'), '')
+        code, receipt, _ = self.run_evidence(root, 'restored', command, sha=base)
+        self.assertEqual(code, 0, receipt['gate'])
+        self.assertEqual(receipt['input']['before']['head'], base)
+        self.assertEqual(marker.read_text(), 'original\n')
+        code, report, _ = self.verify(self.manifest([self.check_entry('restored', root, command, sha=base)]))
+        self.assertEqual((code, report['checks'][0]['status']), (0, 'verified'))
+
     def test_child_setting_index_flag_fails_gate(self):
         root, sha = self.make_repo({'a': 'one\n'})
         code, receipt, _ = self.run_evidence(

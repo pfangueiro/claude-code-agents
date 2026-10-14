@@ -78,7 +78,9 @@ POLL_SECONDS = 0.05
 CLOCK_SLACK_SECONDS = 1.0
 MAX_DESCRIPTION = 500
 MAX_RECEIPT_BYTES = 4 * 1024 * 1024
-GIT_SAFE = ['-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false']
+# Replace refs would let a persistent `git replace` substitute content for the expected
+# commit; input identity is the object graph named by the SHA, so they are ignored.
+GIT_SAFE = ['--no-replace-objects', '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false']
 GIT_CONFIG_FILE_ENV = frozenset({'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_NOSYSTEM'})
 LIMITATIONS = (
     'necessary evidence only: not producer identity, honest predeclaration, '

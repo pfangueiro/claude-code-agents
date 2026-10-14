@@ -47,7 +47,8 @@ python3 scripts/evidence.py run --cwd ../project --out-dir evidence/unit-tests \
   submodules (`submodules-unsupported`) and tracked paths routed through a configured
   content filter driver (`content-filters-unsupported`, because inspecting them would
   run the driver's command) are refused rather than trusted. Use `--source-only` for
-  such trees.
+  such trees. HEAD content is read with replace refs ignored, so a `git replace`
+  substitution cannot make other bytes match the expected commit.
 - A HEAD, index-flag or tracked-content change during the run fails the gate even if
   the child exited 0; the child status is kept separately.
 - The child runs in its own process group. If the leader exits while group members
