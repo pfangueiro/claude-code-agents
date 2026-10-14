@@ -4,10 +4,17 @@
 Manages only the delivery, repo-context and verified-handoff skills, the delivery
 rule and the provider-neutral commit-pr command. It never runs the broad Claude
 installer and never touches settings, hooks, credentials, models, CLAUDE.md or
-daemons. Ownership is recorded as per-file hashes in a manifest; foreign or
-customized files, symlinked destinations and dirty sources are refused before any
-write. Writes happen under a lock with rollback of caught errors. A process kill or
-power loss during a multi-file write is not guaranteed to roll back. Python 3.11+.
+daemons. Installed bytes are read from the Git objects of the source HEAD commit,
+never from the working tree; the working tree is only compared against them. Any
+consumed path that differs, carries an assume-unchanged or skip-worktree flag, or
+has an extra file beside it marks the source dirty, and dirty sources are refused
+for installation. Symlinked source resources and committed entries that are not
+regular files are refused in every mode. Source Git commands run with fsmonitor
+and replace objects disabled and never invoke filters or hooks. Ownership is
+recorded as per-file hashes in a manifest; foreign or customized files and
+symlinked destinations are refused before any write. Writes happen under a lock
+with rollback of caught errors. A process kill or power loss during a multi-file
+write is not guaranteed to roll back. Python 3.11+.
 """
 from __future__ import annotations
 
@@ -21,13 +28,23 @@ import re
 import subprocess
 import sys
 import tempfile
+import unicodedata
 
 SKILLS = ('delivery', 'repo-context', 'verified-handoff')
 SINGLE_FILES = ('rules/delivery.md', 'commands/commit-pr.md')
+SCOPES = tuple(f'.claude/skills/{name}' for name in SKILLS) + tuple(f'.claude/{rel}' for rel in SINGLE_FILES)
 STATE_DIR = '.sdlc-delivery'
 MANIFEST = f'{STATE_DIR}/manifest.json'
 LOCK = '.sdlc-delivery.lock'
 SHA_PATTERN = re.compile(r'[0-9a-f]{40}')
+OBJECT_ID = re.compile(r'[0-9a-f]{40}|[0-9a-f]{64}')
+REGULAR_MODES = ('100644', '100755')
+# Inherited variables that would point Git at another repository, index or object store.
+REDIRECT_ENV = ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_COMMON_DIR',
+                'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_NAMESPACE', 'GIT_REPLACE_REF_BASE')
+# No source inspection may start an fsmonitor hook, honour replace refs or expand pathspec magic.
+GIT_SAFETY = ('-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', '--no-replace-objects',
+              '--no-optional-locks', '--literal-pathspecs')
 
 
 class InstallError(Exception):
@@ -38,47 +55,141 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def git(source: Path, *args: str, binary: bool = False) -> bytes | str:
-    result = subprocess.run(['git', '-C', str(source), *args], capture_output=True)
+def run_git(source: Path, *args: str, stdin: bytes | None = None) -> subprocess.CompletedProcess:
+    env = {key: value for key, value in os.environ.items() if key not in REDIRECT_ENV}
+    return subprocess.run(['git', *GIT_SAFETY, '-C', str(source), *args], input=stdin,
+                          capture_output=True, env=env)
+
+
+def git(source: Path, *args: str, binary: bool = False, stdin: bytes | None = None) -> bytes | str:
+    result = run_git(source, *args, stdin=stdin)
     if result.returncode != 0:
         raise InstallError(f'git {args[0]} failed in source: {result.stderr.decode(errors="replace").strip()}')
     return result.stdout if binary else result.stdout.decode().strip()
 
 
-def source_files(source: Path) -> dict[str, bytes]:
-    """Map Claude-home-relative paths to the exact source bytes."""
-    files: dict[str, bytes] = {}
-    claude = source / '.claude'
-    for name in SKILLS:
-        skill = claude / 'skills' / name
-        if skill.is_symlink() or not (skill / 'SKILL.md').is_file():
-            raise InstallError(f'missing or symlinked source skill: {name}')
-        for path in sorted(skill.rglob('*')):
-            if '__pycache__' in path.parts or path.suffix == '.pyc':
-                continue
-            if path.is_symlink():
-                raise InstallError(f'source resource symlink: {path.relative_to(source)}')
-            if path.is_file():
-                files[path.relative_to(claude).as_posix()] = path.read_bytes()
-    for rel in SINGLE_FILES:
-        path = claude / rel
-        if path.is_symlink() or not path.is_file():
-            raise InstallError(f'missing or symlinked source file: .claude/{rel}')
-        files[rel] = path.read_bytes()
-    return files
+def check_tree_path(path: str) -> None:
+    parts = path.split('/')
+    if any(part in ('', '.', '..') or part.casefold() == '.git' or '\\' in part
+           or any(ord(char) < 32 for char in part) for part in parts):
+        raise InstallError(f'unsafe committed path: {path!r}')
+
+
+def committed_entries(source: Path, commit: str, scopes: tuple[str, ...]) -> dict[str, str]:
+    """Map repository paths under the scopes to blob ids, refusing any non-regular entry."""
+    listing = git(source, 'ls-tree', '-r', '-z', '--full-tree', commit, '--', *scopes, binary=True)
+    entries: dict[str, str] = {}
+    for record in filter(None, listing.split(b'\0')):
+        meta, _, raw = record.partition(b'\t')
+        try:
+            mode, kind, oid = meta.decode('ascii').split(' ')
+            path = raw.decode('utf-8')
+        except (UnicodeDecodeError, ValueError) as err:
+            raise InstallError(f'unreadable committed tree entry: {record!r}') from err
+        if not any(path == scope or path.startswith(scope + '/') for scope in scopes):
+            continue
+        check_tree_path(path)
+        if mode not in REGULAR_MODES or kind != 'blob' or not OBJECT_ID.fullmatch(oid):
+            raise InstallError(f'committed entry is not a regular file ({mode} {kind}): {path}')
+        entries[path] = oid
+    folded: dict[str, str] = {}
+    for path in entries:
+        key = unicodedata.normalize('NFC', path).casefold()
+        if key in folded:
+            raise InstallError(f'committed paths collide on case-insensitive targets: {folded[key]}, {path}')
+        folded[key] = path
+    return entries
+
+
+def read_blobs(source: Path, oids: list[str]) -> dict[str, bytes]:
+    """Read blobs in one batch and prove each content hashes to its object id."""
+    unique = sorted(set(oids))
+    if not unique:
+        return {}
+    output = git(source, 'cat-file', '--batch', binary=True, stdin=''.join(f'{oid}\n' for oid in unique).encode())
+    blobs: dict[str, bytes] = {}
+    offset = 0
+    for oid in unique:
+        end = output.find(b'\n', offset)
+        header = output[offset:end].decode(errors='replace').split(' ')
+        if end < 0 or len(header) != 3 or header[:2] != [oid, 'blob'] or not header[2].isdigit():
+            raise InstallError(f'unreadable source object: {oid}')
+        size, start = int(header[2]), end + 1
+        data = output[start:start + size]
+        algorithm = hashlib.sha1 if len(oid) == 40 else hashlib.sha256
+        if len(data) != size or algorithm(b'blob %d\0' % size + data).hexdigest() != oid:
+            raise InstallError(f'source object content does not match its id: {oid}')
+        blobs[oid] = data
+        offset = start + size + 1
+    return blobs
+
+
+def hidden_index_flags(source: Path) -> list[str]:
+    """Index entries not tagged H: assume-unchanged (lowercase), skip-worktree (S) or unmerged."""
+    listing = git(source, 'ls-files', '-z', '-v', '--', *SCOPES, binary=True)
+    return [f'{record[2:].decode(errors="replace")} (index tag {record[:1].decode(errors="replace")})'
+            for record in filter(None, listing.split(b'\0')) if not record.startswith(b'H ')]
+
+
+def resource_path(source: Path, path: str) -> Path:
+    """Refuse a symlink at the resource or any ancestor inside the source repository."""
+    current = source
+    for part in path.split('/'):
+        current = current / part
+        if current.is_symlink():
+            raise InstallError(f'source resource symlink: {current.relative_to(source)}')
+    return current
+
+
+def worktree_deviations(source: Path, consumed: dict[str, bytes]) -> list[str]:
+    """Consumed paths whose working-tree bytes differ from the commit, plus extra files beside them."""
+    deviations = []
+    for path, data in sorted(consumed.items()):
+        file = resource_path(source, path)
+        if not file.is_file() or file.read_bytes() != data:
+            deviations.append(f'{path} (differs from HEAD)')
+    for scope in SCOPES[:len(SKILLS)]:
+        root = resource_path(source, scope)
+        for directory, dirnames, filenames in os.walk(root):
+            dirnames[:] = [name for name in dirnames if name != '__pycache__']
+            for name in sorted(dirnames + filenames):
+                path = Path(directory, name)
+                rel = path.relative_to(source).as_posix()
+                if path.is_symlink():
+                    raise InstallError(f'source resource symlink: {rel}')
+                if path.is_file() and path.suffix != '.pyc' and rel not in consumed:
+                    deviations.append(f'{rel} (not in HEAD)')
+    return deviations
+
+
+def read_source(source: Path, *, require_payload: bool) -> tuple[str, dict[str, bytes], list[str]]:
+    """Return the HEAD SHA, its committed managed bytes and every working-tree deviation from them."""
+    toplevel = git(source, 'rev-parse', '--show-toplevel')
+    if not toplevel or not Path(toplevel).samefile(source):
+        raise InstallError('--source must be the top level of a non-bare Git work tree')
+    sha = git(source, 'rev-parse', '--verify', 'HEAD^{commit}')
+    entries = committed_entries(source, sha, SCOPES)
+    if require_payload:
+        for scope in SCOPES:
+            required = f'{scope}/SKILL.md' if scope.startswith('.claude/skills/') else scope
+            if required not in entries:
+                raise InstallError(f'missing committed source resource: {required}')
+    blobs = read_blobs(source, list(entries.values()))
+    consumed = {path: blobs[oid] for path, oid in entries.items()}
+    deviations = hidden_index_flags(source) + worktree_deviations(source, consumed)
+    files = {path.removeprefix('.claude/'): data for path, data in consumed.items()}
+    return sha, files, deviations
 
 
 def provenance(source: Path) -> dict:
-    sha = git(source, 'rev-parse', 'HEAD')
-    paths = [f'.claude/skills/{name}' for name in SKILLS] + [f'.claude/{rel}' for rel in SINGLE_FILES]
-    status = git(source, 'status', '--porcelain', '--untracked-files=all', '--', *paths)
-    return {'sha': sha, 'dirty': bool(status)}
+    sha, _, deviations = read_source(source, require_payload=False)
+    return {'sha': sha, 'dirty': bool(deviations)}
 
 
 def baseline_blob(source: Path, baseline: str, rel: str) -> bytes | None:
-    result = subprocess.run(['git', '-C', str(source), 'cat-file', 'blob', f'{baseline}:.claude/{rel}'],
-                            capture_output=True)
-    return result.stdout if result.returncode == 0 else None
+    path = f'.claude/{rel}'
+    oid = committed_entries(source, baseline, (path,)).get(path)
+    return read_blobs(source, [oid])[oid] if oid else None
 
 
 def check_baseline(source: Path, baseline: str | None) -> None:
@@ -86,8 +197,8 @@ def check_baseline(source: Path, baseline: str | None) -> None:
         return
     if not SHA_PATTERN.fullmatch(baseline):
         raise InstallError('--baseline must be a full 40-character lowercase commit SHA')
-    kind = subprocess.run(['git', '-C', str(source), 'cat-file', '-t', baseline], capture_output=True, text=True)
-    if kind.returncode != 0 or kind.stdout.strip() != 'commit':
+    kind = run_git(source, 'cat-file', '-t', baseline)
+    if kind.returncode != 0 or kind.stdout.decode().strip() != 'commit':
         raise InstallError('--baseline is not a commit in the source repository')
 
 
@@ -140,11 +251,13 @@ def load_manifest(home: Path) -> dict:
     return meta
 
 
-def plan(home: Path, source: Path, *, uninstall: bool, baseline: str | None) -> tuple[dict, dict, bytes | None, dict]:
-    """Return writes, expected current bytes, new manifest bytes and source provenance."""
+def plan(home: Path, source: Path, *, uninstall: bool,
+         baseline: str | None) -> tuple[dict, dict, dict, dict, list[str]]:
+    """Return writes, expected current bytes, the old manifest, source provenance and source deviations."""
     old = load_manifest(home)
-    origin = provenance(source)
-    desired = {} if uninstall else source_files(source)
+    sha, committed, deviations = read_source(source, require_payload=not uninstall)
+    origin = {'sha': sha, 'dirty': bool(deviations)}
+    desired = {} if uninstall else committed
     adopted = {} if uninstall else dict(old['adopted'])
     writes: dict[str, bytes | None] = {}
     expected: dict[str, bytes | None] = {}
@@ -181,7 +294,7 @@ def plan(home: Path, source: Path, *, uninstall: bool, baseline: str | None) -> 
     expected[MANIFEST] = manifest_path.read_bytes() if manifest_path.exists() else None
     if manifest != expected[MANIFEST]:
         writes[MANIFEST] = manifest
-    return writes, expected, old, origin
+    return writes, expected, old, origin, deviations
 
 
 def created_parents(home: Path, rel: str) -> list[str]:
@@ -271,7 +384,7 @@ def run(home: Path, source: Path, *, dry_run: bool = False, check: bool = False,
         uninstall: bool = False, baseline: str | None = None) -> tuple[list[str], dict]:
     source = source.absolute()
     check_baseline(source, baseline)
-    writes, expected, old, origin = plan(home, source, uninstall=uninstall, baseline=baseline)
+    writes, expected, old, origin, deviations = plan(home, source, uninstall=uninstall, baseline=baseline)
     changes = sorted(writes)
     if check:
         if changes:
@@ -280,7 +393,8 @@ def run(home: Path, source: Path, *, dry_run: bool = False, check: bool = False,
     if dry_run or not changes:
         return changes, origin
     if origin['dirty'] and not uninstall:
-        raise InstallError('source has uncommitted delivery changes; commit them before installing')
+        raise InstallError('source has uncommitted delivery changes; commit them before installing: '
+                           + ', '.join(deviations))
     transaction(home, writes, expected, old['dirs'] if uninstall else [])
     if uninstall:
         remove_empty(home / STATE_DIR)
@@ -306,7 +420,8 @@ def main() -> int:
         print(f'FAIL: {err}', file=sys.stderr)
         return 1
     verb = 'Would change' if args.dry_run else ('Checked' if args.check else 'Changed')
-    print(f'source {origin["sha"]}{" (dirty)" if origin["dirty"] else ""}; target {home}')
+    dirty = ' (dirty working tree; compared committed HEAD bytes)' if origin['dirty'] else ''
+    print(f'source {origin["sha"]}{dirty}; target {home}')
     print(f'{verb} {len(changes)} paths')
     for rel in changes:
         print(rel)

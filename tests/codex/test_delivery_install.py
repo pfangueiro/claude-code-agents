@@ -239,6 +239,130 @@ class DeliveryInstall(unittest.TestCase):
                 self.install(uninstall=True)
             self.assertEqual(snapshot(self.home), before)
 
+    def committed(self, rel):
+        return subprocess.run(['git', '-C', str(self.source), 'show', f'HEAD:.claude/{rel}'],
+                              capture_output=True, check=True).stdout
+
+    def test_index_flags_cannot_conceal_uncommitted_bytes(self):
+        rel = 'rules/delivery.md'
+        for flag in ('--assume-unchanged', '--skip-worktree'):
+            with self.subTest(flag=flag):
+                self.git('update-index', flag, f'.claude/{rel}')
+                self.write(self.source, {f'.claude/{rel}': b'concealed uncommitted rule\n'})
+                self.assertEqual(self.git('status', '--porcelain'), '')
+                before = snapshot(self.home)
+                try:
+                    self.assertEqual(installer.run(self.home, self.source, dry_run=True)[1],
+                                     {'sha': self.head, 'dirty': True})
+                    with self.assertRaisesRegex(installer.InstallError, f'uncommitted.*{rel}'):
+                        self.install()
+                    self.write(self.source, {f'.claude/{rel}': self.committed(rel)})
+                    with self.assertRaisesRegex(installer.InstallError, 'uncommitted.*index tag'):
+                        self.install()
+                    self.assertEqual(snapshot(self.home), before)
+                finally:
+                    self.git('update-index', flag.replace('--', '--no-'), f'.claude/{rel}')
+                    self.write(self.source, {f'.claude/{rel}': self.committed(rel)})
+        self.install()
+        self.assertEqual((self.home / rel).read_bytes(), self.committed(rel))
+        manifest = json.loads((self.home / installer.MANIFEST).read_text())
+        self.assertEqual((manifest['source_sha'], manifest['source_dirty']), (self.head, False))
+
+    def test_source_git_callbacks_never_run(self):
+        markers = self.tmp / 'markers'
+        markers.mkdir()
+        hook = self.tmp / 'fsmonitor.sh'
+        hook.write_text(f'#!/bin/sh\ntouch "{markers}/fsmonitor"\nexit 1\n')
+        clean = self.tmp / 'clean.sh'
+        clean.write_text(f'#!/bin/sh\ntouch "{markers}/filter"\ncat\n')
+        for script in (hook, clean):
+            script.chmod(0o755)
+        self.git('config', 'core.fsmonitor', str(hook))
+        self.git('config', 'filter.marker.clean', str(clean))
+        self.git('config', 'filter.marker.smudge', str(clean))
+        (self.source / '.git/info/attributes').write_text('* filter=marker\n')
+        for path in (self.source / '.claude').rglob('*'):
+            os.utime(path, (2_000_000_000, 2_000_000_000))
+        before = snapshot(self.home)
+        installer.run(self.home, self.source, dry_run=True)
+        with self.assertRaisesRegex(installer.InstallError, 'drift'):
+            self.install(check=True)
+        installer.provenance(self.source)
+        self.assertEqual(sorted(p.name for p in markers.iterdir()), [])
+        self.assertEqual(snapshot(self.home), before)
+        self.install()
+        self.install(check=True)
+        self.assertEqual(sorted(p.name for p in markers.iterdir()), [])
+        # Control: the same source configuration does fire through git status.
+        subprocess.run(['git', '-C', str(self.source), 'status', '--porcelain'], capture_output=True, timeout=60)
+        self.assertIn('fsmonitor', {p.name for p in markers.iterdir()})
+
+    def test_untracked_and_ignored_source_additions_are_never_copied(self):
+        (self.source / '.git/info/exclude').write_text('ignored-extra.md\n')
+        for extra in ('skills/delivery/untracked-extra.md', 'skills/repo-context/ignored-extra.md'):
+            with self.subTest(extra=extra):
+                self.write(self.source, {f'.claude/{extra}': b'not reviewed\n'})
+                before = snapshot(self.home)
+                try:
+                    self.assertTrue(installer.run(self.home, self.source, dry_run=True)[1]['dirty'])
+                    with self.assertRaisesRegex(installer.InstallError, f'uncommitted.*{extra}'):
+                        self.install()
+                    self.assertEqual(snapshot(self.home), before)
+                finally:
+                    (self.source / '.claude' / extra).unlink()
+
+    def test_symlinked_source_ancestors_refused_in_every_mode(self):
+        for index, rel in enumerate(('.claude/skills', '.claude/rules', '.claude/skills/verified-handoff/scripts')):
+            with self.subTest(rel=rel):
+                real, outside = self.source / rel, self.tmp / f'outside-source-{index}'
+                shutil.copytree(real, outside)
+                shutil.rmtree(real)
+                real.symlink_to(outside, target_is_directory=True)
+                before = snapshot(self.home)
+                try:
+                    for options in ({'dry_run': True}, {'check': True}, {}):
+                        with self.assertRaisesRegex(installer.InstallError, 'source resource symlink'):
+                            self.install(**options)
+                    self.assertEqual(snapshot(self.home), before)
+                finally:
+                    real.unlink()
+                    shutil.move(outside, real)
+        self.assertFalse(installer.provenance(self.source)['dirty'])
+
+    def test_unsafe_committed_entries_refused_in_every_mode(self):
+        (self.source / '.claude/skills/delivery/link.md').symlink_to('../../../README.md')
+        self.commit('symlink entry')
+        gitlink = '.claude/skills/repo-context/vendor'
+        cases = (('120000', lambda: None),
+                 ('160000', lambda: (self.git('rm', '-q', '--cached', '.claude/skills/delivery/link.md'),
+                                     (self.source / '.claude/skills/delivery/link.md').unlink(),
+                                     self.git('update-index', '--add', '--cacheinfo', f'160000,{self.head},{gitlink}'),
+                                     self.git('commit', '-q', '-m', 'gitlink entry'))))
+        for mode, prepare in cases:
+            with self.subTest(mode=mode):
+                prepare()
+                before = snapshot(self.home)
+                for options in ({'dry_run': True}, {'check': True}, {}):
+                    with self.assertRaisesRegex(installer.InstallError, f'not a regular file \\({mode}'):
+                        self.install(**options)
+                self.assertEqual(snapshot(self.home), before)
+
+    def test_committed_source_with_generated_caches_installs_committed_blobs(self):
+        (self.source / '.git/info/exclude').write_text('__pycache__/\n')
+        self.write(self.source, {'.claude/skills/repo-context/scripts/__pycache__/repo_context.pyc': b'cache'})
+        self.assertFalse(installer.provenance(self.source)['dirty'])
+        self.install()
+        self.assertFalse((self.home / 'skills/repo-context/scripts/__pycache__').exists())
+        manifest = json.loads((self.home / installer.MANIFEST).read_text())
+        self.assertEqual((manifest['source_sha'], manifest['source_dirty']), (self.head, False))
+        scopes = ([f'.claude/skills/{name}' for name in installer.SKILLS]
+                  + [f'.claude/{rel}' for rel in installer.SINGLE_FILES])
+        tracked = self.git('ls-tree', '-r', '--name-only', 'HEAD', '--', *scopes).splitlines()
+        self.assertEqual(sorted(manifest['files']), sorted(path.removeprefix('.claude/') for path in tracked))
+        for rel, checksum in manifest['files'].items():
+            self.assertEqual(installer.digest(self.committed(rel)), checksum, rel)
+            self.assertEqual((self.home / rel).read_bytes(), self.committed(rel), rel)
+
     def test_cli_target_selection(self):
         fake_home = self.tmp / 'user'
         fake_home.mkdir()

@@ -93,13 +93,18 @@ choose another existing profile deliberately. It manages only `skills/delivery`,
 `skills/repo-context`, `skills/verified-handoff`, `rules/delivery.md` and
 `commands/commit-pr.md`, records per-file hashes and the source commit in
 `.sdlc-delivery/manifest.json`, and never touches settings, hooks, credentials, models,
-`CLAUDE.md` or daemons. It refuses uncommitted source changes, foreign or customized
-files and symlinked destinations before writing. A `commit-pr.md` copied by an earlier
-full install is adopted only with `--baseline <full commit SHA>` whose shipped bytes match
-it exactly; uninstall then restores those original bytes. Caught write errors roll back;
-a process kill or power loss mid-write is not guaranteed to. A later `./install.sh
---update` may rewrite the same files; `--check` then reports drift and the delivery
-installer refuses to overwrite or remove the changed bytes.
+`CLAUDE.md` or daemons. Installed bytes come from the Git objects of the source `HEAD`
+commit, not the working tree. A managed path that differs from `HEAD`, carries an
+assume-unchanged or skip-worktree flag, or has an untracked or ignored file beside it
+(Python caches aside) marks the source dirty: `--dry-run` reports it and installation
+refuses. Symlinked source resources and committed symlinks or submodules are refused in
+every mode; source inspection runs no fsmonitor, filter or hook. Foreign or customized
+files and symlinked destinations are refused before writing. A `commit-pr.md` copied by
+an earlier full install is adopted only with `--baseline <full commit SHA>` whose
+shipped bytes match it exactly; uninstall then restores those original bytes. Caught
+write errors roll back; a process kill or power loss mid-write is not guaranteed to. A
+later `./install.sh --update` may rewrite the same files; `--check` then reports drift
+and the delivery installer refuses to overwrite or remove the changed bytes.
 
 Open a session in a project and describe the work:
 
