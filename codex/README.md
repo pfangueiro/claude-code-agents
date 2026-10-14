@@ -1,11 +1,12 @@
 # Codex edition
 
 The Claude runtime scripts are preserved; documentation and its instruction template
-now describe both integrations. This adapter builds **39 Codex workflow skills**
-(27 skills and 12 executable command templates) and **13 native custom agents** from
+now describe both integrations. This adapter builds **42 Codex workflow skills**
+(30 skills and 12 executable command templates) and **13 native custom agents** from
 the repository, with handwritten replacements for platform-dependent behavior.
-Each native specialist also has a role-guide skill fallback, giving **52 total skill
-directories: 39 workflows + 13 specialist guides**.
+Each native specialist also has a role-guide skill fallback, giving **55 total skill
+directories: 42 workflows + 13 specialist guides**. 52 are implicitly invocable;
+commit-pr, create-jira and new-feature stay explicit-only.
 It provides workflow portability, not complete Claude runtime parity. See
 [FEATURES.md](FEATURES.md) for every feature and remaining limitation.
 
@@ -42,8 +43,9 @@ was checked against current official documentation; local CLI inspected: 0.162.1
 Project installs write `.agents/skills/sdlc-*`, `.codex/agents/*.toml`,
 `.codex/framework/*`, and one managed block in `AGENTS.md`. User installs use
 `~/.agents/skills/sdlc-*`, `~/.codex/agents`, `~/.codex/framework`, and a managed
-block in `~/.codex/AGENTS.md`. Custom CODEX_HOME is currently rejected for user
-installation; project installation is available. No shell aliases, daemons, model
+block in `~/.codex/AGENTS.md`. A custom `CODEX_HOME` other than `~/.codex` is rejected
+for user installation because its discovery layout is not verified; use the default
+home, or `--project` for an explicit project install. No shell aliases, daemons, model
 settings, credential changes, approval changes or hook trust are installed.
 
 Files with foreign ownership, user modifications, ambiguous instruction markers or
@@ -67,6 +69,17 @@ appropriate guide) inline or pass it to an authorized generic worker. Role-guide
 text does not enforce the native profile's sandbox. Local CLI prompt inspection
 verified implicit skill discovery and exclusion of explicit-only commands; native
 custom-role routing was not exposed by that host and is not claimed as verified.
+
+Delivery: `$sdlc-delivery`, `$sdlc-repo-context` and `$sdlc-verified-handoff` are
+exported from the shared portable skills with their scripts, and the managed AGENTS.md
+block routes implementation outcomes through `$sdlc-delivery` with a default role pair
+that explicit owner or project instructions override. `$sdlc-commit-pr` is now built
+from the provider-neutral `.claude/commands/commit-pr.md`; no Codex-only override
+remains, so both editions export one publication contract (commit, exact-candidate
+checks and independent verdict, current-head confirmation, then authorized publication).
+These are workflow procedures: loading one runs nothing, and no watcher, daemon,
+auto-merge, scheduler or hook trust is added. Project instructions supply the base
+branch, required checks and release policy.
 
 The command adaptation fixes unsafe product assumptions: use the configured default
 branch/Jira project, preserve the owner's attribution and authentication choice, and
@@ -107,8 +120,10 @@ python3 -m unittest discover -s tests/codex -v
 python3 tests/codex/mutations.py
 ```
 
-Tests use isolated temporary projects and simulated home layouts. They check real
-inventory, YAML/TOML parsing, explicit invocation policy, resource execution, collision
+`unittest discover -s tests/codex` also loads every test in
+`tests/delivery/test_resources.py` through a bridge module and runs the incremental
+Claude delivery installer suite. Tests use isolated temporary projects and simulated
+home layouts. They check real inventory, execution of the exported delivery scripts, YAML/TOML parsing, explicit invocation policy, resource execution, collision
 and modification rejection, personal-file preservation, drift repair, symlink/traversal
 rejection, rollback, native hook payloads and logging privacy. This is not an authenticated
 end-to-end test across Codex desktop, IDE, CLI and cloud accounts.

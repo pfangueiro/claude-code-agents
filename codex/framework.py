@@ -207,6 +207,11 @@ Discover `.agents/skills/sdlc-*` workflows and `.codex/agents/*.toml` specialist
 (user installs use the corresponding home locations). Skill selection and agent
 routing use model judgment, not deterministic keyword matching. Use $sdlc-execute
 for substantial goals; read $sdlc-deep-read before consequential source changes.
+Route implementation outcomes through $sdlc-delivery; read-only questions do not
+launch workers. Default roles: Codex coordinates and independently verifies; an
+actual Claude execution implements. Only explicit owner or project instructions
+override them; defaults do not start a dispatcher. Loading a skill is not
+execution; report states from receipts.
 If native specialist types are unavailable, use the sdlc-agent-<name> role skills
 inline or give their procedures to authorized generic workers.
 Read the installed `.codex/framework/rules.md` before implementing or approving work;

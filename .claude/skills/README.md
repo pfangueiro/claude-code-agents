@@ -2,12 +2,19 @@
 
 Welcome to the Claude Skills directory! This directory contains modular, self-contained packages that extend Claude's capabilities with specialized knowledge, workflows, and tools.
 
-There are 27 source skills. This is also the canonical source for portable Codex domain
+There are 30 source skills. This is also the canonical source for portable Codex domain
 procedures. `../../codex/overrides/` supplies runtime replacements; the builder creates
-39 workflow skills (27 + 12 command templates) and 13 specialist-guide fallbacks under
+42 workflow skills (30 + 12 command templates) and 13 specialist-guide fallbacks under
 `~/.agents/skills/sdlc-*`. Use [Codex setup](../../codex/README.md) and
 [coverage](../../codex/FEATURES.md). Edit source, rebuild, and verify both editions;
 do not edit a generated install as if it were canonical source.
+
+`delivery`, `repo-context` and `verified-handoff` are provider-neutral and export to
+both editions unchanged apart from invocation syntax. Their scripts are tested by
+`tests/delivery/test_resources.py`, which `tests/codex` discovery loads. To update only
+these skills, the delivery rule and `commit-pr` in an existing Claude home, run
+`python3 scripts/install-delivery.py --dry-run` from the repository root, then rerun it
+without `--dry-run`.
 
 ## What Are Skills?
 

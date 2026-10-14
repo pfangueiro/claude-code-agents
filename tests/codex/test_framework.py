@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import subprocess
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -35,8 +36,8 @@ class FrameworkAcceptance(unittest.TestCase):
         inv = f.source_inventory()
         skills = list((self.root / '.agents/skills').glob('*/SKILL.md'))
         self.assertEqual(len(skills), len(inv['skills']) + len(inv['commands']) + len(inv['agents']))
-        self.assertEqual(len(skills), 52)
-        self.assertEqual(sum(not p.parent.name.startswith('sdlc-agent-') for p in skills), 39)
+        self.assertEqual(len(skills), 55)
+        self.assertEqual(sum(not p.parent.name.startswith('sdlc-agent-') for p in skills), 42)
         self.assertEqual({p.parent.name for p in skills if p.parent.name.startswith('sdlc-agent-')},
                          {'sdlc-agent-' + name for name in inv['agents']})
         self.assertFalse(any(p.parent.name.endswith('README') for p in skills))
@@ -56,6 +57,9 @@ class FrameworkAcceptance(unittest.TestCase):
         for name in ('commit-pr', 'create-jira', 'new-feature'):
             policy = yaml.safe_load((self.root / f'.agents/skills/sdlc-{name}/agents/openai.yaml').read_text())
             self.assertFalse(policy['policy']['allow_implicit_invocation'])
+        explicit = {p.parents[1].name for p in (self.root / '.agents/skills').glob('*/agents/openai.yaml')}
+        self.assertEqual(explicit, {'sdlc-commit-pr', 'sdlc-create-jira', 'sdlc-new-feature'})
+        self.assertEqual(len(skills) - len(explicit), 52)
         tomllib.loads((self.root / '.codex/framework/mcp.example.toml').read_text())
 
     def test_idempotence_dry_run_and_personal_preservation(self):
@@ -257,6 +261,60 @@ class FrameworkAcceptance(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         for name in ('reading-strategies',):
             self.assertTrue((self.root / f'.agents/skills/sdlc-deep-read/references/{name}.md').is_file())
+
+    def test_exported_delivery_resources_execute_from_installed_bundles(self):
+        f.install(self.root)
+        skills = self.root / '.agents/skills'
+        project, evidence = self.root / 'fixture', self.root / 'evidence'
+        project.mkdir()
+        evidence.mkdir()
+        (project / 'go.mod').write_text('module example.invalid/fixture\n\ngo 1.22\n')
+        (project / 'x_test.go').write_text('package fixture\n')
+        context = subprocess.run([sys.executable, str(skills / 'sdlc-repo-context/scripts/repo_context.py'),
+                                  '--cwd', str(project)], capture_output=True, text=True, timeout=60)
+        self.assertEqual(context.returncode, 0, context.stderr)
+        report = json.loads(context.stdout)
+        self.assertEqual((report['source']['kind'], report['languages']), ('archive-or-unversioned', ['go']))
+        self.assertTrue(all(c['executed'] is False for c in report['commandCandidates']))
+        script = skills / 'sdlc-verified-handoff/scripts/evidence.py'
+        command = [sys.executable, '-c', 'print("checked")']
+        run = subprocess.run([sys.executable, str(script), 'run', '--cwd', str(project), '--out-dir',
+                              str(evidence / 'smoke'), '--label', 'smoke', '--source-only', 'fixture tree',
+                              '--', *command], capture_output=True, text=True, timeout=60)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        manifest = evidence / 'manifest.json'
+        manifest.write_text(json.dumps({'checks': [{'label': 'smoke', 'cwd': str(project), 'sourceOnly': 'fixture tree',
+                                                    'command': {'executable': command[0], 'args': command[1:]},
+                                                    'resultFile': 'smoke/result.json'}]}))
+        verify = subprocess.run([sys.executable, str(script), 'verify', '--manifest', str(manifest)],
+                                capture_output=True, text=True, timeout=60)
+        self.assertEqual(verify.returncode, 0, verify.stdout + verify.stderr)
+        for name in ('delivery', 'repo-context', 'verified-handoff'):
+            bundle = skills / f'sdlc-{name}'
+            self.assertFalse((bundle / 'agents/openai.yaml').exists(), f'{name} must stay implicit')
+            text = (bundle / 'SKILL.md').read_text()
+            for resource in re.findall(r'\b((?:scripts|references)/[\w./-]+\.(?:py|md))\b', text):
+                self.assertTrue((bundle / resource).is_file(), f'{name}: missing {resource}')
+
+    def test_publication_contract_has_one_provider_neutral_source(self):
+        # A Codex-only override diverged from the canonical command once; both editions
+        # must export the same exact-result publication sequence.
+        inv = f.source_inventory()
+        _, body = f.frontmatter(ROOT / '.claude/commands/commit-pr.md')
+        self.assertIn(f.adapt(body, inv), f.build()['.agents/skills/sdlc-commit-pr/SKILL.md'].decode())
+
+    def test_generated_bundles_do_not_leak_claude_invocations_or_paths(self):
+        inv = f.source_inventory()
+        names = '|'.join(re.escape(n) for n in inv['skills'] + inv['commands'])
+        slash = re.compile(rf'(?<![\w:/.$-])/(?:{names})\b')
+        for path, data in f.build().items():
+            if not path.endswith(('/SKILL.md', '.toml')):
+                continue
+            text = data.decode()
+            with self.subTest(path=path):
+                self.assertNotIn('$ARGUMENTS', text)
+                self.assertNotIn('.claude/skills/', text)
+                self.assertIsNone(slash.search(text))
 
     def test_generated_skill_invocations_resolve(self):
         import re

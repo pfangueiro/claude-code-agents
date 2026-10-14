@@ -5,7 +5,7 @@
 [![Claude Code](https://img.shields.io/badge/Claude_Code-Compatible-purple.svg)](https://code.claude.com/docs/en/overview)
 [![Codex](https://img.shields.io/badge/Codex-Compatible-blue.svg)](codex/README.md)
 [![Agents](https://img.shields.io/badge/Agents-13-orange.svg)](#available-agents)
-[![Skills](https://img.shields.io/badge/Source_Skills-27-green.svg)](#skills-system)
+[![Skills](https://img.shields.io/badge/Source_Skills-30-green.svg)](#skills-system)
 [![MCP](https://img.shields.io/badge/MCP-4%20Servers-brightgreen.svg)](#-mcp-integration)
 
 **One framework repository, with an integration for each coding agent.** Share domain
@@ -15,7 +15,7 @@ Describe a task naturally or select a workflow explicitly. Selection uses model 
 | | Claude Code | Codex |
 |---|---|---|
 | User-global install | `./install.sh` | `./install-codex.sh --user` |
-| Skills | 27 source bundles | 39 workflows + 13 specialist guides = 52 bundles |
+| Skills | 30 source bundles | 42 workflows + 13 specialist guides = 55 bundles |
 | Specialists | 13 Markdown agent definitions | 13 TOML definitions plus guide fallbacks |
 | Instructions | `~/.claude/CLAUDE.md` and rules | Managed block in `~/.codex/AGENTS.md` and rules resource |
 | Runtime integration | Existing hooks, dashboard, statusline and watchdog | Opt-in native evidence hooks; [remaining gaps](codex/FEATURES.md) |
@@ -51,6 +51,67 @@ skills from `~/.agents/skills` and definitions/state from `~/.codex`. No per-pro
 copy is required with the default user profile. Project instructions, disabled skills,
 alternate profiles and host capabilities can affect effective behavior.
 
+### Delivery workflow
+
+Three portable skills carry an implementation outcome through review and publication in
+either integration: `delivery` (task contract, roles, separately authorized states),
+`repo-context` (read-only repository discovery) and `verified-handoff` (check receipts
+bound to an exact commit). The `delivery` rule routes implementation work through them,
+and the provider-neutral `commit-pr` command is the single publication contract for both
+editions: commit, then required checks and an independent verdict on that exact
+candidate, then confirmation that the pushed head is the reviewed one. Any new commit
+invalidates the earlier verdict.
+
+- **Availability is not execution.** Installing or loading these workflows changes what
+  a session can follow; nothing is implemented, reviewed, merged or deployed until a real
+  tool call or process does it and its receipt is collected. Receipts are evidence of a
+  run, not proof of review, CI or deployment.
+- **Default roles.** The rule assigns a default pair: a coordinator that verifies
+  independently and a separate implementing execution. Explicit owner or project
+  instructions override that pair; the default never starts a dispatcher.
+- **Project policy.** Base branch, required checks, review, release and attribution
+  come from the project's own instructions. Project rules and owner instructions act as
+  the policy adapter; the workflows do not assume a default branch, CI gate or ticket key.
+- **Nothing runs in the background.** No watcher, daemon, scheduler, auto-merge, hook or
+  hook trust is added. Gates are instructions plus receipts the session collects, not an
+  enforced sandbox.
+
+Codex receives them through `./install-codex.sh --user` as `$sdlc-delivery`,
+`$sdlc-repo-context` and `$sdlc-verified-handoff` (implicit) and `$sdlc-commit-pr`
+(explicit-only). For an existing Claude install, update just these resources without
+rerunning the broad installer:
+
+```bash
+python3 scripts/install-delivery.py --dry-run   # report paths, change nothing
+python3 scripts/install-delivery.py             # install or update
+python3 scripts/install-delivery.py --check     # nonzero if installed bytes drift
+python3 scripts/install-delivery.py --uninstall # remove owned files, restore adopted originals
+```
+
+It targets `CLAUDE_CONFIG_DIR` when set, otherwise `~/.claude`; pass `--claude-home` to
+choose another existing profile deliberately. It manages only `skills/delivery`,
+`skills/repo-context`, `skills/verified-handoff`, `rules/delivery.md` and
+`commands/commit-pr.md`, records per-file hashes and the source commit in
+`.sdlc-delivery/manifest.json`, and never touches settings, hooks, credentials, models,
+`CLAUDE.md` or daemons. Installed bytes come from the Git objects of the source `HEAD`
+commit, not the working tree. A managed path that differs from `HEAD`, carries an
+assume-unchanged or skip-worktree flag, or has an untracked or ignored file beside it
+(Python caches aside) marks the consumed source dirty: `--dry-run` reports it and
+installation refuses. Only those consumed paths are inspected, so provenance is scoped:
+the manifest records `source_sha`, `consumed_source_dirty`, `consumed_source_scopes` and
+`whole_tree_state: "not-inspected"`, and the CLI says the rest of the working tree was not
+inspected. An uncommitted edit elsewhere in the repository neither blocks installation
+nor is claimed clean. Manifests written by earlier versions carried an unqualified
+`source_dirty` flag; the next install rewrites them in the scoped format, and `--check`
+reports that rewrite as drift until then. Symlinked source resources and committed symlinks or submodules are refused in
+every mode; source inspection runs no fsmonitor, filter or hook. Foreign or customized
+files and symlinked destinations are refused before writing. A `commit-pr.md` copied by
+an earlier full install is adopted only with `--baseline <full commit SHA>` whose
+shipped bytes match it exactly; uninstall then restores those original bytes. Caught
+write errors roll back; a process kill or power loss mid-write is not guaranteed to. A
+later `./install.sh --update` may rewrite the same files; `--check` then reports drift
+and the delivery installer refuses to overwrite or remove the changed bytes.
+
 Open a session in a project and describe the work:
 
 ```
@@ -76,10 +137,10 @@ discovery and reviewer use for both integrations.
 | Component | Count | What It Does |
 |-----------|-------|--------------|
 | **Agents** | 13 | Auto-activating SDLC specialists (planning through production) |
-| **Skills** | 27 | Modular knowledge packages (git, Docker, CI/CD, K8s, SRE, IaC, observability, experiment-loop, scheduled-tasks, worktree-workflow, remote-triggers, context-escalation, diverge, etc.) |
+| **Skills** | 30 | Modular knowledge packages (git, Docker, CI/CD, K8s, SRE, IaC, observability, delivery, repo-context, verified-handoff, experiment-loop, scheduled-tasks, worktree-workflow, remote-triggers, context-escalation, diverge, etc.) |
 | **Command templates** | 12 | `/commit-pr`, `/review-pr`, `/compact`, `/new-feature`, `/create-jira`, `/build-fix`, `/tdd`, `/quality-gate`, `/checkpoint`, `/save-session`, `/resume-session`, `/optimize`; `/security-scan` comes from a skill |
 | **MCP Servers** | 4 | context7, sequential-thinking, playwright, github |
-| **Rules** | 6 | Instructions for security, code quality, fix quality, verification, framework integrity, and anti-anchoring; native permissions/sandbox enforce access boundaries |
+| **Rules** | 7 | Instructions for security, code quality, fix quality, verification, framework integrity, anti-anchoring and delivery routing; native permissions/sandbox enforce access boundaries |
 | **Hooks** | 10 | Agent tracking, session lifecycle, permission auditing, file protection, auto-lint, debug detection, pre-compact snapshots, notifications |
 
 ---
@@ -167,9 +228,9 @@ Run `./install.sh --dry-run` first to see the same list resolved against your ac
 | Path | What lands there | On re-install |
 |---|---|---|
 | `~/.claude/agents/` | 13 agent `.md` files | Replaced (heals drift) |
-| `~/.claude/skills/` | 27 skill directories | Replaced per-skill (`rm -rf` then copy) |
+| `~/.claude/skills/` | 30 skill directories | Replaced per-skill (`rm -rf` then copy) |
 | `~/.claude/commands/` | 12 executable templates + README (13 Markdown files) | Replaced |
-| `~/.claude/rules/` | 6 rule `.md` files | Replaced |
+| `~/.claude/rules/` | 7 rule `.md` files | Replaced |
 | `~/.claude/lib/` | 4 reference files (templates, patterns, coordination, MCP guide) | Replaced |
 | `~/.claude/hooks/` | 9 hook `.sh` scripts (+`chmod +x`) and 2 reference `.json` configs | Replaced; orphans pruned |
 | `~/.claude/output-styles/concise.md` | Code-first output style | Written on first install |
@@ -206,7 +267,7 @@ retired, so a personal entry is not merely spared — it is never a candidate.
 Measured, not assumed: with a personal skill, agent, command and rule planted in a throwaway
 `HOME`, two consecutive `--update` runs left all four **byte-identical** and the skills directory at
 27 framework + 1 personal. A working machine here carries 14 personal skills alongside the
-framework's 27; all 41 are present.
+framework's 27; all 41 are present. (Measured when the framework shipped 27 skills.)
 
 ### The background daemon
 
@@ -271,7 +332,7 @@ Threat model, reporting, and the repo's security posture: **[SECURITY.md](./SECU
 
 | Command | Usage | What It Does |
 |---------|-------|-------------|
-| `/commit-pr` | `/commit-pr [message]` | Stage, commit, push, create PR, update JIRA |
+| `/commit-pr` | `/commit-pr [message]` | Commit, run required checks and an independent review on that exact commit, then push and open the PR; merge, release and ticket updates only when authorized |
 | `/review-pr` | `/review-pr 123` | Code quality + security + testing review |
 | `/security-scan` | `/security-scan [path]` | OWASP scanning, secrets detection, dependency audit |
 | `/compact` | `/compact [note]` | Write HANDOFF.md with session context, then compact conversation |
@@ -294,7 +355,7 @@ Threat model, reporting, and the repo's security posture: **[SECURITY.md](./SECU
 
 ## Skills System
 
-Skills provide domain knowledge that agents apply. 27 included:
+Skills provide domain knowledge that agents apply. 30 included:
 
 | Skill | What It Provides |
 |-------|-----------------|
@@ -325,6 +386,9 @@ Skills provide domain knowledge that agents apply. 27 included:
 | **browser-testing** | E2E testing with Playwright MCP — visual regression, responsive design, codegen |
 | **multi-agent-orchestration** | Coordinator pattern, teams, background agents, worker restrictions, SendMessage |
 | **skill-creator** | Create your own custom skills |
+| **delivery** | Provider-neutral delivery: outcome contract, implementer/verifier roles, receipts, separately authorized review/publish/merge/deploy states |
+| **repo-context** | Read-only repository discovery: Git root, HEAD, dirty state, instructions, manifests and command candidates as data |
+| **verified-handoff** | Run checks into receipts bound to an exact commit and verify a declared check manifest before claiming results |
 
 ### Create Your Own Skill
 
@@ -358,7 +422,7 @@ claude mcp add github -- npx -y @modelcontextprotocol/server-github
 
 ## Auto-Enforced Rules
 
-Six rule files in `~/.claude/rules/` are automatically loaded by Claude Code in every session:
+Seven rule files in `~/.claude/rules/` are automatically loaded by Claude Code in every session:
 
 - **security.md** — No secrets in commits, parameterized queries, input validation, security headers, least privilege
 - **code-quality.md** — No dead code, single responsibility, early returns, explicit error handling, descriptive naming
@@ -366,6 +430,7 @@ Six rule files in `~/.claude/rules/` are automatically loaded by Claude Code in 
 - **verification.md** — Verify after every implementation, run tests, build to catch errors, test-driven bug fixes
 - **framework-integrity.md** — Hooks must enforce invariants, state reconciles automatically, snapshots have documented restore paths
 - **anti-anchoring.md** — Name the obvious pick + a non-obvious alternative + a trap on open-ended judgment calls; escalate consequential open decisions to `/diverge`
+- **delivery.md** — Route implementation outcomes through `/delivery` with a default role pair that owner or project instructions override; report states only from receipts
 
 ---
 
@@ -399,8 +464,8 @@ Installed once, user-global under `~/.claude/` — Claude Code loads it in every
 ~/.claude/
 ├── agents/          # 13 auto-activating SDLC agents
 ├── commands/        # 12 executable templates + README
-├── skills/          # 27 modular knowledge packages
-├── rules/           # 6 auto-enforced rule sets
+├── skills/          # 30 modular knowledge packages
+├── rules/           # 7 auto-enforced rule sets
 ├── lib/             # Templates, patterns, coordination protocol
 ├── hooks/           # 9 command hooks + 2 reference configs
 ├── daemon/          # launchd watchdog (hourly validate + snapshots) — macOS only
@@ -544,6 +609,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 **No configuration. No commands. Just describe what you need.**
 
-Built by [Pedro Fangueiro](https://github.com/pfangueiro) with [Claude](https://anthropic.com)
 
 </div>

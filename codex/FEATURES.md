@@ -8,12 +8,13 @@ Do not describe this as complete runtime parity.
 
 | Framework surface | Codex treatment | Verification or limit |
 |---|---|---|
-| 27 skills | 27 namespaced SKILL.md bundles | YAML parsed; resources retained; runtime procedures rewritten |
-| Commands | 12 additional skills | README excluded; actual inventory is 39 total workflows |
+| 30 skills | 30 namespaced SKILL.md bundles | YAML parsed; resources retained; runtime procedures rewritten |
+| Commands | 12 additional skills | README excluded; actual inventory is 42 total workflows; 3 explicit-only |
 | 13 agents | Native standalone TOML | name/description/developer_instructions; model inherited; code-quality read-only sandbox |
 | Specialist fallback | 13 additional role-guide skills | Apply inline or give procedure to generic worker when native roles are unavailable; no native sandbox enforcement claim |
 | Agent auto-selection | Descriptions guide Codex | Model judgment; not deterministic keyword routing |
-| Six rules | Managed AGENTS guidance + rules resource | Instruction hierarchy respected; not enforced sandbox policy |
+| Seven rules | Managed AGENTS guidance + rules resource | Instruction hierarchy respected; not enforced sandbox policy |
+| Delivery workflow | Exported delivery, repo-context and verified-handoff skills; AGENTS routing | Exported scripts executed in tests; procedures and receipts, not an enforced gate; no watcher, daemon or auto-merge |
 | Task DAG / teams | Plan/ledger and actual collaboration APIs | Claude Task/implicit-team persistence not assumed |
 | Background/fork behavior | Host schema discovery | No automatic context fork or Claude background defaults |
 | Parallel coding | Separate Git worktrees | Coupled steps sequential; no fake launcher isolation parameter |
@@ -42,13 +43,15 @@ Each skill is accounted for:
 
 | Treatment | Skills |
 |---|---|
-| Domain workflow/resource adaptation | api-contract-testing, browser-testing, ci-cd-templates, code-review-checklist, deployment-runbook, docker-deployment, experiment-loop, git-workflow, handoff, infrastructure-as-code, kubernetes-ops, library-docs, observability-stack, security-scan, sre-runbooks, ui-guidelines |
+| Domain workflow/resource adaptation | api-contract-testing, browser-testing, ci-cd-templates, code-review-checklist, delivery, deployment-runbook, docker-deployment, experiment-loop, git-workflow, handoff, infrastructure-as-code, kubernetes-ops, library-docs, observability-stack, repo-context, security-scan, sre-runbooks, ui-guidelines, verified-handoff |
 | Handwritten Codex runtime procedure | context-escalation, deep-analysis, deep-read, diverge, execute, investigate, multi-agent-orchestration, remote-triggers, scheduled-tasks, skill-creator, worktree-workflow |
 
 All command templates: build-fix, checkpoint, commit-pr, compact, create-jira,
 new-feature, optimize, quality-gate, resume-session, review-pr, save-session, tdd.
-Commit/PR, review-PR, Jira, branching, compact and session commands receive explicit
-portability rewrites; the other five retain domain steps with invocation/path adaptation.
+Review-PR, Jira, branching, compact and session commands receive explicit portability
+rewrites. Commit/PR is exported from the provider-neutral canonical command, so both
+editions share one publication contract; it and the other five retain domain steps with
+invocation/path adaptation.
 
 All agents: api-backend, architecture-planner, code-quality, database-architect,
 devops-automation, documentation-maintainer, frontend-specialist, incident-commander,
@@ -68,7 +71,9 @@ Independent reviewers reproduced these baseline defects before implementation:
   or represented as valid Codex telemetry.
 - `.claude/commands/commit-pr.md:63` says not to wait for CI before merging, and `:35`
   injects an assistant footer contrary to repository attribution instructions. The
-  Codex rewrite honors exact-head checks, selected scope and owner conventions.
+  Codex rewrite honored exact-head checks, selected scope and owner conventions. (Baseline
+  finding; the canonical command was later rewritten provider-neutral and the Codex
+  override removed.)
 
 The existing Claude edition's defects are recorded here and preserved outside this
 adaptation's write scope. Passing new adapter tests does not certify those mechanisms.

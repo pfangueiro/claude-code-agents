@@ -5,13 +5,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 **SDLC framework** — one repository with Claude Code and Codex integrations. The Claude
-edition has 13 specialized SDLC/SSDLC agents, 27 skills, and 12 executable command
+edition has 13 specialized SDLC/SSDLC agents, 30 skills, and 12 executable command
 templates (13 command-directory Markdown files include README.md). Agent descriptions
 guide model judgment; Claude files specify Haiku/Sonnet/Opus roles.
 
 Read [AGENTS.md](AGENTS.md) for cross-engine maintenance rules and [MEMORY.md](MEMORY.md)
 for architecture and verified state. Codex builds from shared domain sources plus
-`codex/overrides/`: 39 workflows, 13 specialist guides and 13 native TOML definitions.
+`codex/overrides/`: 42 workflows, 13 specialist guides and 13 native TOML definitions.
 It inherits the active Codex model and permission policy. User-global installation is
 `./install-codex.sh --user`; check with `--user --check`. See [codex/FEATURES.md](codex/FEATURES.md).
 

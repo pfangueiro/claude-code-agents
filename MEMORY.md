@@ -13,10 +13,20 @@ AGENTS.md and relevant source before relying on these notes.
   in `~/.codex`, and a hash-owned instruction block in AGENTS.md.
 - No copies in every project are required. Codex `--project` is an explicit alternative.
   Alternate profiles, project instructions, disabled skills and host features affect use.
-- Source inventory: 27 skills, 12 executable command templates and 13 specialists.
+- Source inventory: 30 skills, 12 executable command templates and 13 specialists.
   The command directory also contains a README, not a thirteenth workflow.
-- Codex builds 39 workflow skills plus 13 specialist guides (52 bundles), and 13
+- Codex builds 42 workflow skills plus 13 specialist guides (55 bundles), and 13
   native TOML definitions. Namespaced guides avoid collisions with built-ins.
+  52 are implicit; commit-pr, create-jira and new-feature stay explicit-only.
+- An override in `codex/overrides/` shadows its canonical source. The commit-pr override
+  once diverged from the corrected neutral command (review before commit); it was
+  removed so one publication contract exports to both editions.
+- Delivery skills (delivery, repo-context, verified-handoff), the delivery rule and
+  commit-pr can be updated in an existing Claude home with `scripts/install-delivery.py`
+  (hash manifest, explicit `--baseline` adoption, no settings/hooks). The broad
+  installer can later rewrite the same paths; the delivery installer then refuses.
+- Availability of a workflow is not an execution or an enforced gate. Report delivery
+  states only from receipts; no watcher, daemon, auto-merge or hook trust exists.
 - Native custom routing is host-dependent. Guide discovery is verified; guide prose
   does not enforce a native sandbox. Models and approval policy are inherited.
 
@@ -30,7 +40,8 @@ AGENTS.md and relevant source before relying on these notes.
 - Native hook trust belongs to the user. Direct-patch protection inspects all
   add/update/delete/move destinations; it is not an arbitrary shell/MCP sandbox.
 - Run `python3 -m unittest discover -s tests/codex -v` and
-  `python3 tests/codex/mutations.py`. Native discovery is explicitly skipped without
+  `python3 tests/codex/mutations.py`. Discovery also loads every portable resource test
+  in `tests/delivery/` through a bridge, so CI runs new cases without a list edit. Native discovery is explicitly skipped without
   a CLI; do not call that an end-to-end pass. Claude checks remain independent:
   `./validate.sh` and `bash tests/gap/run.sh --prove --jobs 4`.
 - Test failure/destructive paths in disposable homes/projects; `validate.sh --heal`
