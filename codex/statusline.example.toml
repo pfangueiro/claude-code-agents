@@ -1,9 +1,10 @@
 # Optional fragment: merge only tui.status_line into the existing [tui] table of your
 # Codex config (or pick, reorder and toggle items live with /statusline). The installer
 # never edits config. Items are built-in Codex footer IDs in priority order: the host
-# omits unavailable or zero values (used-tokens is hidden until tokens are used) and
-# clips trailing items on narrow terminals, so not every item shows at every width.
-# Token items are native session counters; limits are the native usage-limit windows.
+# omits unavailable values, hides used-tokens until tokens are used, and clips trailing
+# items on narrow terminals, so not every item shows at every width. Token items are
+# native session counters; total input/output tokens may display zero. Limits are the
+# native usage-limit windows.
 # The thread title shows "SDLC | <task>" only after framework guidance is loaded and the
 # model renamed the current task through a native title capability; it does not mean
 # checks, review or delivery passed. No cost or credit estimates are listed.

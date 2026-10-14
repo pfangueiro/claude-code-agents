@@ -37,8 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Codex footer example now lists native IDs in priority order: thread title, model,
   context remaining (replacing context used), used tokens, five-hour and weekly limits,
   Git branch, current directory, context window size, total input/output tokens and
-  version. Token items are native session counters, omitted while unavailable or zero;
-  trailing items clip on narrow terminals. The consumer test now requires unique,
+  version. Token items are native session counters; used tokens is hidden while zero,
+  input/output totals may display zero, unavailable values are omitted and trailing
+  items clip on narrow terminals. The consumer test now requires unique,
   verified native IDs and still rejects cost, credit and unknown items.
 - `$sdlc-commit-pr` is built from the provider-neutral `.claude/commands/commit-pr.md`.
   The Codex-only override, which still ran tests and review before the commit and so let
