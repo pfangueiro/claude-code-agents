@@ -20,6 +20,12 @@ MANIFEST = Path('.codex/framework/manifest.json')
 BEGIN = '<!-- sdlc-codex:begin -->'
 END = '<!-- sdlc-codex:end -->'
 PREFIX = 'sdlc-'
+# Inherited variables that would point Git at another repository, index or object store.
+# Mirrors scripts/install-delivery.py so every source-identity query ignores the same set.
+GIT_REDIRECT_ENV = ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_COMMON_DIR',
+                    'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_NAMESPACE', 'GIT_REPLACE_REF_BASE')
+GIT_SAFETY = ('-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', '--no-replace-objects',
+              '--no-optional-locks', '--literal-pathspecs')
 
 RUNTIME = """Codex runtime contract: discover the actual tools and their schemas first.
 Use shell/file tools for reading, rg for search, apply_patch or an available editor
@@ -34,6 +40,14 @@ Do not send messages, merge, release, deploy or mutate live data unless authoriz
 
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def head_sha() -> str:
+    """Resolve REPO's own HEAD, ignoring inherited Git repository/index selectors so an
+    unrelated GIT_DIR in the environment cannot misattribute the installed source SHA."""
+    env = {key: value for key, value in os.environ.items() if key not in GIT_REDIRECT_ENV}
+    return subprocess.check_output(['git', *GIT_SAFETY, '-C', str(REPO), 'rev-parse', 'HEAD'],
+                                   text=True, env=env).strip()
 
 
 def frontmatter(path: Path) -> tuple[dict, str]:
@@ -157,6 +171,7 @@ def build() -> dict[str, bytes]:
     files['.codex/framework/mcp.example.toml'] = (REPO / 'codex/mcp.example.toml').read_bytes()
     files['.codex/framework/statusline.example.toml'] = (REPO / 'codex/statusline.example.toml').read_bytes()
     files['.codex/framework/hook.py'] = (REPO / 'codex/hook.py').read_bytes()
+    files['.codex/framework/lint.py'] = (REPO / 'codex/lint.py').read_bytes()
     return files
 
 
@@ -285,9 +300,12 @@ def install(root: Path, *, dry_run: bool = False, uninstall: bool = False,
         command = 'python3 ' + shell_quote(str(root / '.codex/framework/hook.py'))
         events = ('SessionStart', 'SessionEnd', 'SubagentStart', 'SubagentStop', 'PermissionRequest',
                   'PreCompact', 'PostCompact', 'PreToolUse', 'PostToolUse')
+        # PostToolUse may run an opt-in approved lint (<=30s command + bounded cleanup),
+        # so it needs a wider outer budget than the metadata-only events.
+        timeouts = {'SessionEnd': 3, 'PostToolUse': 40}
         config = {'description': 'Optional SDLC evidence hooks; review with /hooks.',
                   'hooks': {event: [{'hooks': [{'type': 'command', 'command': command,
-                                              'timeout': 3 if event == 'SessionEnd' else 10}]}] for event in events}}
+                                              'timeout': timeouts.get(event, 10)}]}] for event in events}}
         desired['.codex/hooks.json'] = (json.dumps(config, indent=2) + '\n').encode()
     agents_path = safe_path(root, 'AGENTS.md') if not user else root / '.codex/AGENTS.md'
     # Apply the same symlink checks for the user instruction destination.
@@ -316,7 +334,7 @@ def install(root: Path, *, dry_run: bool = False, uninstall: bool = False,
     if current != merged:
         writes[agents_path] = merged if merged else None
         expected[agents_path] = current if agents_path.exists() else None
-    sha = subprocess.check_output(['git', '-C', str(REPO), 'rev-parse', 'HEAD'], text=True).strip()
+    sha = head_sha()
     manifest = {'version': 1, 'source_sha': sha, 'files': {p: digest(v) for p, v in desired.items()},
                 'instructions': digest(instructions()) if not uninstall else None,
                 'hooks': hooks, 'user': user}

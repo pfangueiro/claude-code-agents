@@ -17,6 +17,13 @@ import sys
 STATE = Path(__file__).resolve().parent
 EVENTS = {'SessionStart', 'SessionEnd', 'SubagentStart', 'SubagentStop',
           'PermissionRequest', 'PreCompact', 'PostCompact', 'PreToolUse', 'PostToolUse'}
+SUPPORTED_EDITS = {'apply_patch', 'Write', 'Edit'}
+# Canonical model-facing success text emitted by the native apply_patch tool (and its
+# Write/Edit matcher aliases). Source: openai/codex apply-patch/tests/suite/tool.rs.
+APPLY_PATCH_SUCCESS = 'Success. Updated the following files:'
+QUALITY_GATE_REMINDER = 'Edit completed. Run the project quality gate before claiming the change is verified.'
+UNCONFIRMED_EDIT_REMINDER = ('Edit result was not reported as a confirmed success, so no post-edit lint ran. '
+                             'Run the project quality gate before claiming the change is verified.')
 
 
 def patch_paths(command: str) -> list[str]:
@@ -38,6 +45,61 @@ def sensitive(path: str) -> bool:
     lowered = tuple(part.lower() for part in parts)
     return ('secrets' in lowered or '.aws/credentials' in normalized or '.ssh/id_' in normalized
             or '.codex/auth.json' in normalized)
+
+
+def edit_failed(event: dict) -> bool:
+    """True only when the event explicitly reports the edit did not succeed."""
+    for key in ('tool_output', 'tool_response', 'tool_result'):
+        value = event.get(key)
+        if isinstance(value, dict) and (value.get('error') or value.get('success') is False
+                                        or value.get('status') in ('error', 'failed', 'blocked')):
+            return True
+    return event.get('success') is False
+
+
+def edit_succeeded(event: dict) -> bool:
+    """True only for a recognized positive result from a supported edit tool.
+
+    Native apply_patch (and the Write/Edit aliases) report the canonical model-facing success
+    string; structured tool results may carry {"success": true}. The native docs treat
+    tool_response as arbitrary JSON, so anything else — an unknown, missing or unrecognized
+    result — is never assumed to be a successful edit.
+    """
+    for key in ('tool_response', 'tool_output', 'tool_result'):
+        if key not in event:
+            continue
+        value = event[key]
+        if isinstance(value, str):
+            return value.startswith(APPLY_PATCH_SUCCESS)
+        if isinstance(value, dict) and value.get('success') is True:
+            return True
+        return False
+    return False
+
+
+def _reminder(message: str) -> dict:
+    return {'hookSpecificOutput': {'hookEventName': 'PostToolUse', 'additionalContext': message}}
+
+
+def post_edit_output(event: dict) -> dict:
+    """Feedback for a supported PostToolUse edit.
+
+    Only a recognized successful edit may run the opt-in lint (or, without opt-in, emit the
+    quality-gate reminder). An explicitly failed edit yields no feedback; an unknown, missing
+    or unrecognized result falls back to a reminder that does not assert the edit succeeded.
+    A missing/broken lint runner never affects the credential guard; it falls back here.
+    """
+    if edit_failed(event):
+        return {}
+    if not edit_succeeded(event):
+        return _reminder(UNCONFIRMED_EDIT_REMINDER)
+    reminder = _reminder(QUALITY_GATE_REMINDER)
+    try:
+        import lint
+    except ImportError:
+        return reminder
+    result = lint.run_lint(event)
+    return result if result is not None else reminder
 
 
 def inspect_event(event: dict) -> dict:
@@ -73,9 +135,8 @@ def inspect_event(event: dict) -> dict:
                 output = {'hookSpecificOutput': {'hookEventName': name, 'permissionDecision': 'deny',
                           'permissionDecisionReason': 'Direct edit targets a protected credential path.'}}
                 break
-    if name == 'PostToolUse' and tool == 'apply_patch':
-        output = {'hookSpecificOutput': {'hookEventName': name, 'additionalContext':
-                  'Patch completed. Run the project quality gate before claiming the change is verified.'}}
+    if name == 'PostToolUse' and tool in SUPPORTED_EDITS:
+        output = post_edit_output(event)
     if name == 'SessionStart':
         manifest = STATE / 'manifest.json'
         try:

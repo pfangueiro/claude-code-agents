@@ -250,6 +250,10 @@ class FrameworkAcceptance(unittest.TestCase):
         config = json.loads((self.root / '.codex/hooks.json').read_bytes())
         self.assertNotIn('Notification', config['hooks'])
         self.assertEqual(config['hooks']['SessionEnd'][0]['hooks'][0]['timeout'], 3)
+        # PostToolUse may run an opt-in lint, so its outer budget exceeds the max child timeout.
+        self.assertEqual(config['hooks']['PostToolUse'][0]['hooks'][0]['timeout'], 40)
+        self.assertTrue((self.root / '.codex/framework/lint.py').is_file())
+        self.assertFalse((self.root / '.codex/framework/lint-projects.json').exists())
         self.assertEqual(f.install(self.root, user=True), [])
         f.install(self.root, user=True, uninstall=True)
         self.assertEqual(snapshot(self.root), {'AGENTS.md': b'project-like owner file'})
@@ -269,6 +273,52 @@ class FrameworkAcceptance(unittest.TestCase):
                                    capture_output=True, text=True, timeout=10)
         self.assertEqual(malformed.returncode, 2)
         self.assertEqual(malformed.stdout, '')
+
+    def test_installed_post_edit_lint_runs_only_approved_project(self):
+        f.install(self.root, hooks=True)
+        script = self.root / '.codex/framework/hook.py'
+        project = self.root / 'proj'
+        project.mkdir()
+        marker = 'INSTALLED_LINT_PRIVATE_MARKER'
+        failer = self.root / 'lint-fail.py'
+        failer.write_text(f'import sys\nprint("{marker}")\nsys.exit(5)\n')
+        entry = {'version': 1, 'projects': [{'root': str(project), 'command': [sys.executable, str(failer)]}]}
+        approved = {'hook_event_name': 'PostToolUse', 'tool_name': 'Write', 'cwd': str(project),
+                    'tool_input': {'file_path': 'x'}, 'tool_response': {'success': True}}
+
+        def run(home, event):
+            return subprocess.run([sys.executable, str(script)], input=json.dumps(event),
+                                  capture_output=True, text=True, timeout=30,
+                                  env=dict(os.environ, HOME=str(home)))
+
+        # Approval comes only from the owner-global registry (~/.codex/framework), so it is
+        # keyed to the owner's HOME, not the installed project tree.
+        owner = self.root / 'owner-home'
+        registry = owner / '.codex/framework/lint-projects.json'
+        registry.parent.mkdir(parents=True)
+        registry.write_text(json.dumps(entry))
+        registry.chmod(0o600)
+        result = run(owner, approved)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        context = json.loads(result.stdout)['hookSpecificOutput']['additionalContext']
+        self.assertIn('exit code 5', context)
+        self.assertNotIn(marker, context)
+
+        # A project-local registry is never consulted: with an owner HOME that has no registry
+        # the very same approval sitting in the project tree does not execute.
+        project_registry = self.root / '.codex/framework/lint-projects.json'
+        project_registry.write_text(json.dumps(entry))
+        project_registry.chmod(0o600)
+        empty = self.root / 'empty-home'
+        empty.mkdir()
+        ignored = run(empty, approved)
+        self.assertEqual(ignored.returncode, 0, ignored.stderr)
+        self.assertIn('quality gate', json.loads(ignored.stdout)['hookSpecificOutput']['additionalContext'])
+
+        # An unapproved cwd under the owner registry also falls back to the reminder.
+        fallback = run(owner, dict(approved, cwd=str(self.root)))
+        self.assertEqual(fallback.returncode, 0, fallback.stderr)
+        self.assertIn('quality gate', json.loads(fallback.stdout)['hookSpecificOutput']['additionalContext'])
 
     def test_packaged_resources_retain_executable_behavior(self):
         f.install(self.root)

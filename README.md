@@ -121,6 +121,45 @@ Open a session in a project and describe the work:
 "Deploy to production"
 ```
 
+Or invoke a workflow or specialist explicitly. The same request maps across editions:
+
+```
+# Claude Code
+/review-pr                       # review the current change
+/quality-gate --fix              # formatter + linter + type check + tests
+"Use code-quality to review src/auth.ts"
+
+# Codex (sdlc- prefixed; explicit-only commands stay explicit)
+$sdlc-review-pr                  # review the current change
+$sdlc-quality-gate               # run the project quality gate
+$sdlc-agent-code-quality         # apply the code-quality role guide inline
+```
+
+### Selection, availability and limits
+
+- **Selection is model-directed, not deterministic.** The model reads agent and skill
+  descriptions and chooses or delegates by judgment; the cue words above are hints, not a
+  keyword router, and activation is never guaranteed. Name a workflow or specialist
+  explicitly when you want a specific one.
+- **Availability is not execution.** Installing or loading a workflow only makes it
+  selectable; nothing is implemented, reviewed, merged or deployed until a real tool call
+  or process does it. No scheduler or auto-merge drives that SDLC work in the background,
+  and the portable delivery workflows and the Codex adapter add no background watcher or
+  daemon at all. (The full Claude install does set up one optional self-heal watchdog
+  daemon — documented below — but it only reconciles the install; it never implements,
+  reviews, merges or deploys your work.)
+- **Global by default, overridable per project.** Both editions install user-global and
+  apply in every project (Claude from `~/.claude`; Codex skills from `~/.agents/skills`,
+  definitions and state from `~/.codex`). A project's own instructions, disabled skills,
+  an alternate profile, or host capabilities change effective behavior; a `--project`
+  Codex install is an explicit alternative to the user-global one.
+- **Not complete parity.** The editions share domain procedures and specialist roles, not
+  identical runtime behavior. Codex ports are listed with their limits in
+  [codex/FEATURES.md](codex/FEATURES.md); several Claude-only runtime features (dashboard,
+  watchdog, notifications, the custom statusline renderer and snapshots) are unported, and
+  automatic lint *rewriting* is unported too — opt-in post-edit lint *checks* are available
+  instead. Codex hooks are opt-in and user-trusted.
+
 Codex examples include `$sdlc-execute`, `$sdlc-review-pr` and `$sdlc-agent-code-quality`.
 Native profile routing depends on the host; guides provide a fallback.
 The archived [cross-project and CLI validation](docs/archive/codex-2026-10-12/GLOBAL-VALIDATION.md)
@@ -136,7 +175,7 @@ confirmed global discovery and reviewer use for both integrations as of 2026-10-
 
 | Component | Count | What It Does |
 |-----------|-------|--------------|
-| **Agents** | 13 | Auto-activating SDLC specialists (planning through production) |
+| **Agents** | 13 | Model-selected SDLC specialists (planning through production) |
 | **Skills** | 30 | Modular knowledge packages (git, Docker, CI/CD, K8s, SRE, IaC, observability, delivery, repo-context, verified-handoff, experiment-loop, scheduled-tasks, worktree-workflow, remote-triggers, context-escalation, diverge, etc.) |
 | **Command templates** | 12 | `/commit-pr`, `/review-pr`, `/compact`, `/new-feature`, `/create-jira`, `/build-fix`, `/tdd`, `/quality-gate`, `/checkpoint`, `/save-session`, `/resume-session`, `/optimize`; `/security-scan` comes from a skill |
 | **MCP Servers** | 4 | context7, sequential-thinking, playwright, github |
@@ -147,21 +186,27 @@ confirmed global discovery and reviewer use for both integrations as of 2026-10-
 
 ## Available Agents
 
-| Agent | Activates On | Does What | Model |
+The **Typical cues** column lists the kind of request each specialist suits. It is not a
+keyword trigger: the model reads the agent descriptions and selects or delegates by
+judgment, so wording, context and the other specialists all affect the choice. You can
+always name a specialist explicitly. Selection is not deterministic and activation is not
+guaranteed.
+
+| Agent | Typical cues | Does What | Model |
 |-------|-------------|-----------|-------|
-| **architecture-planner** | "design", "architecture", "system" | System design, API specs, ADRs | Sonnet |
-| **code-quality** | "review", "refactor", "quality" | Code review, best practices | Sonnet |
-| **security-auditor** | "security", "auth", "vulnerability" | OWASP scanning, security fixes | **Opus** |
-| **test-automation** | "test", "coverage", "TDD" | Test generation, coverage analysis | Sonnet |
-| **performance-optimizer** | "slow", "optimize", "bottleneck" | Profiling, caching, optimization | Sonnet |
-| **devops-automation** | "deploy", "CI/CD", "Docker" | Deployment, containerization | Sonnet |
-| **documentation-maintainer** | "document", "README", "guide" | Docs, API specs | **Haiku** |
-| **database-architect** | "database", "SQL", "schema" | Query optimization, migrations | Sonnet |
-| **frontend-specialist** | "UI", "React", "frontend" | Components, responsive design | Sonnet |
-| **api-backend** | "API", "backend", "endpoint" | REST/GraphQL, business logic | Sonnet |
-| **incident-commander** | "CRITICAL", "outage", "emergency" | Rapid response, root cause | **Opus** |
-| **sre-specialist** | "SLO", "reliability", "on-call", "runbook" | SRE, SLOs, capacity, chaos eng | Sonnet |
-| **meta-agent** | "create an agent for..." | Generates new custom agents | Opus |
+| **architecture-planner** | design, architecture, system | System design, API specs, ADRs | Sonnet |
+| **code-quality** | review, refactor, quality | Code review, best practices | Sonnet |
+| **security-auditor** | security, auth, vulnerability | OWASP scanning, security fixes | **Opus** |
+| **test-automation** | test, coverage, TDD | Test generation, coverage analysis | Sonnet |
+| **performance-optimizer** | slow, optimize, bottleneck | Profiling, caching, optimization | Sonnet |
+| **devops-automation** | deploy, CI/CD, Docker | Deployment, containerization | Sonnet |
+| **documentation-maintainer** | document, README, guide | Docs, API specs | **Haiku** |
+| **database-architect** | database, SQL, schema | Query optimization, migrations | Sonnet |
+| **frontend-specialist** | UI, React, frontend | Components, responsive design | Sonnet |
+| **api-backend** | API, backend, endpoint | REST/GraphQL, business logic | Sonnet |
+| **incident-commander** | CRITICAL, outage, emergency | Rapid response, root cause | **Opus** |
+| **sre-specialist** | SLO, reliability, on-call, runbook | SRE, SLOs, capacity, chaos eng | Sonnet |
+| **meta-agent** | create an agent for… | Generates new custom agents | Opus |
 
 The model column describes the Claude source files. Codex inherits its active model;
 these aliases and provider pricing are not translated.
@@ -170,7 +215,11 @@ these aliases and provider pricing are not translated.
 
 ## How Agents Collaborate
 
-Agents hand off work automatically. Example: *"Build a user registration system"*
+The model coordinates specialists by judgment — it is not an automatic or deterministic
+hand-off engine. For *"Build a user registration system"* a typical model-directed
+sequence looks like the graph below, but the actual path depends on the request and the
+model's decisions, and each step is a separate call that runs only when the model makes
+it. Nothing is dispatched in the background.
 
 ```mermaid
 graph LR
@@ -184,7 +233,7 @@ graph LR
     G --> H[devops-automation]
 ```
 
-See [`.claude/lib/agent-coordination.md`](.claude/lib/agent-coordination.md) for the formal handoff protocol.
+See [`.claude/lib/agent-coordination.md`](.claude/lib/agent-coordination.md) for the coordination patterns these specialists follow.
 
 ---
 
@@ -212,7 +261,28 @@ conflict rather than being overwritten. [Full Codex instructions](codex/README.m
 
 # Codex installed state (use the installation's Python environment)
 ./install-codex.sh --user --check
+
+# Read-only cross-integration status (writes nothing; no installer/validate called)
+python3 scripts/framework-status.py          # human-readable, --user scope
+python3 scripts/framework-status.py --json    # machine-readable
 ```
+
+`scripts/framework-status.py` reports the source repository SHA, each integration's
+installed source SHA and owned-integrity state (`not_installed` / `clean` / `drift` /
+`error`), native CLI presence, whether optional Codex hooks are configured (with trust
+reported `UNKNOWN` — grant it in native `/hooks`), and MCP connectivity (`UNKNOWN` —
+servers are discovered at runtime). The source SHA is its own repository's HEAD, resolved
+while ignoring inherited Git selectors (`GIT_DIR`, `GIT_WORK_TREE`, …) so a foreign
+repository in the environment cannot misattribute it. It reuses the existing read-only
+checkers (`codex/framework.py --check` and `scripts/install-delivery.py --check`) and never
+writes — not even a source `.pyc` — locks, repairs, runs the broad installer or
+`validate.sh`, executes project scripts, probes the network or starts MCP servers; it does
+not read `config.toml`, `auth.json`, `settings.json` or secrets. Scope flags: `--user`
+(default) inspects the user-global installs, `--project PATH` inspects a project Codex
+install, `--claude-home PATH` overrides the Claude home; a requested scope that does not
+match the installed manifest (e.g. `--project` against a user install) is reported as an
+`error`, never silently relabelled clean. Exit status: `0` nothing wrong, `1` drift, `2`
+error. (The Codex integrity check needs the declared Codex Python dependencies.)
 
 Installed components live under `~/.claude/` — verify with `ls ~/.claude/agents ~/.claude/skills ~/.claude/commands ~/.claude/rules`.
 
@@ -385,7 +455,7 @@ Skills provide domain knowledge that agents apply. 30 included:
 | **deep-read** | 6-phase codebase reading engine: scope, map, trace, deep read, connect, report |
 | **handoff** | Session continuity — write HANDOFF.md for cross-session context |
 | **context-escalation** | Five-level context-pressure policy: truncate → drop-reads → fork-subagent → /compact → handoff |
-| **security-scan** | Auto-activating security scanner (secrets, OWASP, dependencies, file permissions) |
+| **security-scan** | Security scanner (secrets, OWASP, dependencies, file permissions) |
 | **kubernetes-ops** | K8s manifests, Helm, Karpenter, GitOps (ArgoCD/Flux), network policies, troubleshooting |
 | **observability-stack** | OpenTelemetry, Prometheus/Grafana, RED/USE metrics, SLI/SLO monitoring, alerting |
 | **sre-runbooks** | On-call handbook, postmortem templates, SLO/error budgets, chaos engineering, capacity planning |
@@ -473,10 +543,10 @@ Installed once, user-global under `~/.claude/` — Claude Code loads it in every
 
 ```
 ~/.claude/
-├── agents/          # 13 auto-activating SDLC agents
+├── agents/          # 13 model-selected SDLC agents
 ├── commands/        # 12 executable templates + README
 ├── skills/          # 30 modular knowledge packages
-├── rules/           # 7 auto-enforced rule sets
+├── rules/           # 7 instruction/guidance rule sets (native permissions enforce access, not these)
 ├── lib/             # Templates, patterns, coordination protocol
 ├── hooks/           # 9 command hooks + 2 reference configs
 ├── daemon/          # launchd watchdog (hourly validate + snapshots) — macOS only
