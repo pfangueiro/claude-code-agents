@@ -70,6 +70,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   self-contained fixtures — the original `-mcp-integration` bad fragment, a valid heading
   target, and fenced-only heading rejection — rather than assertions on the live badge text,
   which would have rejected a legitimate future badge removal (input `14bc5de`).
+- README link guard still accepted a link into a heading nested inside a *wider* fenced
+  block: `strip_fenced_code` tracked only the fence character, so an inner three-backtick run
+  closed an outer four-backtick fence early and exposed its `# Phantom` line as a rendered
+  anchor, falsely resolving the link. It now records the opening fence character *and* run
+  length and closes only on a line of that same character whose run is at least as long as the
+  opening — a shorter inner run stays inside the block — matching how GitHub renders the
+  closing fence. Added two self-contained controls to `tests/codex/test_documentation.py`: the
+  four-backtick/shorter-inner-fence regression and a symmetric valid case where the same
+  nested-fence shape still resolves a real heading outside the block (input `c09bdc9`).
 - `docs/archive/README.md` mislabeled the archived Codex-adaptation counts: `49/52 installed
   skill bundles` read as "49 of 52" when the snapshot recorded 49 **implicit** skills out of 52
   **total** installed bundles (and 39 workflows = 36 implicit + 3 explicit-only). Relabeled the

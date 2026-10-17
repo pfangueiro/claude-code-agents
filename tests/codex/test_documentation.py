@@ -19,8 +19,10 @@ README = ROOT / 'README.md'
 # Every link/image target `](...)`, robust to nested image links like `[![alt](img)](#anchor)`.
 TARGET = re.compile(r'\]\(([^)]+)\)')
 HEADING = re.compile(r'^#{1,6}\s+(.*?)\s*$')
-# A fenced code block opens/closes on a line whose first non-space run is >=3 backticks
-# or >=3 tildes (CommonMark). Indentation up to the block is tolerated via lstrip.
+# A fenced code block opens on a line whose first non-space run is >=3 backticks or
+# >=3 tildes; its matching close is a line of only that same character whose run is at
+# least as long (a shorter inner run stays inside the block). Leading indentation up to
+# the block is tolerated via lstrip.
 FENCE = re.compile(r'^(`{3,}|~{3,})')
 
 
@@ -28,24 +30,29 @@ def strip_fenced_code(markdown):
     """Return `markdown` with every fenced code region removed.
 
     A fence opens on a line whose first non-space run is a backtick or tilde run of
-    length >= 3 (an info string after it, e.g. ```` ```markdown ````, is allowed) and
-    closes on a later line made up solely of the same fence character (length >= 3).
-    The opening line, the content, and the closing line are all dropped, so headings and
-    link targets shown inside code samples are not mistaken for rendered Markdown.
+    length >= 3 (an info string after it, e.g. ```` ```markdown ````, is allowed). It
+    closes on a later line made up solely of the same fence character whose run is at
+    least as long as the opening run; a shorter run of that character stays inside the
+    block (so ``` inside a ```` fence does not close it). The opening line, the content,
+    and the closing line are all dropped, so headings and link targets shown inside code
+    samples are not mistaken for rendered Markdown.
     """
-    kept, fence_char = [], None
+    kept, fence = [], None  # (char, run_length) while a fence is open, else None
     for line in markdown.splitlines():
         stripped = line.lstrip()
         match = FENCE.match(stripped)
-        if fence_char is None:
+        if fence is None:
             if match:
-                fence_char = match.group(1)[0]
+                fence = (match.group(1)[0], len(match.group(1)))
                 continue  # drop the opening fence line
             kept.append(line)
             continue
-        # Inside a fence: close only on a bare run of the same fence character.
-        if match and match.group(1)[0] == fence_char and set(stripped.rstrip()) == {fence_char}:
-            fence_char = None
+        # Inside a fence: close only on a bare run of the same fence character whose
+        # run is at least as long as the opening run. A shorter run stays part of code.
+        if (match and match.group(1)[0] == fence[0]
+                and len(match.group(1)) >= fence[1]
+                and set(stripped.rstrip()) == {fence[0]}):
+            fence = None
         # Drop every in-fence line, including the closing one.
     return '\n'.join(kept)
 
@@ -141,6 +148,25 @@ class CheckerControls(unittest.TestCase):
         # Symmetric to the heading case: a file link shown inside a code sample is
         # illustrative, not a real link, so a nonexistent path there is not reported.
         fixture = '# Real\n\n```markdown\n[example](./does-not-exist.md)\n```\n'
+        self.assertEqual(broken_local_links(fixture, ROOT), [])
+
+    def test_rejects_link_into_wider_fenced_heading(self):
+        # Run-length regression: a 4-backtick fence encloses a 3-backtick sample line.
+        # The inner, shorter run must NOT close the block, so `# Phantom` stays inside
+        # the code and renders no anchor. Tracking only the fence character (not its run
+        # length) closed early and exposed the phantom heading, wrongly resolving the
+        # link. This is the exact input the saved `probe-fence-width.py` reruns.
+        fixture = '# Real\n\n[broken](#phantom)\n\n````markdown\n```\n# Phantom\n````\n'
+        self.assertEqual(
+            broken_local_links(fixture, ROOT),
+            ['#phantom (no heading anchor #phantom)'],
+        )
+
+    def test_wider_fence_with_inner_sample_resolves_real_heading(self):
+        # Symmetric valid control: the same nested-fence shape, but the link points at a
+        # real heading outside the block. The whole 4-backtick region stays code (its
+        # inner 3-backtick run does not close it) while the legitimate anchor resolves.
+        fixture = '# Real\n\n## Setup\n\n[jump](#setup)\n\n````markdown\n```\n# Phantom\n````\n'
         self.assertEqual(broken_local_links(fixture, ROOT), [])
 
 
