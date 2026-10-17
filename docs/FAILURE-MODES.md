@@ -2,7 +2,7 @@
 
 The historical Claude examples below remain useful for both integrations. Codex
 ownership, rollback, patch and privacy guards are separately proven by
-`python3 tests/codex/mutations.py`; see [Codex review](../codex/REVIEW.md). Do not
+`python3 tests/codex/mutations.py`; see the archived [Codex review](archive/codex-2026-10-12/REVIEW.md). Do not
 infer full runtime parity from a passing guard suite or schema-only check.
 
 A taxonomy of the defect classes that actually shipped in this repository, distilled from six

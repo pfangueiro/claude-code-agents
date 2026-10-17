@@ -6,7 +6,7 @@
 [![Codex](https://img.shields.io/badge/Codex-Compatible-blue.svg)](codex/README.md)
 [![Agents](https://img.shields.io/badge/Agents-13-orange.svg)](#available-agents)
 [![Skills](https://img.shields.io/badge/Source_Skills-30-green.svg)](#skills-system)
-[![MCP](https://img.shields.io/badge/MCP-4%20Servers-brightgreen.svg)](#-mcp-integration)
+[![MCP](https://img.shields.io/badge/MCP-4%20Servers-brightgreen.svg)](#mcp-integration)
 
 **One framework repository, with an integration for each coding agent.** Share domain
 procedures and specialist roles; keep provider-specific runtime behavior in its adapter.
@@ -123,8 +123,8 @@ Open a session in a project and describe the work:
 
 Codex examples include `$sdlc-execute`, `$sdlc-review-pr` and `$sdlc-agent-code-quality`.
 Native profile routing depends on the host; guides provide a fallback.
-[Cross-project and CLI validation](codex/GLOBAL-VALIDATION.md) confirmed global
-discovery and reviewer use for both integrations.
+The archived [cross-project and CLI validation](docs/archive/codex-2026-10-12/GLOBAL-VALIDATION.md)
+confirmed global discovery and reviewer use for both integrations as of 2026-10-12.
 
 > **Before you run it:** see [What the install does to your machine](#what-the-install-does-to-your-machine) for the exact
 > paths written, the background daemon, and how to reverse it. `./install.sh --dry-run` prints every
@@ -259,10 +259,19 @@ permissions or attribution? Put them in `settings.local.json`, which takes prece
 
 ### It is framework-scoped — your own content survives
 
-The install **never** deletes or overwrites a name the framework does not ship. Personal skills,
-agents, commands, and rules in `~/.claude` are preserved on every install and every `--update`; the
-orphan-prune is only ever *eligible* to remove names the framework itself ships or has explicitly
-retired, so a personal entry is not merely spared — it is never a candidate.
+For `~/.claude/{agents,skills,commands,rules,lib}`, the install **never** deletes or overwrites a
+name the framework does not ship. Personal skills, agents, commands, rules and lib files are
+preserved on every install and every `--update`; there the orphan-prune is only ever *eligible* to
+remove a name the framework itself ships or has explicitly retired, so a personal entry is not
+merely spared — it is never a candidate.
+
+**`~/.claude/hooks/` is the exception.** It is reconciled to *exactly the current source set*: the
+sync copies every source hook, then prunes every `.sh`/`.json` in that directory whose name is not
+in the current source (`install.sh:844`). A personal hook script left in `~/.claude/hooks/` is
+therefore removed, not preserved — provenance-based foreign-name protection does not apply to the
+hooks directory. Likewise in `settings.json`, framework-owned hook-event arrays and the
+`.permissions` block are replaced wholesale on drift (above); keep custom permissions in
+`settings.local.json`.
 
 Measured, not assumed: with a personal skill, agent, command and rule planted in a throwaway
 `HOME`, two consecutive `--update` runs left all four **byte-identical** and the skills directory at

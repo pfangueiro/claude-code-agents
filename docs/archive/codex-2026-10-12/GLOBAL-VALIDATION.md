@@ -1,5 +1,12 @@
 # Laptop user-global validation
 
+> **Historical snapshot — archived 2026-10-17.** A point-in-time record of the
+> 2026-10-12 laptop installation/testing, not a current check. Its counts, SHAs and
+> fixture fingerprints describe that session and are preserved verbatim. See
+> [docs/archive/README.md](../README.md) for scope and the
+> [current docs](../../../README.md) / [feature matrix](../../../codex/FEATURES.md)
+> for the live framework.
+
 Performed 2026-10-12 against framework Git baseline
 `509d282a195cc7a0e3b4d63b51b5f791be519eed` plus the independently reviewed adapter.
 The user requested installation/testing on this laptop across projects.
@@ -68,4 +75,4 @@ default profile. Project instructions, disabled skills, alternate CODEX_HOME/pro
 and host-specific capabilities can change effective behavior. Availability does not
 guarantee automatic selection or prove all workflows. Native custom Codex profile
 spawning, optional hooks/MCP activation and the remaining runtime parity gaps are
-not established by these tests. See [FEATURES.md](FEATURES.md).
+not established by these tests. See [FEATURES.md](../../../codex/FEATURES.md).

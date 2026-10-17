@@ -13,7 +13,8 @@ credential guard handles add/update/delete/move destinations and aliases, but do
 constrain arbitrary shell/MCP writes. Use native sandbox/execpolicy for that boundary.
 Logs retain allowlisted metadata rather than commands, patches or credentials. There is
 no permission auto-approval. Test these guards with `python3 tests/codex/mutations.py`.
-See [feature limits](codex/FEATURES.md) and [independent review](codex/REVIEW.md).
+See [feature limits](codex/FEATURES.md); the original independent review is an archived
+historical snapshot at [docs/archive/codex-2026-10-12/REVIEW.md](docs/archive/codex-2026-10-12/REVIEW.md).
 
 ## Supported Versions
 

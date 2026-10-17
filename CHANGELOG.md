@@ -45,14 +45,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The Codex-only override, which still ran tests and review before the commit and so let
   a later commit bypass the exact-candidate verdict, is removed; a test requires the
   exported body to match the canonical command. Explicit-only invocation is unchanged.
+- Documentation/obsolete-file cleanup from input `3618b31`: moved the 2026-10-12 Codex
+  acceptance snapshots (`REVIEW.md`, `PUBLICATION-REVIEW.md`, `GLOBAL-VALIDATION.md`,
+  `WORKLOG.md`) to `docs/archive/codex-2026-10-12/` and the v2.1 skills summary to
+  `docs/archive/legacy-skills-integration.md`, each with a historical-scope banner, behind
+  a new `docs/archive/README.md` index; repointed every active link and corrected obsolete
+  counts (INSTALL/EXTENSIBILITY/SKILLS-QUICKSTART still said 27 skills, 6 rules or 39/52
+  Codex bundles). Snapshot SHAs, hashes and measured counts are preserved verbatim as
+  historical records, not relabeled as current.
+- Corrected the Claude installer ownership claim: `~/.claude/hooks/` is pruned to exactly
+  the current source set (`install.sh:844`), so a personal hook file left there is removed,
+  and framework-owned hook-event arrays and the `.permissions` block are replaced wholesale
+  on drift. Provenance-based foreign-name protection applies to agents/skills/commands/
+  rules/lib, not the hooks directory (README, INSTALL).
 
 ### Fixed
+
+- README MCP badge linked to `#-mcp-integration`, a fragment with no matching heading (the
+  slug for `## MCP Integration` is `#mcp-integration`); corrected the anchor. Added
+  `tests/codex/test_documentation.py` guarding README local file and heading-anchor links,
+  with a negative control on the former bad fragment and a valid-target control.
 
 - Codex Linux CI dependency failure at `1debb18`: declare Requests 2.34.2 for the exported
   health checker, run adapter CI in a clean Python environment, and prove the resource
   dependency gate with an injected missing import and restored control. The same missing
   Requests error was reproduced with the original manifest in a clean Python 3.11 env;
   preserve the failing gate rather than skipping resource execution.
+
+### Removed
+
+- `clean-old-agents.sh` (input `3618b31`): an unused v1 helper that deleted project-local
+  agent filenames from `.claude/agents/`. No installer, test, CI job or doc referenced it;
+  the current installers are `install.sh` and `install-codex.sh`. Removed, not archived.
 
 ### Added
 

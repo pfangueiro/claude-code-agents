@@ -1,5 +1,12 @@
 # Adaptation task ledger
 
+> **Historical snapshot — archived 2026-10-17.** A point-in-time ledger of the
+> 2026-10-12 Codex adaptation, not a current check. Its counts and SHAs describe
+> that work and are preserved verbatim. See
+> [docs/archive/README.md](../README.md) for scope and the
+> [current docs](../../../README.md) / [feature matrix](../../../codex/FEATURES.md)
+> for the live framework.
+
 Initial adaptation input SHA: 509d282a195cc7a0e3b4d63b51b5f791be519eed.
 That phase made no commits or remote mutations. Subsequent global installation is in
 GLOBAL-VALIDATION.md. The user later authorized documentation/memory updates and GitHub

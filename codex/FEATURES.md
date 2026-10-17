@@ -2,8 +2,8 @@
 
 Audited Claude baseline: `509d282a195cc7a0e3b4d63b51b5f791be519eed`.
 Official capability documentation researched 2026-10-12. The initial audit input is
-recorded above; [publication review](PUBLICATION-REVIEW.md) identifies the implementation
-commit. Install manifests record checkout HEAD at install time and owned output hashes.
+recorded above; the archived [publication review](../docs/archive/codex-2026-10-12/PUBLICATION-REVIEW.md)
+identifies the implementation commit. Install manifests record checkout HEAD at install time and owned output hashes.
 Do not describe this as complete runtime parity.
 
 | Framework surface | Codex treatment | Verification or limit |
