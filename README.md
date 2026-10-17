@@ -259,11 +259,13 @@ permissions or attribution? Put them in `settings.local.json`, which takes prece
 
 ### It is framework-scoped — your own content survives
 
-For `~/.claude/{agents,skills,commands,rules,lib}`, the install **never** deletes or overwrites a
-name the framework does not ship. Personal skills, agents, commands, rules and lib files are
-preserved on every install and every `--update`; there the orphan-prune is only ever *eligible* to
-remove a name the framework itself ships or has explicitly retired, so a personal entry is not
-merely spared — it is never a candidate.
+For `~/.claude/{agents,skills,commands,rules,lib}`, the install manages exactly the **basenames**
+the framework currently ships or has explicitly retired. A personal file whose name is neither
+shipped nor retired is never touched — not overwritten, not pruned. Preservation is by
+non-colliding **name**, not by origin, so two name collisions are the exception: because each
+shipped file is copied by basename, a personal file that shares a currently-shipped name (e.g. your
+own `code-quality.md`) is **overwritten** by the shipped copy, and a personal file left at an
+explicitly-retired framework name is **eligible for pruning**.
 
 **`~/.claude/hooks/` is the exception.** It is reconciled to *exactly the current source set*: the
 sync copies every source hook, then prunes every `.sh`/`.json` in that directory whose name is not

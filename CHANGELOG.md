@@ -63,8 +63,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - README MCP badge linked to `#-mcp-integration`, a fragment with no matching heading (the
   slug for `## MCP Integration` is `#mcp-integration`); corrected the anchor. Added
-  `tests/codex/test_documentation.py` guarding README local file and heading-anchor links,
-  with a negative control on the former bad fragment and a valid-target control.
+  `tests/codex/test_documentation.py` guarding README local file and heading-anchor links.
+  The guard ignores fenced code regions (backtick/tilde code blocks) for both heading and
+  target extraction, so a link to a heading that appears only inside a code sample is flagged
+  broken and example links shown inside code samples are not false-positives. Controls are
+  self-contained fixtures — the original `-mcp-integration` bad fragment, a valid heading
+  target, and fenced-only heading rejection — rather than assertions on the live badge text,
+  which would have rejected a legitimate future badge removal (input `14bc5de`).
+- `docs/archive/README.md` mislabeled the archived Codex-adaptation counts: `49/52 installed
+  skill bundles` read as "49 of 52" when the snapshot recorded 49 **implicit** skills out of 52
+  **total** installed bundles (and 39 workflows = 36 implicit + 3 explicit-only). Relabeled the
+  as-of-date figures and dropped the copied current-inventory parenthetical in favor of the
+  already-linked current docs, so the archive index no longer restates live counts (input
+  `14bc5de`).
+- `README.md`/`INSTALL.md` "framework-scoped" sections overstated preservation, claiming personal
+  `agents/skills/commands/rules/lib` files are preserved on every install and "never a candidate"
+  for removal. Documented the basename-collision reality: the installer manages the basenames it
+  currently ships or has explicitly retired; a non-colliding personal name is never touched, but a
+  personal file sharing a currently-shipped basename is overwritten by the shipped copy and one
+  left at an explicitly-retired name is eligible for pruning (hooks remain the broader exception —
+  any `.sh`/`.json` absent from source is pruned). Documentation only; no runtime change (input
+  `14bc5de`).
 
 - Codex Linux CI dependency failure at `1debb18`: declare Requests 2.34.2 for the exported
   health checker, run adapter CI in a clean Python environment, and prove the resource

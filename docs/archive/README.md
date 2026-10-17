@@ -15,11 +15,11 @@ Current defect taxonomy and contribution rules are in
 
 ### `codex-2026-10-12/` — Codex adaptation acceptance (2026-10-12)
 
-The initial Codex adapter audit, review and laptop installation. Figures such as
-39/36 workflows, 49/52 installed skill bundles and 21 acceptance tests are the counts
-**as of that date**; the current inventory (30 source skills, 12 command templates,
-13 specialists; 42 Codex workflows + 13 guides = 55 bundles, 52 implicit) lives in the
-docs linked above.
+The initial Codex adapter audit, review and laptop installation. The figures it
+records — e.g. 39 workflows (36 implicit + 3 explicit-only), 49 **implicit** skills out
+of 52 **total** installed skill bundles, and 21 acceptance tests — are the counts **as of
+that date**. For the current inventory, see the docs linked above; this index deliberately
+does not restate live counts.
 
 - [`REVIEW.md`](codex-2026-10-12/REVIEW.md) — initial independent acceptance result.
 - [`PUBLICATION-REVIEW.md`](codex-2026-10-12/PUBLICATION-REVIEW.md) — publication-time

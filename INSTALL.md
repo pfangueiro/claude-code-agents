@@ -138,10 +138,14 @@ Want custom permissions, attribution, or a different statusline? Put them in
 ### It is framework-scoped — your own content is preserved
 
 `~/.claude/{agents,skills,commands,rules,lib}` is shared with anything **you** have put there.
-The install is fail-closed about this: a copy only ever replaces a file the framework itself ships,
-and the orphan-prune is only ever *eligible* to remove a name the framework currently ships or has
-explicitly listed as retired. A personal skill, agent, command, or rule is never a candidate for
-deletion — the check cannot even reach it.
+The install manages exactly the **basenames** the framework currently ships or has explicitly
+listed as retired: it replaces each shipped name and is only ever *eligible* to prune a
+shipped-but-removed or explicitly-retired name. A personal skill, agent, command, rule or lib file
+whose name is neither shipped nor retired is never a candidate — the orphan-prune cannot even reach
+it. Preservation is by non-colliding **name**, not by origin, so two name collisions are the
+exception: a personal file that shares a currently-shipped basename (e.g. your own
+`code-quality.md`) is **overwritten** by the shipped copy, and one left at an explicitly-retired
+framework name is **eligible for pruning**.
 
 `~/.claude/hooks/` is the exception. It is reconciled to **exactly the current source set**: any
 `.sh`/`.json` there that the current framework does not ship is pruned, so a personal hook script
@@ -241,7 +245,7 @@ cd claude-code-agents && git pull --ff-only    # the one manual step; the rest i
 ./install.sh --update                          # optional: reconcile now instead of waiting for self-heal
 ```
 
-`--update` re-copies the framework's shared set to `~/.claude` (replacing framework files so drift heals) while preserving your own `~/.claude/CLAUDE.md`, personal skills, and settings.
+`--update` re-copies the framework's shared set to `~/.claude` (replacing framework files so drift heals) while preserving your own `~/.claude/CLAUDE.md`, your non-colliding personal files, and settings (a personal file sharing a shipped or retired framework basename is the exception — see [framework-scoped](#it-is-framework-scoped--your-own-content-is-preserved) above).
 
 **Optional — autonomously migrate old per-project `.claude/` copies.** If you previously deployed the framework into individual projects, create an opt-in marker so `--update` migrates them to user-global for you:
 
