@@ -56,8 +56,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Corrected the Claude installer ownership claim: `~/.claude/hooks/` is pruned to exactly
   the current source set (`install.sh:844`), so a personal hook file left there is removed,
   and framework-owned hook-event arrays and the `.permissions` block are replaced wholesale
-  on drift. Provenance-based foreign-name protection applies to agents/skills/commands/
-  rules/lib, not the hooks directory (README, INSTALL).
+  on drift. For agents, skills, commands, rules and lib the installer instead manages by
+  basename: it overwrites a framework-owned file of the same name, prunes names the framework
+  has since retired, and leaves a non-colliding personal file of a different name in place — it
+  does not track provenance. The hooks directory is the broader exception, pruned to exactly the
+  current source set as above (README, INSTALL).
 
 ### Fixed
 

@@ -980,7 +980,7 @@ claude-code-agents/
 │   │   ├── resume-session.md
 │   │   └── optimize.md
 │   │
-│   ├── rules/                     # Auto-enforced rules — 7 total
+│   ├── rules/                     # Instruction rules (guidance) — 7 total
 │   │   ├── security.md
 │   │   ├── code-quality.md
 │   │   ├── fix-quality.md
