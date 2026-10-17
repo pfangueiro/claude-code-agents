@@ -124,14 +124,42 @@ Optional hooks:
 This adds `.codex/hooks.json` only if foreign configuration does not occupy that path.
 Nine supported events produce an allowlisted metadata log in
 `.codex/framework/events.jsonl`. SessionStart checks owned file hashes; direct patches
-to protected credential paths are denied; PostToolUse prompts a quality gate. The
+to protected credential paths are denied; PostToolUse emits a quality-gate reminder or,
+when a project has opted in, runs an approved post-edit lint (below). The
 hook adapter handles add/update/delete/move destinations and symlink aliases. It is
 **not a shell/MCP sandbox** and does not scan arbitrary command writes. Use native
-sandbox/execpolicy for that boundary. There is no automatic lint rewrite, permission
-auto-approval, full conversation snapshot, desktop notification or inferred cost.
-Hooks are local-runtime features and may be unavailable in cloud orchestration. Updates
-preserve an installed hook edition and require native re-review if definitions change.
-Uninstall leaves runtime metadata and saved notes for the owner to retain or remove.
+sandbox/execpolicy for that boundary. There is no automatic lint *rewrite* (`--fix` is
+never added), permission auto-approval, full conversation snapshot, desktop notification
+or inferred cost. Hooks are local-runtime features and may be unavailable in cloud
+orchestration. Updates preserve an installed hook edition and require native re-review if
+definitions change. Uninstall leaves runtime metadata and saved notes for the owner to
+retain or remove.
+
+Opt-in post-edit lint (disabled until you create the registry):
+
+- The installer ships `.codex/framework/lint.py` beside the hook but **never creates or
+  trusts** the registry. You add `~/.codex/framework/lint-projects.json` yourself (a
+  project install reads it beside that project's `.codex/framework/`). Until it exists,
+  a successful supported PostToolUse edit (`apply_patch`, `Write`, `Edit`) only produces
+  the quality-gate reminder; non-edit events never run a command.
+- Format: `{"version": 1, "projects": [{"root": "<absolute canonical project dir>",
+  "command": ["<absolute executable>", "..."], "timeout": <1..30, default 10>}]}`. The
+  registry must be a regular file you own, without group/world write and with no symlink
+  at it or any ancestor. A malformed, duplicate, unknown-version, unsafe, symlinked or
+  unreadable registry runs nothing and returns a static notice.
+- A lint runs only when the event's canonical cwd exactly equals an approved `root`.
+  Approval starts at that root: a nested working directory under it is **not**
+  automatically approved, and there is no ancestor matching or command autodetection.
+- The approved argv runs directly (`shell=False`, no filename or template interpolation),
+  with cwd set to the approved root and stdin/stdout/stderr discarded, inside its own
+  POSIX process group. A timeout sends `SIGTERM` then `SIGKILL`; descendants left after
+  an early-exiting leader are also killed, so no process group is left running. The
+  PostToolUse event timeout (40 s) exceeds the maximum child plus cleanup budget.
+- A user-selected command trusts that project's own code and dependencies; it is **not**
+  sandboxed or read-only. No argv, output, environment or patch content appears in the
+  hook output or the evidence log — only a static status and the process exit code. A
+  failure or timeout reports the failed check (and exit code) and states the edit was
+  applied and not rolled back; it never claims the edit was reverted.
 
 Validation:
 
@@ -145,8 +173,13 @@ python3 tests/codex/mutations.py
 Claude delivery installer suite. Tests use isolated temporary projects and simulated
 home layouts. They check real inventory, execution of the exported delivery scripts, YAML/TOML parsing, explicit invocation policy, resource execution, collision
 and modification rejection, personal-file preservation, drift repair, symlink/traversal
-rejection, rollback, native hook payloads and logging privacy. This is not an authenticated
-end-to-end test across Codex desktop, IDE, CLI and cloud accounts.
+rejection, rollback, native hook payloads and logging privacy. They also cover the
+opt-in post-edit lint (enabled/disabled, unapproved and nested roots, unsafe/malformed/
+symlinked/non-owned/writable registries, literal shell metacharacters, failure privacy,
+timeout with a grandchild, early-leader descendant cleanup and installed stdio operation)
+and the read-only `scripts/framework-status.py` (not-installed/clean/drift/error states,
+before/after trees proving it writes nothing, and JSON/exit-code shape). This is not an
+authenticated end-to-end test across Codex desktop, IDE, CLI and cloud accounts.
 When the Codex CLI is installed, a native prompt-input smoke test checks skill discovery
 and managed instructions in an isolated home; otherwise that check is explicitly skipped.
 CI runs the suite in a fresh virtual environment populated only from requirements.txt,

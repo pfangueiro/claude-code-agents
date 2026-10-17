@@ -17,6 +17,8 @@ import sys
 STATE = Path(__file__).resolve().parent
 EVENTS = {'SessionStart', 'SessionEnd', 'SubagentStart', 'SubagentStop',
           'PermissionRequest', 'PreCompact', 'PostCompact', 'PreToolUse', 'PostToolUse'}
+SUPPORTED_EDITS = {'apply_patch', 'Write', 'Edit'}
+QUALITY_GATE_REMINDER = 'Edit completed. Run the project quality gate before claiming the change is verified.'
 
 
 def patch_paths(command: str) -> list[str]:
@@ -38,6 +40,31 @@ def sensitive(path: str) -> bool:
     lowered = tuple(part.lower() for part in parts)
     return ('secrets' in lowered or '.aws/credentials' in normalized or '.ssh/id_' in normalized
             or '.codex/auth.json' in normalized)
+
+
+def edit_failed(event: dict) -> bool:
+    """True only when the event explicitly reports the edit did not succeed."""
+    for key in ('tool_output', 'tool_response', 'tool_result'):
+        value = event.get(key)
+        if isinstance(value, dict) and (value.get('error') or value.get('success') is False
+                                        or value.get('status') in ('error', 'failed', 'blocked')):
+            return True
+    return event.get('success') is False
+
+
+def post_edit_output(event: dict) -> dict:
+    """Run an opt-in approved lint if configured; otherwise emit the quality-gate reminder.
+
+    A missing/broken lint runner never affects the credential guard; it falls back here.
+    """
+    reminder = {'hookSpecificOutput': {'hookEventName': 'PostToolUse',
+                'additionalContext': QUALITY_GATE_REMINDER}}
+    try:
+        import lint
+    except ImportError:
+        return reminder
+    result = lint.run_lint(event)
+    return result if result is not None else reminder
 
 
 def inspect_event(event: dict) -> dict:
@@ -73,9 +100,8 @@ def inspect_event(event: dict) -> dict:
                 output = {'hookSpecificOutput': {'hookEventName': name, 'permissionDecision': 'deny',
                           'permissionDecisionReason': 'Direct edit targets a protected credential path.'}}
                 break
-    if name == 'PostToolUse' and tool == 'apply_patch':
-        output = {'hookSpecificOutput': {'hookEventName': name, 'additionalContext':
-                  'Patch completed. Run the project quality gate before claiming the change is verified.'}}
+    if name == 'PostToolUse' and tool in SUPPORTED_EDITS and not edit_failed(event):
+        output = post_edit_output(event)
     if name == 'SessionStart':
         manifest = STATE / 'manifest.json'
         try:

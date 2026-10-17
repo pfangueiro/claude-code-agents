@@ -30,7 +30,7 @@ Do not describe this as complete runtime parity.
 | Sensitive file hook | Direct-patch add/update/delete/move guard | Does not constrain arbitrary shell/MCP writes |
 | Permission auditing | Metadata event log | No automatic approval or credential/command logging |
 | Agent/session lifecycle | Actual event identifiers | No fabricated duration/status/token/cost fields |
-| Post-edit quality | Quality-gate reminder | Automatic linting/rewrite remains unported |
+| Post-edit quality | Quality-gate reminder, or an opt-in user-approved post-edit lint | User-owned registry (never installer-generated/trusted), exact-root match (nested cwd not approved), direct argv (no shell/interpolation/`--fix`), bounded own process group with descendant cleanup, exit-code-only privacy; Claude's unconditional auto-lint/rewrite remains unported |
 | Compaction hooks | Lifecycle evidence | Automatic git/conversation snapshots remain unported |
 | Prompt/agent hook handlers | Not installed | Current Codex parses but skips these handler types |
 | Desktop notifications | Unported | Claude Notification event absent from current supported list |

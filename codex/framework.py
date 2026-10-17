@@ -157,6 +157,7 @@ def build() -> dict[str, bytes]:
     files['.codex/framework/mcp.example.toml'] = (REPO / 'codex/mcp.example.toml').read_bytes()
     files['.codex/framework/statusline.example.toml'] = (REPO / 'codex/statusline.example.toml').read_bytes()
     files['.codex/framework/hook.py'] = (REPO / 'codex/hook.py').read_bytes()
+    files['.codex/framework/lint.py'] = (REPO / 'codex/lint.py').read_bytes()
     return files
 
 
@@ -285,9 +286,12 @@ def install(root: Path, *, dry_run: bool = False, uninstall: bool = False,
         command = 'python3 ' + shell_quote(str(root / '.codex/framework/hook.py'))
         events = ('SessionStart', 'SessionEnd', 'SubagentStart', 'SubagentStop', 'PermissionRequest',
                   'PreCompact', 'PostCompact', 'PreToolUse', 'PostToolUse')
+        # PostToolUse may run an opt-in approved lint (<=30s command + bounded cleanup),
+        # so it needs a wider outer budget than the metadata-only events.
+        timeouts = {'SessionEnd': 3, 'PostToolUse': 40}
         config = {'description': 'Optional SDLC evidence hooks; review with /hooks.',
                   'hooks': {event: [{'hooks': [{'type': 'command', 'command': command,
-                                              'timeout': 3 if event == 'SessionEnd' else 10}]}] for event in events}}
+                                              'timeout': timeouts.get(event, 10)}]}] for event in events}}
         desired['.codex/hooks.json'] = (json.dumps(config, indent=2) + '\n').encode()
     agents_path = safe_path(root, 'AGENTS.md') if not user else root / '.codex/AGENTS.md'
     # Apply the same symlink checks for the user instruction destination.

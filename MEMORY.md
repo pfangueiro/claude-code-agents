@@ -54,12 +54,32 @@ AGENTS.md and relevant source before relying on these notes.
   acceptance snapshots ([review](docs/archive/codex-2026-10-12/REVIEW.md),
   [global validation](docs/archive/codex-2026-10-12/GLOBAL-VALIDATION.md)) are archived
   historical records under [docs/archive/](docs/archive/README.md). Dashboard, watchdog, notifications,
-  the Claude statusline renderer, automatic linting and snapshots remain unported. MCP
+  the Claude statusline renderer, Claude's unconditional auto-lint and snapshots remain
+  unported (an opt-in, user-approved post-edit lint now exists — see below). MCP
   examples are disabled and Codex hooks are opt-in. The status bar counterpart is an
   opt-in `tui.status_line` example of built-in footer IDs (context remaining, native
   session token counters, usage limits, branch/directory; never auto-merged into
   config; width clips trailing items) plus instruction guidance to title the current task `SDLC | <task>` where a
   native rename capability exists; the marker means guidance loaded, not checks passed.
+- Opt-in post-edit lint: the installer ships `.codex/framework/lint.py` beside the hook
+  but never creates or trusts the registry `~/.codex/framework/lint-projects.json`
+  (user-owned, regular, non-symlink, owner-only writable; version 1 + projects
+  `{root, command, timeout}`). On a successful supported PostToolUse edit whose canonical
+  cwd exactly equals an approved root (nested cwd is not approved), the approved argv runs
+  directly — no shell, no interpolation, no `--fix` — with stdio discarded, in its own
+  process group with TERM/KILL and descendant cleanup, under the 40 s PostToolUse budget.
+  Output carries only a static status and the exit code; no argv/output/env. Missing
+  registry or entry falls back to the quality-gate reminder; an unsafe one runs nothing.
+  The PreToolUse credential guard is unchanged. Five new mutation controls cover it;
+  the nine existing controls are preserved.
+- `scripts/framework-status.py` is a read-only cross-integration status: repository SHA,
+  each integration's installed source SHA and owned-integrity state (not_installed/clean/
+  drift/error) via the existing `framework.py --check` and `install-delivery.py --check`
+  logic, native CLI presence, Codex hook config (trust UNKNOWN → `/hooks`) and MCP
+  connectivity UNKNOWN. `--user` default, `--project PATH`, `--claude-home PATH`, `--json`;
+  exit 0 clean/absent, 1 drift, 2 error. It never writes, locks, repairs, runs the broad
+  installer/validate, executes project scripts, probes networks or reads config/auth/
+  settings/secrets.
 
 ## Evidence and publishing
 

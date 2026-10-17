@@ -250,6 +250,10 @@ class FrameworkAcceptance(unittest.TestCase):
         config = json.loads((self.root / '.codex/hooks.json').read_bytes())
         self.assertNotIn('Notification', config['hooks'])
         self.assertEqual(config['hooks']['SessionEnd'][0]['hooks'][0]['timeout'], 3)
+        # PostToolUse may run an opt-in lint, so its outer budget exceeds the max child timeout.
+        self.assertEqual(config['hooks']['PostToolUse'][0]['hooks'][0]['timeout'], 40)
+        self.assertTrue((self.root / '.codex/framework/lint.py').is_file())
+        self.assertFalse((self.root / '.codex/framework/lint-projects.json').exists())
         self.assertEqual(f.install(self.root, user=True), [])
         f.install(self.root, user=True, uninstall=True)
         self.assertEqual(snapshot(self.root), {'AGENTS.md': b'project-like owner file'})
@@ -269,6 +273,33 @@ class FrameworkAcceptance(unittest.TestCase):
                                    capture_output=True, text=True, timeout=10)
         self.assertEqual(malformed.returncode, 2)
         self.assertEqual(malformed.stdout, '')
+
+    def test_installed_post_edit_lint_runs_only_approved_project(self):
+        f.install(self.root, hooks=True)
+        script = self.root / '.codex/framework/hook.py'
+        project = self.root / 'proj'
+        project.mkdir()
+        marker = 'INSTALLED_LINT_PRIVATE_MARKER'
+        failer = self.root / 'lint-fail.py'
+        failer.write_text(f'import sys\nprint("{marker}")\nsys.exit(5)\n')
+        registry = self.root / '.codex/framework/lint-projects.json'
+        registry.write_text(json.dumps({'version': 1, 'projects': [
+            {'root': str(project), 'command': [sys.executable, str(failer)]}]}))
+        registry.chmod(0o600)
+        approved = {'hook_event_name': 'PostToolUse', 'tool_name': 'Write', 'cwd': str(project),
+                    'tool_input': {'file_path': 'x'}}
+        result = subprocess.run([sys.executable, str(script)], input=json.dumps(approved),
+                                capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        context = json.loads(result.stdout)['hookSpecificOutput']['additionalContext']
+        self.assertIn('exit code 5', context)
+        self.assertNotIn(marker, context)
+        # An unapproved cwd falls back to the quality-gate reminder, running nothing.
+        unapproved = dict(approved, cwd=str(self.root))
+        fallback = subprocess.run([sys.executable, str(script)], input=json.dumps(unapproved),
+                                  capture_output=True, text=True, timeout=10)
+        self.assertEqual(fallback.returncode, 0, fallback.stderr)
+        self.assertIn('quality gate', json.loads(fallback.stdout)['hookSpecificOutput']['additionalContext'])
 
     def test_packaged_resources_retain_executable_behavior(self):
         f.install(self.root)
