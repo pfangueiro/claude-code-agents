@@ -10,6 +10,10 @@ amend commits, or skip hooks without an explicit request. Update CHANGELOG.md
 with behavioral changes. Do not commit generated installation directories.
 
 Verify source claims at the recorded SHA. Read the implementation before editing.
+Current inventory and limits live in README, INSTALL and `codex/FEATURES.md`; past
+acceptance snapshots are archived under `docs/archive/` (see `docs/archive/README.md`)
+as historical records — cite them for provenance, not as current state, and do not
+relabel their dates, SHAs or counts as current.
 Use independent reviewers for substantial changes; reviewers must not review
 their own implementation. Parallel writes require disjoint scopes and isolated
 worktrees. Discover tools at runtime; do not assume a named MCP is connected.

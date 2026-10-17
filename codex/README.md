@@ -154,9 +154,10 @@ so undeclared resource dependencies cannot be hidden by the runner's installed p
 
 Official references checked for this adaptation:
 
-Actual laptop deployment and read-only cross-project/CLI tests are recorded in
-[GLOBAL-VALIDATION.md](GLOBAL-VALIDATION.md). Maintenance rules are in `../AGENTS.md`
-and architecture notes in `../MEMORY.md`.
+The 2026-10-12 laptop deployment and read-only cross-project/CLI tests are recorded in the
+archived [GLOBAL-VALIDATION.md](../docs/archive/codex-2026-10-12/GLOBAL-VALIDATION.md) (a historical
+snapshot, not a current check). Maintenance rules are in `../AGENTS.md` and architecture notes in
+`../MEMORY.md`.
 
 - [Skill discovery and invocation](https://learn.chatgpt.com/docs/build-skills)
 - [Native custom agents](https://learn.chatgpt.com/docs/agent-configuration/subagents)

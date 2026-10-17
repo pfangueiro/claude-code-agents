@@ -1,5 +1,12 @@
 # Independent acceptance result
 
+> **Historical snapshot — archived 2026-10-17.** A point-in-time record from the
+> 2026-10-12 Codex adaptation, not a current check. Its counts, SHAs and results
+> describe that milestone and are preserved verbatim. See
+> [docs/archive/README.md](../README.md) for scope and the
+> [current docs](../../../README.md) / [feature matrix](../../../codex/FEATURES.md)
+> for the live framework.
+
 This records the initial adapter review before global installation. Subsequent
 laptop deployment and cross-project tests are recorded in [GLOBAL-VALIDATION.md](GLOBAL-VALIDATION.md).
 
@@ -48,6 +55,6 @@ local procedure use, not an authenticated native custom-profile spawn.
 
 Native custom-profile spawning, hook trust UI and authenticated desktop/IDE/cloud
 behavior remain unverified. Dashboard, watchdog/self-healing, notifications, statusline,
-automatic linting and automatic snapshots are not implemented. See [FEATURES.md](FEATURES.md).
+automatic linting and automatic snapshots are not implemented. See [FEATURES.md](../../../codex/FEATURES.md).
 No global installation, personal auth/configuration access, live-data writes, commits,
 remote publishing or external messages were performed.

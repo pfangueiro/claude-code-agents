@@ -6,9 +6,10 @@ Codex requires Python 3.11+/PyYAML for building/installing; see [INSTALL.md](INS
 No project-by-project copying is needed with the default user profile.
 
 Codex workflow names are prefixed, for example `$sdlc-code-review-checklist` and
-`$sdlc-execute`. The adapter supplies 39 workflows plus 13 specialist guides (52
-skill directories) and 13 native agent definitions. Use a guide if native custom
-roles are unavailable. Selection uses model judgment; a skill is not an access policy.
+`$sdlc-execute`. The adapter supplies 42 workflows plus 13 specialist guides (55
+skill directories, 52 implicitly invocable) and 13 native agent definitions. Use a guide
+if native custom roles are unavailable. Selection uses model judgment; a skill is not an
+access policy.
 
 ## What Are Skills?
 
@@ -22,7 +23,7 @@ Skills are modular knowledge packages that extend Claude's capabilities with dom
 
 ## Included Skills
 
-The Claude source contains 27 skills. These four are introductory examples:
+The Claude source contains 30 skills. These four are introductory examples:
 
 ### 1. skill-creator
 **Purpose:** Create new skills

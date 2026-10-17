@@ -50,8 +50,10 @@ AGENTS.md and relevant source before relying on these notes.
 - Validate Python resources in a clean virtual environment populated only from declared
   dependencies. A passing system-Python run can hide missing dependencies; the first
   Linux Codex CI run caught an undeclared Requests import in the bundled health checker.
-- Consult [FEATURES](codex/FEATURES.md), [review](codex/REVIEW.md) and
-  [global validation](codex/GLOBAL-VALIDATION.md). Dashboard, watchdog, notifications,
+- Consult [FEATURES](codex/FEATURES.md) for current capability limits; the 2026-10-12
+  acceptance snapshots ([review](docs/archive/codex-2026-10-12/REVIEW.md),
+  [global validation](docs/archive/codex-2026-10-12/GLOBAL-VALIDATION.md)) are archived
+  historical records under [docs/archive/](docs/archive/README.md). Dashboard, watchdog, notifications,
   the Claude statusline renderer, automatic linting and snapshots remain unported. MCP
   examples are disabled and Codex hooks are opt-in. The status bar counterpart is an
   opt-in `tui.status_line` example of built-in footer IDs (context remaining, native
@@ -63,6 +65,12 @@ AGENTS.md and relevant source before relying on these notes.
 
 - Initial adaptation input: `509d282a195cc7a0e3b4d63b51b5f791be519eed`. Retain
   historical audit inputs and record subsequent verification separately.
+- Past acceptance snapshots are historical records, not current checks. The 2026-10-12
+  Codex audit/review/global-validation/worklog live under
+  `docs/archive/codex-2026-10-12/` and the v2.1 skills summary under
+  `docs/archive/legacy-skills-integration.md` (see `docs/archive/README.md`). Keep their
+  dates, SHAs and counts verbatim; current inventory and limits stay in README, INSTALL
+  and `codex/FEATURES.md`.
 - Global discovery passed in two unrelated repositories and a nested directory.
   Actual Codex/Claude reviewers reproduced one synthetic boundary defect without
   changing fixture source. This is representative validation, not every workflow.

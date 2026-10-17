@@ -45,14 +45,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The Codex-only override, which still ran tests and review before the commit and so let
   a later commit bypass the exact-candidate verdict, is removed; a test requires the
   exported body to match the canonical command. Explicit-only invocation is unchanged.
+- Documentation/obsolete-file cleanup from input `3618b31`: moved the 2026-10-12 Codex
+  acceptance snapshots (`REVIEW.md`, `PUBLICATION-REVIEW.md`, `GLOBAL-VALIDATION.md`,
+  `WORKLOG.md`) to `docs/archive/codex-2026-10-12/` and the v2.1 skills summary to
+  `docs/archive/legacy-skills-integration.md`, each with a historical-scope banner, behind
+  a new `docs/archive/README.md` index; repointed every active link and corrected obsolete
+  counts (INSTALL/EXTENSIBILITY/SKILLS-QUICKSTART still said 27 skills, 6 rules or 39/52
+  Codex bundles). Snapshot SHAs, hashes and measured counts are preserved verbatim as
+  historical records, not relabeled as current.
+- Corrected the Claude installer ownership claim: `~/.claude/hooks/` is pruned to exactly
+  the current source set (`install.sh:844`), so a personal hook file left there is removed,
+  and framework-owned hook-event arrays and the `.permissions` block are replaced wholesale
+  on drift. For agents, skills, commands, rules and lib the installer instead manages by
+  basename: it overwrites a framework-owned file of the same name, prunes names the framework
+  has since retired, and leaves a non-colliding personal file of a different name in place — it
+  does not track provenance. The hooks directory is the broader exception, pruned to exactly the
+  current source set as above (README, INSTALL).
 
 ### Fixed
+
+- README MCP badge linked to `#-mcp-integration`, a fragment with no matching heading (the
+  slug for `## MCP Integration` is `#mcp-integration`); corrected the anchor. Added
+  `tests/codex/test_documentation.py` guarding README local file and heading-anchor links.
+  The guard ignores fenced code regions (backtick/tilde code blocks) for both heading and
+  target extraction, so a link to a heading that appears only inside a code sample is flagged
+  broken and example links shown inside code samples are not false-positives. Controls are
+  self-contained fixtures — the original `-mcp-integration` bad fragment, a valid heading
+  target, and fenced-only heading rejection — rather than assertions on the live badge text,
+  which would have rejected a legitimate future badge removal (input `14bc5de`).
+- README link guard still accepted a link into a heading nested inside a *wider* fenced
+  block: `strip_fenced_code` tracked only the fence character, so an inner three-backtick run
+  closed an outer four-backtick fence early and exposed its `# Phantom` line as a rendered
+  anchor, falsely resolving the link. It now records the opening fence character *and* run
+  length and closes only on a line of that same character whose run is at least as long as the
+  opening — a shorter inner run stays inside the block — matching how GitHub renders the
+  closing fence. Added two self-contained controls to `tests/codex/test_documentation.py`: the
+  four-backtick/shorter-inner-fence regression and a symmetric valid case where the same
+  nested-fence shape still resolves a real heading outside the block (input `c09bdc9`).
+- `docs/archive/README.md` mislabeled the archived Codex-adaptation counts: `49/52 installed
+  skill bundles` read as "49 of 52" when the snapshot recorded 49 **implicit** skills out of 52
+  **total** installed bundles (and 39 workflows = 36 implicit + 3 explicit-only). Relabeled the
+  as-of-date figures and dropped the copied current-inventory parenthetical in favor of the
+  already-linked current docs, so the archive index no longer restates live counts (input
+  `14bc5de`).
+- `README.md`/`INSTALL.md` "framework-scoped" sections overstated preservation, claiming personal
+  `agents/skills/commands/rules/lib` files are preserved on every install and "never a candidate"
+  for removal. Documented the basename-collision reality: the installer manages the basenames it
+  currently ships or has explicitly retired; a non-colliding personal name is never touched, but a
+  personal file sharing a currently-shipped basename is overwritten by the shipped copy and one
+  left at an explicitly-retired name is eligible for pruning (hooks remain the broader exception —
+  any `.sh`/`.json` absent from source is pruned). Documentation only; no runtime change (input
+  `14bc5de`).
 
 - Codex Linux CI dependency failure at `1debb18`: declare Requests 2.34.2 for the exported
   health checker, run adapter CI in a clean Python environment, and prove the resource
   dependency gate with an injected missing import and restored control. The same missing
   Requests error was reproduced with the original manifest in a clean Python 3.11 env;
   preserve the failing gate rather than skipping resource execution.
+
+### Removed
+
+- `clean-old-agents.sh` (input `3618b31`): an unused v1 helper that deleted project-local
+  agent filenames from `.claude/agents/`. No installer, test, CI job or doc referenced it;
+  the current installers are `install.sh` and `install-codex.sh`. Removed, not archived.
 
 ### Added
 

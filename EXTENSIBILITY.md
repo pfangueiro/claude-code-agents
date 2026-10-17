@@ -918,7 +918,7 @@ If you have existing documentation or workflows:
 ```
 claude-code-agents/
 ├── .claude/
-│   ├── skills/                    # Skills (Blue) — 27 total
+│   ├── skills/                    # Skills (Blue) — 30 total
 │   │   ├── skill-creator/
 │   │   ├── git-workflow/
 │   │   ├── code-review-checklist/
@@ -945,7 +945,10 @@ claude-code-agents/
 │   │   ├── deep-read/             # Orchestration
 │   │   ├── diverge/               # Divergence (parallel ideation)
 │   │   ├── library-docs/          # MCP-powered
-│   │   └── deep-analysis/         # MCP-powered + Orchestration
+│   │   ├── deep-analysis/         # MCP-powered + Orchestration
+│   │   ├── delivery/              # Delivery (provider-neutral outcome contract)
+│   │   ├── repo-context/          # Delivery (read-only repo discovery)
+│   │   └── verified-handoff/      # Delivery (check receipts bound to a commit)
 │   │
 │   ├── agents/                    # Agents (Orange) — 13 total
 │   │   ├── architecture-planner.md
@@ -977,13 +980,14 @@ claude-code-agents/
 │   │   ├── resume-session.md
 │   │   └── optimize.md
 │   │
-│   ├── rules/                     # Auto-enforced rules — 6 total
+│   ├── rules/                     # Instruction rules (guidance) — 7 total
 │   │   ├── security.md
 │   │   ├── code-quality.md
 │   │   ├── fix-quality.md
 │   │   ├── verification.md
 │   │   ├── framework-integrity.md
-│   │   └── anti-anchoring.md
+│   │   ├── anti-anchoring.md
+│   │   └── delivery.md
 │   │
 │   └── lib/                       # Shared infrastructure
 │       ├── agent-templates.json
@@ -1007,7 +1011,7 @@ claude-code-agents/
 - [Claude Code Documentation](https://docs.claude.com/claude-code)
 - [MCP Documentation](https://modelcontextprotocol.io)
 
-### Skills in This Project (27)
+### Skills in This Project (30)
 - `skill-creator`: Create new skills from templates
 - `git-workflow`: Git best practices and conventions
 - `code-review-checklist`: Systematic code review framework
@@ -1035,6 +1039,9 @@ claude-code-agents/
 - `observability-stack`: OpenTelemetry, Prometheus/Grafana, RED/USE metrics, SLI/SLO
 - `sre-runbooks`: On-call handbook, postmortems, error budgets, chaos engineering
 - `infrastructure-as-code`: Terraform/CDK/Pulumi patterns, IaC testing, state management
+- `delivery`: Provider-neutral delivery contract, implementer/verifier roles, receipts
+- `repo-context`: Read-only repository discovery (Git root, HEAD, dirty state, instructions)
+- `verified-handoff`: Check receipts bound to an exact commit, verified against a manifest
 
 ### Agents in This Project
 - `architecture-planner`: System design and API specifications
@@ -1047,6 +1054,7 @@ claude-code-agents/
 - `frontend-specialist`: Frontend development and UI/UX
 - `api-backend`: Backend API development
 - `incident-commander`: Emergency response and triage
+- `sre-specialist`: SRE, SLOs, error budgets, on-call, capacity and chaos engineering
 - `code-quality`: Code review and quality assessment
 - `meta-agent`: Generates new specialized agents
 

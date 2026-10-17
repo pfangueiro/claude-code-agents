@@ -1,5 +1,12 @@
 # Publication acceptance
 
+> **Historical snapshot — archived 2026-10-17.** A point-in-time record from the
+> 2026-10-12 Codex adaptation, not a current check. Its counts, SHAs and payload
+> fingerprints describe that milestone and are preserved verbatim. See
+> [docs/archive/README.md](../README.md) for scope and the
+> [current docs](../../../README.md) / [feature matrix](../../../codex/FEATURES.md)
+> for the live framework.
+
 Implementation input: `aadd77c383189d5b72e06e89aff87a2e3285cae8`, parent
 `c4f343a89fcd7311c4973708048c04670f299de3`. The parent was fast-forwarded from GitHub
 before implementing publication changes, preserving prior commit SHAs.

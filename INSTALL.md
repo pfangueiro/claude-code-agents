@@ -17,9 +17,9 @@ python3 -m pip install -r codex/requirements.txt
 ./install-codex.sh --user --check
 ```
 
-Writes 52 skill bundles to `~/.agents/skills`, 13 specialist TOML definitions to
-`~/.codex/agents`, resources/ownership metadata to `~/.codex/framework`, and a managed
-block in `~/.codex/AGENTS.md`. Existing config.toml, auth, MCP settings and personal
+Writes 55 skill bundles (42 workflows + 13 specialist guides) to `~/.agents/skills`,
+13 specialist TOML definitions to `~/.codex/agents`, resources/ownership metadata to
+`~/.codex/framework`, and a managed block in `~/.codex/AGENTS.md`. Existing config.toml, auth, MCP settings and personal
 instruction content are preserved. User installation currently requires default CODEX_HOME.
 
 | Operation | Codex command |
@@ -34,7 +34,7 @@ Foreign/modified files, ambiguous instruction blocks and symlink destinations fa
 Updates do not silently heal owner customizations. MCP examples are disabled and hooks
 are optional; installation does not activate either or bypass native trust. There is no
 Codex watchdog/dashboard/statusline/snapshot parity claim. See [codex/README.md](codex/README.md),
-[feature coverage](codex/FEATURES.md) and [global validation](codex/GLOBAL-VALIDATION.md).
+[feature coverage](codex/FEATURES.md) and the archived [global validation](docs/archive/codex-2026-10-12/GLOBAL-VALIDATION.md).
 
 The remainder describes the Claude installer and its existing runtime.
 
@@ -95,7 +95,7 @@ Most of it lands under `~/.claude/` and is loaded by Claude Code in every projec
 | Path | Contents | Re-install / `--update` behavior |
 |---|---|---|
 | `agents/`, `commands/`, `rules/`, `lib/` | The framework's `.md` / `.json` files | Each framework-owned file is **replaced** so drift heals. Framework files deleted from source are pruned. |
-| `skills/` | 27 skill directories | Each framework skill directory is `rm -rf`'d and re-copied, so files deleted *inside* a skill heal too. |
+| `skills/` | 30 skill directories | Each framework skill directory is `rm -rf`'d and re-copied, so files deleted *inside* a skill heal too. |
 | `hooks/` | 9 `.sh` scripts (made executable) + 2 reference `.json` configs | Replaced. Hook files no longer in source are pruned, as are stale `settings.json` hook-event bindings that point at a framework script. |
 | `output-styles/concise.md` | Code-first output style | Written on a **bare install only** — `--update` does not reconcile it. |
 | `statusline.sh` | Status bar script | Replaced **only when it differs from source** (byte-compare); skipped when identical. |
@@ -138,15 +138,26 @@ Want custom permissions, attribution, or a different statusline? Put them in
 ### It is framework-scoped — your own content is preserved
 
 `~/.claude/{agents,skills,commands,rules,lib}` is shared with anything **you** have put there.
-The install is fail-closed about this: a copy only ever replaces a file the framework itself ships,
-and the orphan-prune is only ever *eligible* to remove a name the framework currently ships or has
-explicitly listed as retired. A personal skill, agent, command, or rule is never a candidate for
-deletion — the check cannot even reach it.
+The install manages exactly the **basenames** the framework currently ships or has explicitly
+listed as retired: it replaces each shipped name and is only ever *eligible* to prune a
+shipped-but-removed or explicitly-retired name. A personal skill, agent, command, rule or lib file
+whose name is neither shipped nor retired is never a candidate — the orphan-prune cannot even reach
+it. Preservation is by non-colliding **name**, not by origin, so two name collisions are the
+exception: a personal file that shares a currently-shipped basename (e.g. your own
+`code-quality.md`) is **overwritten** by the shipped copy, and one left at an explicitly-retired
+framework name is **eligible for pruning**.
+
+`~/.claude/hooks/` is the exception. It is reconciled to **exactly the current source set**: any
+`.sh`/`.json` there that the current framework does not ship is pruned, so a personal hook script
+left in that directory is **not** preserved (see the `hooks/` row above). In `settings.json`,
+framework-owned hook-event arrays and the `.permissions` block are likewise replaced wholesale on
+drift — put custom permissions in `settings.local.json`.
 
 Measured, not assumed. With a personal skill, agent, command and rule planted in a throwaway `HOME`,
 two consecutive `./install.sh --update` runs left all four **byte-identical**, and the skills
 directory held 27 framework + 1 personal. Separately, a working machine here carries 14 personal
-skills alongside the framework's 27, and all 41 are present.
+skills alongside the framework's 27, and all 41 are present. (Both figures were measured when the
+framework shipped 27 skills; it now ships 30.)
 
 You can run the same check yourself before trusting it:
 
@@ -234,7 +245,7 @@ cd claude-code-agents && git pull --ff-only    # the one manual step; the rest i
 ./install.sh --update                          # optional: reconcile now instead of waiting for self-heal
 ```
 
-`--update` re-copies the framework's shared set to `~/.claude` (replacing framework files so drift heals) while preserving your own `~/.claude/CLAUDE.md`, personal skills, and settings.
+`--update` re-copies the framework's shared set to `~/.claude` (replacing framework files so drift heals) while preserving your own `~/.claude/CLAUDE.md`, your non-colliding personal files, and settings (a personal file sharing a shipped or retired framework basename is the exception — see [framework-scoped](#it-is-framework-scoped--your-own-content-is-preserved) above).
 
 **Optional — autonomously migrate old per-project `.claude/` copies.** If you previously deployed the framework into individual projects, create an opt-in marker so `--update` migrates them to user-global for you:
 

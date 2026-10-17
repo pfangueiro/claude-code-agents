@@ -1,11 +1,11 @@
 # Skills System Integration - Project Summary
 
-> **Historical record (v2.1 integration).** Dates, component counts and measurements
-> below describe that earlier milestone, not current inventory or compatibility.
-> Current architecture is one repository with Claude/Codex integrations: 27 source skills,
-> 12 executable command templates and 13 specialists; Codex generates 39 workflows plus
-> 13 guide fallbacks. Use [README.md](README.md), [INSTALL.md](INSTALL.md) and
-> [codex/FEATURES.md](codex/FEATURES.md) for current setup and limits.
+> **Historical snapshot — archived 2026-10-17 (v2.1 integration, October 2024).**
+> Every date, component count and measurement below describes that earlier milestone,
+> not current inventory or compatibility, and is preserved verbatim. For the live
+> framework and its current counts see [README.md](../../README.md),
+> [INSTALL.md](../../INSTALL.md) and [codex/FEATURES.md](../../codex/FEATURES.md); for
+> the other archived snapshots see [docs/archive/README.md](README.md).
 
 **Version:** 2.1.0
 **Date:** October 28, 2024
