@@ -138,28 +138,56 @@ retain or remove.
 Opt-in post-edit lint (disabled until you create the registry):
 
 - The installer ships `.codex/framework/lint.py` beside the hook but **never creates or
-  trusts** the registry. You add `~/.codex/framework/lint-projects.json` yourself (a
-  project install reads it beside that project's `.codex/framework/`). Until it exists,
-  a successful supported PostToolUse edit (`apply_patch`, `Write`, `Edit`) only produces
-  the quality-gate reminder; non-edit events never run a command.
-- Format: `{"version": 1, "projects": [{"root": "<absolute canonical project dir>",
-  "command": ["<absolute executable>", "..."], "timeout": <1..30, default 10>}]}`. The
-  registry must be a regular file you own, without group/world write and with no symlink
-  at it or any ancestor. A malformed, duplicate, unknown-version, unsafe, symlinked or
-  unreadable registry runs nothing and returns a static notice.
+  trusts** the registry. Approval always comes from the single owner-global
+  `~/.codex/framework/lint-projects.json`, for both user and project installs; a
+  project-local registry is never consulted, so a repository cannot carry its own
+  execution approval. Until the owner-global registry exists, a recognized-successful
+  supported PostToolUse edit (`apply_patch`, `Write`, `Edit`) only produces the
+  quality-gate reminder; non-edit events never run a command.
+- A command runs only on a recognized positive edit result — the canonical apply_patch
+  success text or a structured `{"success": true}`. An explicitly failed edit runs
+  nothing and emits no feedback at all (no lint, no reminder). An unknown, missing or
+  unrecognized result also runs nothing, but falls back to a manual quality-gate reminder
+  that states no lint ran and does not assert the edit succeeded.
+- Format: a JSON object with `version` `1` and a `projects` array; each project has an
+  absolute canonical `root`, a `command` argv whose first element is an absolute
+  executable, and an optional `timeout` in seconds (`1`–`30`, default `10`). The single
+  owner-global `~/.codex/framework/lint-projects.json` approves projects for both user and
+  project installs — there is no project-local registry. A copyable example:
+
+  ```json
+  {
+    "version": 1,
+    "projects": [
+      {
+        "root": "/home/you/project",
+        "command": ["/usr/local/bin/npm", "run", "lint"],
+        "timeout": 10
+      }
+    ]
+  }
+  ```
+
+  The registry must be a regular file you own, without group/world write and with no
+  symlink at it or any ancestor. A malformed, duplicate, unknown-version, unsafe,
+  symlinked or unreadable registry runs nothing and returns a static notice.
 - A lint runs only when the event's canonical cwd exactly equals an approved `root`.
   Approval starts at that root: a nested working directory under it is **not**
   automatically approved, and there is no ancestor matching or command autodetection.
 - The approved argv runs directly (`shell=False`, no filename or template interpolation),
   with cwd set to the approved root and stdin/stdout/stderr discarded, inside its own
-  POSIX process group. A timeout sends `SIGTERM` then `SIGKILL`; descendants left after
-  an early-exiting leader are also killed, so no process group is left running. The
-  PostToolUse event timeout (40 s) exceeds the maximum child plus cleanup budget.
+  POSIX process group. A timeout, or a leader that exits while background processes it
+  started are still running, is reported as timed-out/incomplete — **never** as a pass —
+  and the group is signalled `SIGTERM` then `SIGKILL` within a bounded grace. Cleanup is
+  best effort and makes no containment promise: a process that escapes the group is not
+  sandboxed, so the feedback claims only that a stop was signalled. The PostToolUse event
+  timeout (40 s) exceeds the maximum child plus cleanup budget.
 - A user-selected command trusts that project's own code and dependencies; it is **not**
   sandboxed or read-only. No argv, output, environment or patch content appears in the
   hook output or the evidence log — only a static status and the process exit code. A
-  failure or timeout reports the failed check (and exit code) and states the edit was
-  applied and not rolled back; it never claims the edit was reverted.
+  failure, timeout or incomplete run reports the status (and exit code on a plain failure)
+  and states the edit was applied and not rolled back; it never claims the edit was
+  reverted, and incomplete work is never reported as passed.
 
 Validation:
 
@@ -174,11 +202,14 @@ Claude delivery installer suite. Tests use isolated temporary projects and simul
 home layouts. They check real inventory, execution of the exported delivery scripts, YAML/TOML parsing, explicit invocation policy, resource execution, collision
 and modification rejection, personal-file preservation, drift repair, symlink/traversal
 rejection, rollback, native hook payloads and logging privacy. They also cover the
-opt-in post-edit lint (enabled/disabled, unapproved and nested roots, unsafe/malformed/
-symlinked/non-owned/writable registries, literal shell metacharacters, failure privacy,
-timeout with a grandchild, early-leader descendant cleanup and installed stdio operation)
-and the read-only `scripts/framework-status.py` (not-installed/clean/drift/error states,
-before/after trees proving it writes nothing, and JSON/exit-code shape). This is not an
+opt-in post-edit lint (the owner-global-only registry, recognized-success-only execution,
+enabled/disabled, unapproved and nested roots, unsafe/malformed/symlinked/non-owned/
+writable registries, literal shell metacharacters, failure privacy, timeout with a
+grandchild, incomplete work from an early-exiting leader reported as not-passed, and
+installed stdio operation) and the read-only `scripts/framework-status.py`
+(not-installed/clean/drift/error states, requested-vs-installed scope mismatch,
+before/after trees proving it writes nothing — including no source bytecode, and
+JSON/exit-code shape). This is not an
 authenticated end-to-end test across Codex desktop, IDE, CLI and cloud accounts.
 When the Codex CLI is installed, a native prompt-input smoke test checks skill discovery
 and managed instructions in an isolated home; otherwise that check is explicitly skipped.

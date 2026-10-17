@@ -15,27 +15,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`codex/framework.py --check`, `scripts/install-delivery.py --check`) and the
   `~/.claude/.framework-version` marker, native CLI presence, optional Codex hook
   configuration (trust `UNKNOWN` — set in native `/hooks`) and MCP connectivity (`UNKNOWN`
-  — runtime discovery). `--user` (default), `--project PATH`, `--claude-home PATH`,
-  `--json`; exit `0`/`1`/`2` for clean-or-absent/drift/error. It writes nothing, takes no
-  lock, repairs nothing, and never runs the broad installer, `validate.sh`, project
-  scripts, the network or MCP servers, nor reads `config.toml`/`auth.json`/`settings.json`
-  /secrets. Covered by `tests/codex/test_status.py` with before/after target trees.
+  — runtime discovery). The repository SHA is its own HEAD, resolved while stripping
+  inherited Git selectors (`GIT_DIR`, `GIT_WORK_TREE`, …) so a foreign repository in the
+  environment cannot misattribute it. It passes the requested scope to the checker, so a
+  requested-vs-installed scope mismatch (`--project` against a user install, or the reverse)
+  is reported as an `error` rather than silently relabelled clean. `--user` (default),
+  `--project PATH`, `--claude-home PATH`, `--json`; exit `0`/`1`/`2` for
+  clean-or-absent/drift/error. It writes nothing — not even a Python `.pyc` into the source
+  tree (`sys.dont_write_bytecode` is set before the checker import) — takes no lock, repairs
+  nothing, and never runs the broad installer, `validate.sh`, project scripts, the network
+  or MCP servers, nor reads `config.toml`/`auth.json`/`settings.json`/secrets. Covered by
+  `tests/codex/test_status.py` with before/after target trees.
 - Opt-in Codex post-edit lint: `codex/lint.py` ships beside the installed hook (added to
-  `codex/framework.py`'s build and ownership manifest) and runs on a successful supported
-  PostToolUse edit (`apply_patch`/`Write`/`Edit`) only when the event's canonical cwd
-  exactly matches a project approved in the user-owned
-  `~/.codex/framework/lint-projects.json` (nested cwd is not approved). The installer never
-  generates or trusts that registry. The registry must be a regular, owner-only-writable,
-  non-symlinked file (`version 1` + `projects` of `{root, command, timeout 1..30}`);
-  malformed/duplicate/unknown-version/unsafe/symlinked registries run nothing. The approved
-  argv runs directly (no shell, no interpolation, no `--fix`), stdio discarded, in its own
-  POSIX process group with `SIGTERM`→`SIGKILL` on timeout and descendant cleanup after an
-  early-exiting leader; the PostToolUse hook timeout is raised to 40 s. Output carries only
-  a static status and the process exit code — never argv, output, environment or patch
-  content — and a failure/timeout states the edit was applied, not rolled back. The
-  PreToolUse credential guard is unchanged. Covered by `tests/codex/test_lint.py` and new
-  installed-stdio assertions; five new mutation controls added in `tests/codex/mutations.py`
-  (the nine existing controls are preserved).
+  `codex/framework.py`'s build and ownership manifest). Approval comes only from the single
+  owner-global `~/.codex/framework/lint-projects.json`, for both user and project installs;
+  a project-local registry is never consulted, so a repository cannot carry its own
+  execution approval. The installer never generates or trusts that registry. The literal
+  (unresolved) registry path is used for the symlink/ancestor checks so a swapped-in
+  symlinked ancestor is caught rather than resolved away. The registry must be a regular,
+  owner-only-writable, non-symlinked file (`version` exactly `1` — JSON `true` rejected — a
+  `projects` list of `{root, command, timeout 1..30}`, no unknown top-level or entry keys,
+  no duplicate roots); malformed/duplicate/unknown-version/unsafe/symlinked registries run
+  nothing. Lint runs only on a *recognized* successful supported edit (`apply_patch`/`Write`
+  /`Edit`) — the canonical apply_patch success text or a structured `{"success": true}`;
+  an explicitly failed edit runs nothing and emits no feedback at all (no lint, no
+  reminder), while an unknown/missing/unrecognized result runs nothing but falls back to a
+  manual quality-gate reminder that does not assert the edit succeeded. It runs only
+  when the event's canonical cwd exactly matches an approved root (nested cwd is not
+  approved; a relative, NUL-bearing or invalid cwd is rejected). The approved argv runs
+  directly (no shell, no interpolation, no `--fix`), stdio discarded, in its own POSIX
+  process group; the PostToolUse hook timeout is raised to 40 s. A timeout, or a leader that
+  exits while background processes it started are still running, is reported as
+  timed-out/incomplete — never as a pass — and the group is signalled `SIGTERM`→`SIGKILL`
+  within a bounded grace (best effort, with no containment promise). Output carries only a
+  static status and the process exit code — never argv, output, environment or patch content
+  — and a failure/timeout/incomplete run states the edit was applied, not rolled back. The
+  PreToolUse credential guard is unchanged. Covered by `tests/codex/test_lint.py` and
+  installed-stdio assertions; eight lint mutation controls in `tests/codex/mutations.py`
+  (five original plus central owner-global registry, recognized-success gate and
+  incomplete-not-pass; the nine framework controls are preserved).
 - Delivery workflow integration: the portable `delivery`, `repo-context` and
   `verified-handoff` skills and the `delivery` rule ship in both editions. Source inventory
   is 30 skills, 12 command templates and 13 specialists; Codex builds 42 workflows plus

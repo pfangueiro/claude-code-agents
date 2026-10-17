@@ -42,6 +42,10 @@ import sys
 
 REPO = Path(__file__).resolve().parent.parent
 
+# Read-only means the source tree too: never emit .pyc caches while importing the checker
+# modules below. Set before any import so no codex/__pycache__ entry is written.
+sys.dont_write_bytecode = True
+
 try:  # The Codex checker needs PyYAML; degrade to an explicit error if it is absent.
     sys.path.insert(0, str(REPO / 'codex'))
     import framework
@@ -58,8 +62,13 @@ def _load_delivery():
 
 def repository_sha() -> str | None:
     try:
+        if framework is not None:
+            return framework.head_sha()
+        # PyYAML absent (the checker import failed): still ignore inherited Git selectors so a
+        # foreign GIT_DIR or config injection in the environment cannot misattribute our HEAD.
+        env = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
         return subprocess.check_output(['git', '-C', str(REPO), 'rev-parse', 'HEAD'],
-                                       text=True, stderr=subprocess.DEVNULL).strip()
+                                       text=True, stderr=subprocess.DEVNULL, env=env).strip()
     except (OSError, subprocess.CalledProcessError):
         return None
 
@@ -82,12 +91,20 @@ def codex_status(root: Path, user: bool) -> dict:
         return {**result, 'present': True, 'state': 'error', 'detail': 'unreadable or invalid manifest'}
     if not meta.get('files'):
         return {**result, 'present': False, 'state': 'not_installed'}
+    manifest_user = meta.get('user')
+    if isinstance(manifest_user, bool) and manifest_user != user:
+        # The requested scope must not be silently reinterpreted as the installed scope: a
+        # user-install is never reported as a clean project install, or vice versa.
+        requested = 'user' if user else 'project'
+        installed = 'user' if manifest_user else 'project'
+        return {**result, 'present': True, 'state': 'error',
+                'detail': f'requested {requested}-scope status but this install records a {installed}-scope manifest'}
     hooks_configured = bool(meta.get('hooks')) and os.path.lexists(root / '.codex/hooks.json')
     result.update(present=True, installed_source_sha=meta.get('source_sha'),
                   owned_files=len(meta['files']), hooks_configured=hooks_configured,
                   hook_trust='UNKNOWN' if hooks_configured else 'n/a')
     try:
-        framework.install(root, check=True, user=bool(meta.get('user')))
+        framework.install(root, check=True, user=user)
         result['state'] = 'clean'
     except ValueError as err:
         result['state'] = _classify(str(err))

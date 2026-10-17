@@ -143,7 +143,11 @@ $sdlc-agent-code-quality         # apply the code-quality role guide inline
   explicitly when you want a specific one.
 - **Availability is not execution.** Installing or loading a workflow only makes it
   selectable; nothing is implemented, reviewed, merged or deployed until a real tool call
-  or process does it. No watcher, daemon, scheduler or auto-merge runs in the background.
+  or process does it. No scheduler or auto-merge drives that SDLC work in the background,
+  and the portable delivery workflows and the Codex adapter add no background watcher or
+  daemon at all. (The full Claude install does set up one optional self-heal watchdog
+  daemon — documented below — but it only reconciles the install; it never implements,
+  reviews, merges or deploys your work.)
 - **Global by default, overridable per project.** Both editions install user-global and
   apply in every project (Claude from `~/.claude`; Codex skills from `~/.agents/skills`,
   definitions and state from `~/.codex`). A project's own instructions, disabled skills,
@@ -152,8 +156,9 @@ $sdlc-agent-code-quality         # apply the code-quality role guide inline
 - **Not complete parity.** The editions share domain procedures and specialist roles, not
   identical runtime behavior. Codex ports are listed with their limits in
   [codex/FEATURES.md](codex/FEATURES.md); several Claude-only runtime features (dashboard,
-  watchdog, notifications, the custom statusline renderer, automatic linting and snapshots)
-  are unported, and Codex hooks are opt-in and user-trusted.
+  watchdog, notifications, the custom statusline renderer and snapshots) are unported, and
+  automatic lint *rewriting* is unported too — opt-in post-edit lint *checks* are available
+  instead. Codex hooks are opt-in and user-trusted.
 
 Codex examples include `$sdlc-execute`, `$sdlc-review-pr` and `$sdlc-agent-code-quality`.
 Native profile routing depends on the host; guides provide a fallback.
@@ -266,14 +271,18 @@ python3 scripts/framework-status.py --json    # machine-readable
 installed source SHA and owned-integrity state (`not_installed` / `clean` / `drift` /
 `error`), native CLI presence, whether optional Codex hooks are configured (with trust
 reported `UNKNOWN` — grant it in native `/hooks`), and MCP connectivity (`UNKNOWN` —
-servers are discovered at runtime). It reuses the existing read-only checkers
-(`codex/framework.py --check` and `scripts/install-delivery.py --check`) and never writes,
-locks, repairs, runs the broad installer or `validate.sh`, executes project scripts,
-probes the network or starts MCP servers; it does not read `config.toml`, `auth.json`,
-`settings.json` or secrets. Scope flags: `--user` (default) inspects the user-global
-installs, `--project PATH` inspects a project Codex install, `--claude-home PATH`
-overrides the Claude home. Exit status: `0` nothing wrong, `1` drift, `2` error. (The
-Codex integrity check needs the declared Codex Python dependencies.)
+servers are discovered at runtime). The source SHA is its own repository's HEAD, resolved
+while ignoring inherited Git selectors (`GIT_DIR`, `GIT_WORK_TREE`, …) so a foreign
+repository in the environment cannot misattribute it. It reuses the existing read-only
+checkers (`codex/framework.py --check` and `scripts/install-delivery.py --check`) and never
+writes — not even a source `.pyc` — locks, repairs, runs the broad installer or
+`validate.sh`, executes project scripts, probes the network or starts MCP servers; it does
+not read `config.toml`, `auth.json`, `settings.json` or secrets. Scope flags: `--user`
+(default) inspects the user-global installs, `--project PATH` inspects a project Codex
+install, `--claude-home PATH` overrides the Claude home; a requested scope that does not
+match the installed manifest (e.g. `--project` against a user install) is reported as an
+`error`, never silently relabelled clean. Exit status: `0` nothing wrong, `1` drift, `2`
+error. (The Codex integrity check needs the declared Codex Python dependencies.)
 
 Installed components live under `~/.claude/` — verify with `ls ~/.claude/agents ~/.claude/skills ~/.claude/commands ~/.claude/rules`.
 
@@ -537,7 +546,7 @@ Installed once, user-global under `~/.claude/` — Claude Code loads it in every
 ├── agents/          # 13 model-selected SDLC agents
 ├── commands/        # 12 executable templates + README
 ├── skills/          # 30 modular knowledge packages
-├── rules/           # 7 auto-enforced rule sets
+├── rules/           # 7 instruction/guidance rule sets (native permissions enforce access, not these)
 ├── lib/             # Templates, patterns, coordination protocol
 ├── hooks/           # 9 command hooks + 2 reference configs
 ├── daemon/          # launchd watchdog (hourly validate + snapshots) — macOS only

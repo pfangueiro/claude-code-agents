@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -170,6 +171,49 @@ class CliContract(StatusBase):
         result = self.run_cli('--project', str(self.project), '--claude-home', str(self.home))
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn('codex: drift', result.stdout)
+
+
+class RemediationControls(StatusBase):
+    def test_requested_scope_mismatch_is_error_both_directions(self):
+        # A user-scope install queried with a project request (and the reverse) is an error,
+        # never silently relabelled clean; the explanation names the scope.
+        framework.install(self.project, user=True)
+        codex = self.integration(self.collect(user=False, project=self.project), 'codex')
+        self.assertEqual(codex['state'], 'error')
+        self.assertIn('scope', json.dumps(codex).lower())
+        other = self.base / 'proj2'
+        other.mkdir()
+        framework.install(other)  # project-scope manifest (user=False)
+        codex2 = self.status.codex_status(other, user=True)
+        self.assertEqual(codex2['state'], 'error')
+        self.assertIn('scope', json.dumps(codex2).lower())
+
+    def test_inherited_git_dir_does_not_misattribute_repository_sha(self):
+        unrelated = self.base / 'unrelated.git'
+        subprocess.run(['git', 'init', '--bare', '--quiet', str(unrelated)],
+                       check=True, capture_output=True, timeout=10)
+        before = tree(unrelated)
+        env = dict(os.environ, GIT_DIR=str(unrelated))
+        result = self.run_cli('--json', '--project', str(self.project),
+                              '--claude-home', str(self.home), env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report['repository']['sha'], self.status.repository_sha())
+        self.assertRegex(report['repository']['sha'] or '', r'^[0-9a-f]{40}$')
+        self.assertEqual(tree(unrelated), before, 'status touched the inherited Git repository')
+
+    def test_status_writes_no_source_bytecode(self):
+        src = self.base / 'src-copy'
+        for sub in ('codex', 'scripts'):
+            shutil.copytree(ROOT / sub, src / sub, ignore=shutil.ignore_patterns('__pycache__'))
+        env = {key: value for key, value in os.environ.items() if key != 'PYTHONDONTWRITEBYTECODE'}
+        env['HOME'] = str(self.base / 'bc-home')
+        result = subprocess.run([sys.executable, str(src / 'scripts/framework-status.py'),
+                                 '--json', '--claude-home', str(self.home)],
+                                capture_output=True, text=True, env=env, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(list((src / 'codex').rglob('__pycache__')), [])
+        self.assertEqual(list((src / 'scripts').rglob('__pycache__')), [])
 
 
 if __name__ == '__main__':

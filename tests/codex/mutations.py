@@ -57,9 +57,16 @@ def main():
         ('lint failure visibility', test_lint, 'lint', test_lint.CommandExecution, 'test_failing_command_reports_exit_code_without_output_or_argv',
          'if proc.returncode == 0:', 'if True:'),
         ('lint descendant cleanup', test_lint, 'lint', test_lint.CommandExecution, 'test_leader_exit_cleans_lingering_descendant',
-         "        # Kill any descendants lingering in the leader's process group, whether the\n"
-         "        # leader timed out or exited early on its own. Never leave a group running.\n"
-         "        _signal_group(pgid, signal.SIGKILL)", '        pass'),
+         '        _signal_group(pgid, signal.SIGKILL)\n        _wait_group_exit(pgid, GRACE)', '        pass'),
+        # New remediation controls: incomplete work is not a pass, approval is owner-global,
+        # and only a recognized successful edit runs lint.
+        ('lint incomplete not reported as pass', test_lint, 'lint', test_lint.CommandExecution, 'test_leader_exit_cleans_lingering_descendant',
+         'if killed:', 'if False:'),
+        ('lint central owner-global registry', test_lint, 'lint', test_lint.RegistryLocation, 'test_registry_is_user_global_not_project_local',
+         "REGISTRY = Path.home() / '.codex/framework/lint-projects.json'",
+         "REGISTRY = Path(__file__).resolve().parent / 'lint-projects.json'"),
+        ('lint positive-success gate', test_lint, 'hook', test_lint.HookIntegration, 'test_unrecognized_edit_result_does_not_run_lint',
+         'if not edit_succeeded(event):', 'if False:'),
     ]
     for label, module, attr, case_class, test, before, after in cases:
         original = getattr(module, attr)

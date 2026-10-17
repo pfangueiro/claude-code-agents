@@ -42,20 +42,29 @@ files the existing `--check` logic compares, and the `~/.claude/.framework-versi
 to report the repository SHA, each integration's installed source SHA and owned-integrity
 state (`not_installed`/`clean`/`drift`/`error`), native CLI presence, whether optional
 Codex hooks are configured (trust reported `UNKNOWN` — grant it in native `/hooks`) and
-MCP connectivity (`UNKNOWN` — runtime discovery). It writes nothing, takes no lock,
-repairs nothing and never runs the broad installer, `validate.sh`, a project script, the
-network or an MCP server, and it does not read `config.toml`, `auth.json`, `settings.json`
-or secrets. Exit status is `0` (clean or not installed), `1` (drift) or `2` (error). The
-Codex integrity check additionally needs the declared Codex Python dependencies.
+MCP connectivity (`UNKNOWN` — runtime discovery). It reports the source SHA of its own
+repository, ignoring inherited Git selectors (`GIT_DIR`, `GIT_WORK_TREE`, …) so a foreign
+repository in the environment cannot misattribute it, and it honors the requested scope —
+`--project` against a user-scope install (or the reverse) is reported as an `error`, never
+silently relabelled clean. It writes nothing — not even a Python `.pyc` into the source
+tree — takes no lock, repairs nothing and never runs the broad installer, `validate.sh`, a
+project script, the network or an MCP server, and it does not read `config.toml`,
+`auth.json`, `settings.json` or secrets. Exit status is `0` (clean or not installed), `1`
+(drift) or `2` (error). The Codex integrity check additionally needs the declared Codex
+Python dependencies.
 
 If the optional Codex hooks are installed, PostToolUse can run an **opt-in, user-approved**
 post-edit lint. The installer ships the runner but never creates or trusts the registry;
-you add `~/.codex/framework/lint-projects.json` yourself (`{"version": 1, "projects":
-[{"root": "<abs canonical dir>", "command": ["<abs exe>", …], "timeout": 1-30}]}`). It runs
-the approved command only when the edit's canonical cwd exactly matches an approved root
-(a nested directory is not approved), directly without a shell or `--fix`, bounded by a
-timeout in its own process group; the hook reports only a status and exit code. Until the
-registry exists, PostToolUse just reminds you to run the quality gate.
+approval always comes from the single owner-global `~/.codex/framework/lint-projects.json`
+(for both user and project installs — a project-local file is never consulted), which you
+add yourself (`{"version": 1, "projects": [{"root": "<abs canonical dir>", "command":
+["<abs exe>", …], "timeout": 1-30}]}`). It runs the approved command only on a
+recognized-successful edit whose canonical cwd exactly matches an approved root (a nested
+directory is not approved), directly without a shell or `--fix`, bounded by a timeout in
+its own process group; the hook reports only a status and exit code, and a timeout or a
+leader that leaves background work running is reported as incomplete, never as passed.
+Until the owner-global registry exists, PostToolUse just reminds you to run the quality
+gate.
 
 The remainder describes the Claude installer and its existing runtime.
 

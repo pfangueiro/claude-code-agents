@@ -62,24 +62,37 @@ AGENTS.md and relevant source before relying on these notes.
   config; width clips trailing items) plus instruction guidance to title the current task `SDLC | <task>` where a
   native rename capability exists; the marker means guidance loaded, not checks passed.
 - Opt-in post-edit lint: the installer ships `.codex/framework/lint.py` beside the hook
-  but never creates or trusts the registry `~/.codex/framework/lint-projects.json`
-  (user-owned, regular, non-symlink, owner-only writable; version 1 + projects
-  `{root, command, timeout}`). On a successful supported PostToolUse edit whose canonical
-  cwd exactly equals an approved root (nested cwd is not approved), the approved argv runs
-  directly — no shell, no interpolation, no `--fix` — with stdio discarded, in its own
-  process group with TERM/KILL and descendant cleanup, under the 40 s PostToolUse budget.
-  Output carries only a static status and the exit code; no argv/output/env. Missing
-  registry or entry falls back to the quality-gate reminder; an unsafe one runs nothing.
-  The PreToolUse credential guard is unchanged. Five new mutation controls cover it;
-  the nine existing controls are preserved.
-- `scripts/framework-status.py` is a read-only cross-integration status: repository SHA,
-  each integration's installed source SHA and owned-integrity state (not_installed/clean/
-  drift/error) via the existing `framework.py --check` and `install-delivery.py --check`
-  logic, native CLI presence, Codex hook config (trust UNKNOWN → `/hooks`) and MCP
-  connectivity UNKNOWN. `--user` default, `--project PATH`, `--claude-home PATH`, `--json`;
-  exit 0 clean/absent, 1 drift, 2 error. It never writes, locks, repairs, runs the broad
-  installer/validate, executes project scripts, probes networks or reads config/auth/
-  settings/secrets.
+  but never creates or trusts the registry. Approval is always the single owner-global
+  `~/.codex/framework/lint-projects.json` (both user AND project installs; a project-local
+  registry is never consulted, and the literal unresolved path is used for the symlink/
+  ancestor checks so a swapped-in symlinked ancestor is caught, not resolved away).
+  Registry: owner-only regular non-symlink file, version exactly `1` (JSON `true` rejected),
+  no unknown top-level or entry keys, no duplicate roots, argv of absolute literal strings,
+  integer timeout 1-30. Lint runs only on a RECOGNIZED positive edit result (canonical
+  apply_patch success text or structured `{"success": true}`); explicit failure runs
+  nothing and emits NO feedback (no lint, no reminder), while an unknown/missing/unrecognized
+  result runs nothing but falls back to a manual quality-gate reminder that does not assert
+  success. On an approved exact-root match (nested cwd not
+  approved; relative/NUL/invalid cwd rejected) the argv runs directly — no shell, no
+  interpolation, no `--fix` — stdio discarded, in its own process group under the 40 s
+  PostToolUse budget. A timeout, or a leader that exits while descendants it spawned are
+  still running, is reported as timed-out/incomplete — never passed — with best-effort
+  TERM→KILL cleanup and no containment promise. Output carries only a static status and the
+  exit code. The PreToolUse credential guard is unchanged. Eight lint mutation controls
+  (five original + three remediation: central owner-global registry, recognized-success
+  gate, incomplete-not-pass) plus the nine framework controls, all gap-tested.
+- `scripts/framework-status.py` is a read-only cross-integration status: repository SHA
+  (its own HEAD, resolved while stripping inherited Git selectors like `GIT_DIR` so a
+  foreign repo in the environment cannot misattribute it), each integration's installed
+  source SHA and owned-integrity state (not_installed/clean/drift/error) via the existing
+  `framework.py --check` and `install-delivery.py --check` logic, native CLI presence, Codex
+  hook config (trust UNKNOWN → `/hooks`) and MCP connectivity UNKNOWN. It passes the
+  REQUESTED scope to the checker: a requested-vs-installed scope mismatch is an `error`,
+  never silently relabelled clean. `--user` default, `--project PATH`, `--claude-home PATH`,
+  `--json`; exit 0 clean/absent, 1 drift, 2 error. It never writes — not even a source
+  `.pyc` (`sys.dont_write_bytecode` is set before importing the checker) — locks, repairs,
+  runs the broad installer/validate, executes project scripts, probes networks or reads
+  config/auth/settings/secrets.
 
 ## Evidence and publishing
 

@@ -67,8 +67,10 @@ class LintBase(unittest.TestCase):
         self.registry.chmod(mode)
 
     def event(self, cwd=None):
+        # Carry a recognized successful edit result: the hook runs lint only on a confirmed success.
         return {'hook_event_name': 'PostToolUse', 'tool_name': 'Write',
-                'cwd': str(cwd if cwd is not None else self.project), 'tool_input': {'file_path': 'x'}}
+                'cwd': str(cwd if cwd is not None else self.project),
+                'tool_input': {'file_path': 'x'}, 'tool_response': {'success': True}}
 
     def context(self, result):
         return (result or {}).get('hookSpecificOutput', {}).get('additionalContext')
@@ -156,6 +158,30 @@ class RegistrySafety(LintBase):
                 self.write_registry([entry])
                 self.assertUnsafe()
 
+    def test_unknown_top_level_key_and_bool_version_rejected(self):
+        entry = {'root': str(self.project), 'command': [PY, '-c', 'pass']}
+        # JSON true == 1 in Python, so a bool version must be rejected explicitly; unknown
+        # top-level keys must fail closed just like unknown entry keys.
+        for content in (json.dumps({'version': 1, 'projects': [entry], 'extra': 'x'}),
+                        json.dumps({'version': True, 'projects': [entry]})):
+            with self.subTest(content=content):
+                self.registry.write_text(content)
+                self.registry.chmod(0o600)
+                self.assertUnsafe()
+
+    def test_symlink_registry_ancestor_rejected(self):
+        # The literal (unresolved) registry path is checked, so a symlinked ancestor directory
+        # is caught rather than being resolved away before the guard runs.
+        real = self.root / 'real-state'
+        real.mkdir()
+        link = self.root / 'linked-state'
+        link.symlink_to(real, target_is_directory=True)
+        (real / 'lint-projects.json').write_text(json.dumps(
+            {'version': 1, 'projects': [{'root': str(self.project), 'command': [PY, '-c', 'pass']}]}))
+        (real / 'lint-projects.json').chmod(0o600)
+        with patch.object(lint, 'REGISTRY', link / 'lint-projects.json'):
+            self.assertEqual(self.context(lint.run_lint(self.event())), lint.UNSAFE)
+
 
 class CommandExecution(LintBase):
     def test_failing_command_reports_exit_code_without_output_or_argv(self):
@@ -202,8 +228,11 @@ class CommandExecution(LintBase):
             force_kill(grandchild)
 
     def test_leader_exit_cleans_lingering_descendant(self):
+        # A leader that exits 0 while a descendant it spawned is still running is incomplete
+        # lint work, never a pass. The descendant ignores SIGTERM to force escalation to KILL.
         dpid = self.root / 'descendant.pid'
-        sleeper = self.helper('sleeper2.py', 'import os, sys, time\n'
+        sleeper = self.helper('sleeper2.py', 'import os, signal, sys, time\n'
+                              'signal.signal(signal.SIGTERM, signal.SIG_IGN)\n'
                               'open(sys.argv[1], "w").write(str(os.getpid()))\ntime.sleep(60)\n')
         leader = self.helper('leader2.py', 'import os, subprocess, sys, time\n'
                              'subprocess.Popen([sys.executable, sys.argv[1], sys.argv[2]])\n'
@@ -214,7 +243,7 @@ class CommandExecution(LintBase):
                               'command': [PY, leader, sleeper, str(dpid)], 'timeout': 10}])
         descendant = None
         try:
-            self.assertEqual(self.context(lint.run_lint(self.event())), lint.SUCCESS)
+            self.assertEqual(self.context(lint.run_lint(self.event())), lint.INCOMPLETE)
             self.assertTrue(dpid.exists(), 'descendant never started')
             descendant = int(dpid.read_text())
             self.assertTrue(wait_dead(descendant), 'descendant left running after leader exit')
@@ -244,6 +273,25 @@ class HookIntegration(LintBase):
     def test_reminder_fallback_when_not_opted_in(self):
         out = hook.inspect_event(self.event())
         self.assertEqual(out['hookSpecificOutput']['additionalContext'], hook.QUALITY_GATE_REMINDER)
+
+    def test_unrecognized_edit_result_does_not_run_lint(self):
+        # An unknown/unrecognized tool result is never treated as a successful edit: the
+        # approved command must not run, and the fallback must not assert the edit succeeded.
+        marker = self.root / 'ran.txt'
+        self.write_registry([{'root': str(self.project),
+                              'command': [PY, '-c', f'open({str(marker)!r}, "w").write("ran")']}])
+        event = self.event()
+        event['tool_response'] = 'unrecognized result shape'
+        out = hook.inspect_event(event)
+        self.assertFalse(marker.exists(), 'lint ran on an unrecognized edit result')
+        self.assertIn('quality gate', self.context(out).lower())
+
+
+class RegistryLocation(unittest.TestCase):
+    def test_registry_is_user_global_not_project_local(self):
+        # Approval resolves from the owner-global home, never beside the installed runner, so a
+        # project install cannot supply its own execution approval.
+        self.assertEqual(lint.REGISTRY, Path.home() / '.codex/framework/lint-projects.json')
 
 
 if __name__ == '__main__':

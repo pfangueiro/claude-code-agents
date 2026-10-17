@@ -20,6 +20,12 @@ MANIFEST = Path('.codex/framework/manifest.json')
 BEGIN = '<!-- sdlc-codex:begin -->'
 END = '<!-- sdlc-codex:end -->'
 PREFIX = 'sdlc-'
+# Inherited variables that would point Git at another repository, index or object store.
+# Mirrors scripts/install-delivery.py so every source-identity query ignores the same set.
+GIT_REDIRECT_ENV = ('GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_COMMON_DIR',
+                    'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_NAMESPACE', 'GIT_REPLACE_REF_BASE')
+GIT_SAFETY = ('-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', '--no-replace-objects',
+              '--no-optional-locks', '--literal-pathspecs')
 
 RUNTIME = """Codex runtime contract: discover the actual tools and their schemas first.
 Use shell/file tools for reading, rg for search, apply_patch or an available editor
@@ -34,6 +40,14 @@ Do not send messages, merge, release, deploy or mutate live data unless authoriz
 
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def head_sha() -> str:
+    """Resolve REPO's own HEAD, ignoring inherited Git repository/index selectors so an
+    unrelated GIT_DIR in the environment cannot misattribute the installed source SHA."""
+    env = {key: value for key, value in os.environ.items() if key not in GIT_REDIRECT_ENV}
+    return subprocess.check_output(['git', *GIT_SAFETY, '-C', str(REPO), 'rev-parse', 'HEAD'],
+                                   text=True, env=env).strip()
 
 
 def frontmatter(path: Path) -> tuple[dict, str]:
@@ -320,7 +334,7 @@ def install(root: Path, *, dry_run: bool = False, uninstall: bool = False,
     if current != merged:
         writes[agents_path] = merged if merged else None
         expected[agents_path] = current if agents_path.exists() else None
-    sha = subprocess.check_output(['git', '-C', str(REPO), 'rev-parse', 'HEAD'], text=True).strip()
+    sha = head_sha()
     manifest = {'version': 1, 'source_sha': sha, 'files': {p: digest(v) for p, v in desired.items()},
                 'instructions': digest(instructions()) if not uninstall else None,
                 'hooks': hooks, 'user': user}

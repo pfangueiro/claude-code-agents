@@ -18,7 +18,12 @@ STATE = Path(__file__).resolve().parent
 EVENTS = {'SessionStart', 'SessionEnd', 'SubagentStart', 'SubagentStop',
           'PermissionRequest', 'PreCompact', 'PostCompact', 'PreToolUse', 'PostToolUse'}
 SUPPORTED_EDITS = {'apply_patch', 'Write', 'Edit'}
+# Canonical model-facing success text emitted by the native apply_patch tool (and its
+# Write/Edit matcher aliases). Source: openai/codex apply-patch/tests/suite/tool.rs.
+APPLY_PATCH_SUCCESS = 'Success. Updated the following files:'
 QUALITY_GATE_REMINDER = 'Edit completed. Run the project quality gate before claiming the change is verified.'
+UNCONFIRMED_EDIT_REMINDER = ('Edit result was not reported as a confirmed success, so no post-edit lint ran. '
+                             'Run the project quality gate before claiming the change is verified.')
 
 
 def patch_paths(command: str) -> list[str]:
@@ -52,13 +57,43 @@ def edit_failed(event: dict) -> bool:
     return event.get('success') is False
 
 
-def post_edit_output(event: dict) -> dict:
-    """Run an opt-in approved lint if configured; otherwise emit the quality-gate reminder.
+def edit_succeeded(event: dict) -> bool:
+    """True only for a recognized positive result from a supported edit tool.
 
+    Native apply_patch (and the Write/Edit aliases) report the canonical model-facing success
+    string; structured tool results may carry {"success": true}. The native docs treat
+    tool_response as arbitrary JSON, so anything else — an unknown, missing or unrecognized
+    result — is never assumed to be a successful edit.
+    """
+    for key in ('tool_response', 'tool_output', 'tool_result'):
+        if key not in event:
+            continue
+        value = event[key]
+        if isinstance(value, str):
+            return value.startswith(APPLY_PATCH_SUCCESS)
+        if isinstance(value, dict) and value.get('success') is True:
+            return True
+        return False
+    return False
+
+
+def _reminder(message: str) -> dict:
+    return {'hookSpecificOutput': {'hookEventName': 'PostToolUse', 'additionalContext': message}}
+
+
+def post_edit_output(event: dict) -> dict:
+    """Feedback for a supported PostToolUse edit.
+
+    Only a recognized successful edit may run the opt-in lint (or, without opt-in, emit the
+    quality-gate reminder). An explicitly failed edit yields no feedback; an unknown, missing
+    or unrecognized result falls back to a reminder that does not assert the edit succeeded.
     A missing/broken lint runner never affects the credential guard; it falls back here.
     """
-    reminder = {'hookSpecificOutput': {'hookEventName': 'PostToolUse',
-                'additionalContext': QUALITY_GATE_REMINDER}}
+    if edit_failed(event):
+        return {}
+    if not edit_succeeded(event):
+        return _reminder(UNCONFIRMED_EDIT_REMINDER)
+    reminder = _reminder(QUALITY_GATE_REMINDER)
     try:
         import lint
     except ImportError:
@@ -100,7 +135,7 @@ def inspect_event(event: dict) -> dict:
                 output = {'hookSpecificOutput': {'hookEventName': name, 'permissionDecision': 'deny',
                           'permissionDecisionReason': 'Direct edit targets a protected credential path.'}}
                 break
-    if name == 'PostToolUse' and tool in SUPPORTED_EDITS and not edit_failed(event):
+    if name == 'PostToolUse' and tool in SUPPORTED_EDITS:
         output = post_edit_output(event)
     if name == 'SessionStart':
         manifest = STATE / 'manifest.json'

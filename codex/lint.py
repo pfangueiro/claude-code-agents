@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
 """Opt-in post-edit lint runner for the Codex hook.
 
-A user-owned registry (`lint-projects.json`, next to this file in the installed
-`.codex/framework/` directory) names projects that have explicitly approved a lint
-command. The installer never generates or trusts this file. On a successful,
-supported PostToolUse edit whose canonical event cwd exactly matches an approved
-project root, the configured argv is run directly (no shell, no interpolation,
-no --fix default) with stdin/stdout/stderr discarded. Only an approved root is
-run: a nested working directory under a root is not automatically approved.
+Approval always comes from a single owner-global registry (`lint-projects.json` under
+`~/.codex/framework/`), never a project-local file, so a project install cannot carry its
+own execution approval. The installer never generates or trusts this file. The literal
+(unresolved) registry path is used for the symlink/ancestor checks so that swapping an
+ancestor directory for a symlink is caught rather than resolved away. On a recognized
+successful, supported PostToolUse edit whose canonical event cwd exactly matches an
+approved project root, the configured argv is run directly (no shell, no interpolation,
+no --fix default) with stdin/stdout/stderr discarded. Only an approved root is run: a
+nested working directory under a root is not automatically approved.
 
 A user-selected command trusts that project's own code and dependencies; it is not
-sandboxed or read-only. The run is bounded by a per-project timeout and its own
-POSIX process group so that a timed-out leader and any descendants are terminated
-and an early-exiting leader cannot leave descendants running. No argv, stdout,
-stderr, environment or patch content is placed in the hook output or evidence; only
-a static status and the process exit code are reported. This is not a sandbox.
-Python 3.11+.
+sandboxed or read-only. The run is bounded by a per-project timeout and its own POSIX
+process group. A timed-out leader, or a leader that exits while descendants it spawned are
+still running, is reported as timed-out/incomplete — never as a pass — and the group is
+signalled (TERM then KILL) within a bounded grace. Cleanup is best effort: a process that
+escapes the group is not contained, so the feedback claims only that a stop was signalled.
+No argv, stdout, stderr, environment or patch content is placed in the hook output or
+evidence; only a static status and the process exit code are reported. This is not a
+sandbox. Python 3.11+.
 """
 from __future__ import annotations
 
@@ -25,9 +29,11 @@ from pathlib import Path
 import signal
 import stat
 import subprocess
+import time
 
-# Registry of user-approved projects, resolved beside the installed runner.
-REGISTRY = Path(__file__).resolve().parent / 'lint-projects.json'
+# Approval registry, always the owner-global file regardless of install scope. Kept as a
+# literal (unresolved) path so the symlink-ancestor guard in load_registry still fires.
+REGISTRY = Path.home() / '.codex/framework/lint-projects.json'
 # Bounded grace between SIGTERM and SIGKILL and for descendant cleanup. Kept small so
 # the whole run (<=30s command + cleanup) stays inside the hook's 40s PostToolUse budget.
 GRACE = 2.0
@@ -37,8 +43,13 @@ SUCCESS = 'Post-edit lint passed (exit code 0) for this approved project; the ed
 FAILURE = ('Post-edit lint failed (exit code {code}) for this approved project. The edit was applied '
            'and not rolled back; fix the reported failures before claiming the change is verified. '
            'The command, its output and environment are not shown here.')
-TIMEOUT = ('Post-edit lint for this approved project timed out and its process group was terminated. '
-           'The edit was applied and not rolled back; run the project quality gate manually.')
+TIMEOUT = ('Post-edit lint for this approved project timed out before completing; its process group '
+           'was signalled to stop. The edit was applied and not rolled back; run the project quality '
+           'gate manually.')
+INCOMPLETE = ('Post-edit lint for this approved project did not finish: background processes it started '
+              'were still running after the command exited and were signalled to stop. The edit was '
+              'applied and not rolled back; do not treat lint as passed — run the project quality gate '
+              'manually.')
 UNAVAILABLE = ('Post-edit lint for this approved project could not start (the configured command is '
                'missing or not executable); no command output is retained. Run the project quality '
                'gate manually.')
@@ -72,8 +83,13 @@ def load_registry(path: Path) -> list[dict]:
         data = json.loads(path.read_bytes())
     except (ValueError, UnicodeDecodeError) as err:
         raise LintError('registry is not valid JSON') from err
-    if not isinstance(data, dict) or data.get('version') != 1:
+    if not isinstance(data, dict):
+        raise LintError('registry must be a JSON object')
+    # JSON true equals 1 in Python, so reject bool explicitly before the version compare.
+    if isinstance(data.get('version'), bool) or data.get('version') != 1:
         raise LintError('registry version is missing or unsupported')
+    if set(data) - {'version', 'projects'}:
+        raise LintError('registry has unexpected top-level keys')
     projects = data.get('projects')
     if not isinstance(projects, list):
         raise LintError('registry projects must be a list')
@@ -120,9 +136,14 @@ def run_lint(event: dict) -> dict | None:
     except (LintError, OSError):
         return _feedback(UNSAFE)
     cwd = event.get('cwd')
-    if not isinstance(cwd, str) or not cwd:
+    # An absent, relative, NUL-bearing or otherwise invalid cwd never matches an approved
+    # absolute root: fall back to the reminder without executing anything.
+    if not isinstance(cwd, str) or not cwd or '\x00' in cwd or not os.path.isabs(cwd):
         return None
-    canonical = os.path.realpath(cwd)
+    try:
+        canonical = os.path.realpath(cwd)
+    except (ValueError, OSError):
+        return None
     match = next((entry for entry in entries if entry['root'] == canonical), None)
     if match is None:
         return None
@@ -134,6 +155,43 @@ def _signal_group(pgid: int, sig: int) -> None:
         os.killpg(pgid, sig)
     except (ProcessLookupError, PermissionError, OSError):
         pass
+
+
+def _group_alive(pgid: int) -> bool:
+    """True if any process still belongs to the group (the reaped leader does not count)."""
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True  # cannot prove it is empty: assume members remain and clean up.
+    return True
+
+
+def _wait_group_exit(pgid: int, grace: float) -> bool:
+    deadline = time.monotonic() + grace
+    while time.monotonic() < deadline:
+        if not _group_alive(pgid):
+            return True
+        time.sleep(0.02)
+    return not _group_alive(pgid)
+
+
+def _terminate_group(pgid: int, timed_out: bool) -> bool:
+    """Signal any group members still alive after the leader finished.
+
+    Returns True when live members had to be signalled — a timed-out run, or a leader that
+    exited while descendants it spawned were still running (both are unfinished lint work).
+    Returns False when the leader exited and the group was already empty. Escalates TERM ->
+    KILL within the bounded grace; this is best effort and guarantees no containment.
+    """
+    if not timed_out and not _group_alive(pgid):
+        return False
+    _signal_group(pgid, signal.SIGTERM)
+    if not _wait_group_exit(pgid, GRACE):
+        _signal_group(pgid, signal.SIGKILL)
+        _wait_group_exit(pgid, GRACE)
+    return True
 
 
 def _run_command(argv: list[str], cwd: str, timeout: int) -> dict:
@@ -155,21 +213,15 @@ def _run_command(argv: list[str], cwd: str, timeout: int) -> dict:
         proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         timed_out = True
-        _signal_group(pgid, signal.SIGTERM)
-        try:
-            proc.wait(timeout=GRACE)
-        except subprocess.TimeoutExpired:
-            _signal_group(pgid, signal.SIGKILL)
-            try:
-                proc.wait(timeout=GRACE)
-            except subprocess.TimeoutExpired:
-                pass
-    finally:
-        # Kill any descendants lingering in the leader's process group, whether the
-        # leader timed out or exited early on its own. Never leave a group running.
-        _signal_group(pgid, signal.SIGKILL)
+    killed = _terminate_group(pgid, timed_out)
+    try:
+        proc.wait(timeout=GRACE)  # reap the leader itself after the group is cleaned.
+    except subprocess.TimeoutExpired:
+        pass
     if timed_out:
         return _feedback(TIMEOUT)
+    if killed:
+        return _feedback(INCOMPLETE)
     if proc.returncode == 0:
         return _feedback(SUCCESS)
     return _feedback(FAILURE.format(code=proc.returncode))

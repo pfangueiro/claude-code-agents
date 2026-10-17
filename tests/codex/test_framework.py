@@ -282,22 +282,41 @@ class FrameworkAcceptance(unittest.TestCase):
         marker = 'INSTALLED_LINT_PRIVATE_MARKER'
         failer = self.root / 'lint-fail.py'
         failer.write_text(f'import sys\nprint("{marker}")\nsys.exit(5)\n')
-        registry = self.root / '.codex/framework/lint-projects.json'
-        registry.write_text(json.dumps({'version': 1, 'projects': [
-            {'root': str(project), 'command': [sys.executable, str(failer)]}]}))
-        registry.chmod(0o600)
+        entry = {'version': 1, 'projects': [{'root': str(project), 'command': [sys.executable, str(failer)]}]}
         approved = {'hook_event_name': 'PostToolUse', 'tool_name': 'Write', 'cwd': str(project),
-                    'tool_input': {'file_path': 'x'}}
-        result = subprocess.run([sys.executable, str(script)], input=json.dumps(approved),
-                                capture_output=True, text=True, timeout=30)
+                    'tool_input': {'file_path': 'x'}, 'tool_response': {'success': True}}
+
+        def run(home, event):
+            return subprocess.run([sys.executable, str(script)], input=json.dumps(event),
+                                  capture_output=True, text=True, timeout=30,
+                                  env=dict(os.environ, HOME=str(home)))
+
+        # Approval comes only from the owner-global registry (~/.codex/framework), so it is
+        # keyed to the owner's HOME, not the installed project tree.
+        owner = self.root / 'owner-home'
+        registry = owner / '.codex/framework/lint-projects.json'
+        registry.parent.mkdir(parents=True)
+        registry.write_text(json.dumps(entry))
+        registry.chmod(0o600)
+        result = run(owner, approved)
         self.assertEqual(result.returncode, 0, result.stderr)
         context = json.loads(result.stdout)['hookSpecificOutput']['additionalContext']
         self.assertIn('exit code 5', context)
         self.assertNotIn(marker, context)
-        # An unapproved cwd falls back to the quality-gate reminder, running nothing.
-        unapproved = dict(approved, cwd=str(self.root))
-        fallback = subprocess.run([sys.executable, str(script)], input=json.dumps(unapproved),
-                                  capture_output=True, text=True, timeout=10)
+
+        # A project-local registry is never consulted: with an owner HOME that has no registry
+        # the very same approval sitting in the project tree does not execute.
+        project_registry = self.root / '.codex/framework/lint-projects.json'
+        project_registry.write_text(json.dumps(entry))
+        project_registry.chmod(0o600)
+        empty = self.root / 'empty-home'
+        empty.mkdir()
+        ignored = run(empty, approved)
+        self.assertEqual(ignored.returncode, 0, ignored.stderr)
+        self.assertIn('quality gate', json.loads(ignored.stdout)['hookSpecificOutput']['additionalContext'])
+
+        # An unapproved cwd under the owner registry also falls back to the reminder.
+        fallback = run(owner, dict(approved, cwd=str(self.root)))
         self.assertEqual(fallback.returncode, 0, fallback.stderr)
         self.assertIn('quality gate', json.loads(fallback.stdout)['hookSpecificOutput']['additionalContext'])
 
