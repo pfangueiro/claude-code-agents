@@ -36,6 +36,15 @@ AGENTS.md and relevant source before relying on these notes.
   `>20`/`< 40` line rules are gone). Findings cite concrete consequences, not invented
   metrics; the rule opening reads as instruction guidance, not guaranteed enforcement. The
   Codex edition inherits it through the generated `rules.md`.
+- `deep-read` and `investigate` (and their shadowing `codex/overrides/` bodies, so both
+  editions) carry a shared evidence-reporting convention: label findings observed (source
+  inspection vs an actual runtime capture — a source read is not proof the runtime path
+  ran), derived from named premises, or inferred and unverified; preserve unknown/contradictory
+  evidence and truncated/partial coverage; bound negatives to the searched/read scope; page a
+  truncated read rather than promote a preview; report behaviour checks apart from static
+  conclusions. Reporting guidance only — no new phase, gate, schema or runtime; the existing
+  proof/consent/coverage gates and the `verified-handoff` v1 schema are unchanged. Adapted in
+  our own words from REA's reporting practices, not its runtime.
 
 ## Safety and verification
 

@@ -15,6 +15,8 @@ then use source and executable evidence for conclusions.
    evidence checks without claiming a tool call. Do not impose a fabricated tool name.
 6. REPORT: answer the target with source citations and explicit coverage limits.
 
+Qualify each reported claim: observed (directly inspected — state whether the basis is source inspection at the cited revision/`file:line` or an actual runtime capture; reading code does not prove the runtime path executed), derived (name the premises), or inferred (a hypothesis still to verify). Keep unknown, unsupported and contradictory evidence visible — a missing fact is not proof of absence, nor licence to invent one — and preserve truncated or partial coverage. Bound negatives to the searched root/query or selected-file scope and its limits; no match in a partial search, and a clean tool exit, are not repository-wide absence or complete coverage. On a truncated preview, page a supported smaller read or reuse retained source by stable path rather than promote the preview or rerun identical expensive work. For a consequential finding record, within the normal concise report, its conclusion, basis/category, citation, scope and limits, any contradiction, and the next discriminating read — scaled to the question, no numeric confidence scores, no new phase or schema.
+
 Use `rg` and shell/file tools; LSP/code graphs are optional accelerators. Delegate
 only if authorized and supported; skills do not automatically fork a Codex session.
 See `references/reading-strategies.md` for conditional reading strategies.

@@ -9,7 +9,7 @@ argument-hint: "<codebase area, module, flow, or question to understand>"
 
 Systematic source-code-first analysis protocol. Reads implementations, not just interfaces. Every finding cites `file:line`.
 
-**Core principle:** Source code is the source of truth. Documentation lies, comments rot, function names mislead. Read the actual code. A code graph or index (LSP, a code-graph tool) speeds up *locating* code but is itself a possibly-stale snapshot — never ground truth. Verify every graph- or LSP-derived hit against live source before citing it.
+**Core principle:** Source code is the source of truth. Documentation lies, comments rot, function names mislead. Read the actual code. A code graph or index (LSP, a code-graph tool) speeds up *locating* code but is itself a possibly-stale snapshot — never ground truth. Verify every graph- or LSP-derived hit against live source before citing it. Reading the code is an observation of the code, not proof that the runtime path executed — report any behavior claim as a separate, actually-captured check (see **Evidence semantics**).
 
 ## Protocol
 
@@ -259,7 +259,19 @@ For each critical area:
 <if the reading target was a question, answer it here with full evidence>
 ```
 
-**Gate:** All sections populated. Every finding cites `file:line`. Report complete.
+**Gate:** All sections populated. Every finding cites `file:line` and is qualified per **Evidence semantics** below (observed / derived / inferred, with negatives bounded to scope). Report complete.
+
+---
+
+## Evidence semantics
+
+A reporting convention over the phases above — how each finding in the report is qualified. Not a new phase, gate or runtime. Scale it to the question: a quick lookup needs a citation, not a dossier. No numeric confidence scores.
+
+- **Category each claim.** *Observed* — directly inspected; state the basis: source inspection (`file:line` at the read revision) vs an actual runtime capture or test. Reading the code is an observation of the code — it does not establish that the runtime path executed. *Derived* — follows from named premises; cite them. *Inferred* — a hypothesis still to verify; say what would confirm it. Cite the exact input revision or artifact where it matters.
+- **Keep unknowns and contradictions.** Unavailable, unsupported or unread is a missing fact — not proof of absence, and not a cue to invent an answer. Record contradictory evidence and any incomplete or truncated coverage; never present a partially-read target as fully understood.
+- **Bound every negative.** Tie "no X" to what was actually searched or read — the root/query or the selected-file set (the Phase 1 cap), its exclusions, and unresolved branches. No match in a partial search is not repo-wide absence; a clean tool exit is not complete coverage.
+- **On a truncated read,** page it with a supported smaller Read (offset/limit) or re-read the retained source by stable path; if it stays unavailable keep the limit rather than promote a preview to full evidence, and do not rerun identical expensive work for the same bytes.
+- **For a consequential finding,** carry in Key Findings (or the relevant section) its conclusion, category and basis, citation, scope and limits, contradictory evidence where present, and the remaining question or next discriminating read — not per-line tagging or a separate ledger.
 
 ---
 

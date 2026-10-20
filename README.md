@@ -471,6 +471,8 @@ Skills provide domain knowledge that agents apply. 30 included:
 | **repo-context** | Read-only repository discovery: Git root, HEAD, dirty state, instructions, manifests and command candidates as data |
 | **verified-handoff** | Run checks into receipts bound to an exact commit and verify a declared check manifest before claiming results |
 
+The reading and diagnostic skills — `deep-read` and `investigate` — share one evidence-reporting convention in their reports: each finding is marked as observed (directly inspected, stating whether the basis is source inspection or an actual runtime capture — reading code is not proof the runtime path executed), derived from named premises, or inferred and still to verify; unknowns, contradictions and truncated or partial coverage are preserved rather than smoothed over; negatives are bounded to what was actually searched or read; and runtime-behavior checks are reported separately from static conclusions. It qualifies how findings are reported and adds no phase, gate, schema or runtime. The approach adapts, in our own words, the evidence-reporting practices of the [REA](https://github.com/morluto/rea/tree/d532b18123916a9e88f98c7880ba4f984e23d715) project — its reporting discipline only, not its runtime or tooling.
+
 ### Create Your Own Skill
 
 ```bash

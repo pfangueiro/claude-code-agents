@@ -127,6 +127,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   review are never traded for a smaller diff. The rule's opening now reads as instruction
   guidance within scope, not guaranteed enforcement or a sandbox. README credits the Ponytail
   project as inspiration. Documentation only; no inventory or version change.
+- Evidence-reporting guidance added to the `deep-read` and `investigate` skills and their
+  Codex overrides (`codex/overrides/deep-read.md`, `codex/overrides/investigate.md`, which
+  shadow the canonical bodies, so both editions carry it). Reports now qualify each finding as
+  observed (source inspection vs an actual runtime capture — reading code is not proof the
+  runtime path executed), derived from named premises, or inferred and still to verify; keep
+  unknown/unsupported/contradictory evidence and truncated or partial coverage visible; bound
+  negative conclusions to the searched/read scope (no match in a partial search is not
+  repository-wide absence; a clean tool exit is not complete coverage); page a truncated read
+  instead of promoting a preview; and report runtime-behavior checks separately from static
+  conclusions. It adds no phase, gate, schema, ledger or runtime, leaves the existing
+  proof/consent/coverage gates and the `verified-handoff` v1 schema unchanged, and scales to
+  the question. README credits the REA project for the reporting approach, not its runtime.
+  Documentation only; no inventory or version change.
 
 ### Fixed
 

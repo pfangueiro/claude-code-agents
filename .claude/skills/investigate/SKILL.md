@@ -265,6 +265,18 @@ The investigation isn't complete until recurrence is prevented.
 
 ---
 
+## Evidence semantics
+
+A reporting convention over the phases above — how claims are qualified in the Phase 5 evidence log, the Phase 6 root-cause statement and the Phase 8 report. Not a new phase, and it relaxes neither the Phase 5 proof gate nor the Phase 6 causal-proof/consent gate. Scale it to the question. No numeric confidence scores.
+
+- **Category each claim.** *Observed* — directly inspected; state the basis: source inspection (`file:line` at the read revision) vs an actual runtime capture (a reproduction, test or log you ran). Reading the code is an observation of the code — reproduction (Phase 2), not the read, establishes that the path executed. *Derived* — follows from named premises; cite them. *Inferred* — a hypothesis still to verify; this is the Phase 4/5 state, carried as INCONCLUSIVE until proven. Cite the exact input revision or artifact where it matters.
+- **Keep unknowns and contradictions.** Unavailable, unsupported or unreproduced is a missing fact — not proof of absence, and not a cue to invent a cause. Preserve disconfirming evidence and INCONCLUSIVE verdicts; an unproven cause is not a root cause, so do not report the investigation complete on it.
+- **Bound every negative.** Tie "not the cause" or "not found" to what was searched or run — the files read, the blast-radius Grep scope and its exclusions, the reproduction attempted. A green test or clean Grep exit covers only what it exercised, not the whole repository.
+- **On a truncated read,** page it with a supported smaller Read (offset/limit) or re-read the retained source by stable path; if evidence stays unavailable keep the limit rather than promote a preview, and do not rerun an identical expensive reproduction for a result already captured.
+- **Report behaviour separately from static reasoning.** A reproduction or regression result is runtime evidence; code reading is static. Keep them distinct, and invent no test, output or citation.
+
+---
+
 ## Tool Usage by Phase
 
 | Phase | Primary Tools | When to Use Agents |
