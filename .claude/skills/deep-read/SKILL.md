@@ -9,7 +9,7 @@ argument-hint: "<codebase area, module, flow, or question to understand>"
 
 Systematic source-code-first analysis protocol. Reads implementations, not just interfaces. Every finding cites `file:line`.
 
-**Core principle:** Source code is the source of truth. Documentation lies, comments rot, function names mislead. Read the actual code. A code graph or index (LSP, a code-graph tool) speeds up *locating* code but is itself a possibly-stale snapshot — never ground truth. Verify every graph- or LSP-derived hit against live source before citing it. Reading the code is an observation of the code, not proof that the runtime path executed — report any behavior claim as a separate, actually-captured check (see **Evidence semantics**).
+**Core principle:** Source code is the source of truth. Documentation lies, comments rot, function names mislead. Read the actual code. A code graph or index (LSP, a code-graph tool) speeds up *locating* code but is itself a possibly-stale snapshot — never ground truth. Verify every graph- or LSP-derived hit against live source before citing it. Reading the code is an observation of the code, not proof that the runtime path executed — a predicted behavior may be stated as a *derived* claim from named premises, while a claim that execution or a test actually produced a result needs separately captured runtime evidence (see **Evidence semantics**).
 
 ## Protocol
 
