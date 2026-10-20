@@ -1,156 +1,32 @@
 ---
-description: Create a new JIRA issue (Epic or Story/Task) and assign to current user
-argument-hint: <type> [epic-key] <title>
+description: Create an issue in the configured issue tracker, or hand back a ready-to-file draft when no connector is available
+argument-hint: "<type> [parent] <title>"
 disable-model-invocation: true
 ---
 
-Create a new JIRA issue in the JPT Portal project and automatically assign it to you.
+Create a tracker issue (epic, story, or task) using whatever issue-tracking capability this environment actually exposes. Do not assume a specific tenant, project key, credentials store, or helper script.
 
-## Usage Examples
+1. **Parse the request**:
+   - Read `$ARGUMENTS` as an issue type (`epic`, `story`, or `task`), an optional parent/epic reference, and a title. If the type or title is missing, ask for it.
+   - Keep drafting the issue content while you wait for any missing required field — do not block all progress on a single answer.
 
-**Create a new Epic:**
-```
-/create-jira epic Improve Dashboard Performance
-/create-jira epic Add User Management Features
-```
+2. **Discover the tracker capability**:
+   - Look for an issue-tracking connector or integration actually exposed to this session: an MCP tracker tool, a CLI or API documented by the project, or project instructions that name the tracker.
+   - Use read-only calls to confirm the target project, the issue types it supports, and whether a parent/epic link applies.
+   - Resolve defaults (project, assignee, priority, labels) from that authorized configuration or the project's own instructions — never from a hardcoded project key or database.
 
-**Create a Story under an Epic:**
-```
-/create-jira story PROJ-753 Add filter functionality to alerts
-/create-jira story PROJ-905 Implement mobile responsive design
-```
+3. **Prepare the issue content**:
+   - Compose the summary, description, type, parent link (if the type needs one), and assignee. Use the current-user convention (for example `git config user.email`) only when the tracker's configuration calls for it or the user names an assignee.
+   - Validate the content against the schema the discovered capability actually supports before attempting creation.
 
-**Create a Task under an Epic:**
-```
-/create-jira task PROJ-753 Fix TypeScript compilation errors
-/create-jira task PROJ-905 Update documentation
-```
+4. **Create it — only if a connector exists**:
+   - If an authorized tracker capability is available, create the issue through it, then verify and report the returned key, URL, and fields.
+   - Creating the one requested issue is in scope; sending unrelated messages, notifications, or updates is not.
 
-## Command Workflow
+5. **No connector? Return a draft, honestly**:
+   - If no tracker connector or runnable integration is available, report that **no issue was created** and hand back the ready-to-file draft (type, title, parent, description, suggested assignee) so the user can file it themselves.
+   - Never present a draft as if it were a live, created issue.
 
-1. **Validate arguments (MANDATORY)**:
-   - Check if `$ARGUMENTS` is provided
-   - If missing or empty, STOP and display error:
-     ```
-     ❌ Error: Arguments required
-
-     Usage:
-       /create-jira epic <Title Here>
-       /create-jira story <EPIC-KEY> <Title Here>
-       /create-jira task <EPIC-KEY> <Title Here>
-
-     Examples:
-       /create-jira epic Improve Dashboard Performance
-       /create-jira story PROJ-753 Add filtering to alerts
-       /create-jira task PROJ-905 Fix mobile CSS issues
-     ```
-   - DO NOT proceed further if arguments are missing
-
-2. **Parse and validate issue type**:
-   - First argument must be: `epic`, `story`, or `task`
-   - If invalid, STOP and show same error message as above
-   - Convert to proper case: Epic, Story, Task
-
-3. **Parse remaining arguments**:
-   - For `epic`: All remaining arguments become the title
-   - For `story`/`task`:
-     - Second argument must be epic key (format: PROJ-XXX)
-     - Validate epic key format (starts with PROJ- followed by numbers)
-     - If invalid format, STOP and show error:
-       ```
-       ❌ Error: Invalid epic key format
-       Expected: PROJ-XXX (e.g., PROJ-753)
-       Provided: [invalid-key]
-       ```
-     - Remaining arguments become the title
-
-4. **Get current user email**:
-   - Run `git config user.email` to get user's email
-   - This will be used to assign the issue
-
-5. **Execute JIRA creation script**:
-   - Run: `node scripts/create-jira-issue.mjs <type> [epic-key] "<title>"`
-   - Examples:
-     - `node scripts/create-jira-issue.mjs Epic "Improve Dashboard Performance"`
-     - `node scripts/create-jira-issue.mjs Story PROJ-753 "Add filter functionality"`
-     - `node scripts/create-jira-issue.mjs Task PROJ-905 "Fix mobile CSS"`
-   - Pass user email as environment variable: `USER_EMAIL="user@your-company.com"`
-
-6. **Parse script output**:
-   - Script returns JSON with: `{ success: true, issueKey: "PROJ-XXX", issueId: "123", url: "https://..." }`
-   - Or error: `{ success: false, error: "Error message" }`
-
-7. **Display result**:
-   - On success:
-     ```
-     ✅ JIRA issue created successfully!
-
-     Issue Key: PROJ-XXX
-     Type: Epic/Story/Task
-     Title: [title]
-     Assignee: [user email]
-     URL: https://your-jira-instance.com/browse/PROJ-XXX
-
-     🎯 Issue has been assigned to you and is ready to work on!
-     ```
-   - On failure:
-     ```
-     ❌ Failed to create JIRA issue
-
-     Error: [error message]
-
-     Please check:
-     - Your git user.email is set correctly
-     - You have access to JIRA
-     - The epic key exists (if creating story/task)
-     ```
-
-## Important Notes
-
-- **Auto-assignment**: Issue is automatically assigned to the git user (from `git config user.email`)
-- **Project**: All issues are created in the "JPT Portal" project (JMIA)
-- **Priority**: Default priority is "Medium"
-- **Labels**: Automatically tagged with "claude-created"
-- **Epic Link**: For stories/tasks, the epic key must exist in JIRA
-- **Description**: Auto-generated with "🤖 Created via Claude Code" footer
-
-## Validation Rules
-
-1. **Issue Type**: Must be `epic`, `story`, or `task` (case-insensitive)
-2. **Epic Key**: Must match pattern `PROJ-\d+` (e.g., PROJ-753)
-3. **Title**: Cannot be empty, max 255 characters
-4. **User Email**: Must be configured in git and exist in JPT database
-
-## Troubleshooting
-
-**"User not found in database"**
-- Your git email doesn't match any user in JPT
-- Run `git config user.email` to check your email
-- Contact admin to add your email to the system
-
-**"Epic key not found"**
-- The epic key doesn't exist in JIRA
-- Verify the epic exists: https://your-jira-instance.com/browse/PROJ-XXX
-- Use `/create-jira epic` to create the epic first
-
-**"Permission denied"**
-- You don't have permission to create issues in JIRA
-- Contact your JIRA admin for access
-
-## Technical Details
-
-**Script Location**: `scripts/create-jira-issue.mjs`
-
-**JIRA Fields Used**:
-- `project`: JMIA (JPT Portal)
-- `issuetype`: Epic/Story/Task
-- `summary`: Issue title
-- `customfield_12000`: Epic Link (for stories/tasks)
-- `assignee`: Current git user
-- `priority`: Medium (default)
-- `labels`: ["claude-created"]
-- `description`: Auto-generated with Claude Code footer
-
-**Database Tables**:
-- `jira_instances`: JIRA credentials
-- `users_acl`: User validation and username lookup
+**Notes**:
+- The project, issue types, and parent conventions are discovered from the authorized configuration, not assumed.
+- The command creates at most the single requested issue, and only when a real capability exists; otherwise it drafts.

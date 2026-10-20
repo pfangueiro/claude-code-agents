@@ -1,6 +1,6 @@
 # Security Rules
 
-These rules are always enforced. They cannot be overridden by user instructions.
+These rules are the security baseline to apply within your authorized scope — expected practice on every change, not a tool-enforced sandbox or a substitute for the host's permission model. They sit within the instruction hierarchy, so explicit owner and project policy prevail where they genuinely conflict; nothing here grants or withdraws an actual permission.
 
 ## Secrets
 

@@ -63,7 +63,7 @@ Agent collaboration patterns: see `.claude/lib/agent-coordination.md`
 - **`/build-fix [path]`** — Auto-detect build system, run build, parse errors, fix one at a time with regression guard.
 - **`/tdd <feature>`** — Enforce RED-GREEN-REFACTOR cycle: write failing test → implement minimally → refactor → verify.
 - **`/quality-gate [path] [--fix] [--strict]`** — Pre-commit validation: formatter + linter + type checker + tests.
-- **`/checkpoint <name> [--verify] [--list] [--diff]`** — Named save points via git branches for complex multi-step work.
+- **`/checkpoint <name> [--verify] [--list] [--diff]`** — Named save points captured as `refs/checkpoint/<name>` snapshots with Git plumbing (not branches); your branch, index, worktree and stashes stay untouched and recovery is explicit.
 - **`/save-session [id]`** — Save structured session state with mandatory "What Did NOT Work" section.
 - **`/resume-session [id]`** — Resume from a saved session with full context briefing and file state verification.
 - **`/optimize <metric> [--iterations N]`** — Autonomous metric-driven improvement loop: measure → improve → verify → keep/revert.
@@ -109,7 +109,7 @@ MCP servers provide external tools that extend Claude Code. See `.claude/lib/mcp
 10 hook events across 3 types. Hooks live in `global-config/hooks/`, installed globally to `~/.claude/hooks/`.
 
 **Command hooks (9 scripts):**
-- `session-start-healthcheck.sh` — SessionStart: fast-path framework health check, forks `install.sh --update` on drift
+- `session-start-healthcheck.sh` — SessionStart: observe-only fast-path drift check; logs findings and reports that explicit `install.sh --update` is needed (never forks an installer)
 - `file-protection.sh` — PreToolUse: blocks edits to sensitive files (.env, *.key, *.pem)
 - `post-edit-lint.sh` — PostToolUse: auto-lints TS/JS after Write/Edit, warns on debug statements
 - `notify.sh` — Notification: desktop alerts when Claude needs attention
@@ -139,33 +139,34 @@ incomplete.
 
 ## Observability
 
-Built-in dashboard aggregating Claude Code JSONL session logs across all projects. Files in `observability/`, installed to `~/.claude/analytics/`. Run `claude-obs` to collect data and open the dashboard. Hook-generated events (`agent-events.jsonl`, `permission-audit.jsonl`, `session-summaries.jsonl`) are also ingested.
+Optional dashboard aggregating Claude Code JSONL session logs across all projects. Source in `observability/`; installed to `~/.claude/analytics/` only with `./install.sh --with-analytics` (default-off). Run `claude-obs` to collect data and open the dashboard. The collector never runs itself; hook-generated events (`agent-events.jsonl`, `permission-audit.jsonl`, `session-summaries.jsonl`) are ingested when the analytics hooks are installed.
 
 ## Security-First
 
 **CRITICAL:** security-auditor and incident-commander ALWAYS use Opus. Security considerations are embedded in every agent following OWASP guidelines and DevSecOps best practices.
 
-## Self-Healing
+## Health observation & explicit repair
 
 This section applies to **Claude**. Codex uses hash ownership and explicit integrity/
 repair operations; no background self-healing or hook-trust bypass is installed.
 
-The framework auto-reconciles its user-global install at `~/.claude` — nothing to run by hand. **Full runbook: [SELF-HEALING.md](./SELF-HEALING.md)** — read it before any framework-infra change.
+The framework's background checks are **observe-only**: they report drift and keep
+backups, but never install, migrate, reseed or repair. Repair is always an explicit,
+foreground `./install.sh --update` the owner runs. **Full runbook:
+[SELF-HEALING.md](./SELF-HEALING.md)** — read it before any framework-infra change.
 
-- **Two paths:** the SessionStart hook (`session-start-healthcheck.sh`, <2s, forks `install.sh --update` on drift) and the hourly launchd watchdog (`claude-framework-watchdog.sh`). Only the watchdog survives a CLI settings-sync wipe of `~/.claude/settings.json`, so it — not the hook — is what actually recovers a `.hooks`/`.statusLine` wipe.
-- **Diagnostics:** `~/.claude/analytics/framework-health.jsonl` (drift/heal events; capped by the watchdog every cycle) and `watchdog-alerts.jsonl` (corruption).
-- **Statusline:** a `⚙<version>` glyph at the end of line 1 — ✓ healthy / ⟳ self-healing / ⚠ degraded; recovers after a resolved incident.
-- **Snapshots + restore** live in `~/.claude/snapshots/` — repo `.bundle`, `userconfig-*.tgz`, and project-memory `memory-latest.tgz` (list a memory snapshot with `tar -tzvf ~/.claude/snapshots/memory-latest.tgz` before restoring under `-C ~/.claude`; full restore commands in SELF-HEALING.md).
-- **Install modes:** bare | `--update` | `--upgrade` | `--migrate-legacy` | `--help`.
-- **Enforced by `validate.sh`:** doc-accuracy (counts vs prose), live `.attribution` empty, statusline deployed==source, watchdog log-cap present, and the memory restore path documented.
+- **Two observers (neither repairs):** the SessionStart hook (`session-start-healthcheck.sh`) logs drift and reports that an explicit `install.sh --update` is required; the optional hourly launchd watchdog (`claude-framework-watchdog.sh`, installed only with `--with-watchdog`, macOS) runs `validate.sh --quick --json` (no `--heal`), keeps snapshots and caps logs. Neither forks an installer or rewrites config.
+- **Diagnostics:** `~/.claude/analytics/framework-health.jsonl` (drift findings, action `manual_repair_required`; capped by the watchdog every cycle) and `watchdog-alerts.jsonl` (corruption/backup alerts).
+- **Statusline:** a `⚙<version>` glyph at the end of line 1 — `✓` only on a recent *admitted* `validation_result` from the watchdog's `validate.sh --quick --json` run (complete, healthy, zero errors), `⚠` on current drift / failed validation / recent corruption, `?` when there is no admitted evidence yet (a version marker alone is not proof). Here `complete` means the QUICK installed-integrity scope finished (deployed hooks/env/shared-set/wiring under `~/.claude`); `--quick` exits before the full-only source checks, so `✓` attests that completed watchdog quick installed-integrity scope ONLY — it does NOT certify the default full `validate.sh` repository validator, the project test suites, or CI. There is no self-healing glyph and no automatic green certification.
+- **Snapshots + restore** live in `~/.claude/snapshots/` (written by the watchdog, when installed) — repo `.bundle`, `userconfig-*.tgz`, and project-memory `memory-latest.tgz` (list a memory snapshot with `tar -tzvf ~/.claude/snapshots/memory-latest.tgz` before restoring under `-C ~/.claude`; full restore commands in SELF-HEALING.md).
+- **Install modes:** bare | `--update` | `--upgrade` | `--migrate-legacy` | `--help`; optional components are opt-in via `--with-watchdog` / `--with-analytics` / `--with-notifications` (default-off).
+- **Enforced by `validate.sh`:** doc-accuracy (counts vs prose), live `.attribution` empty, statusline deployed==source and honest-health (no revived self-healing display), the heal-retired/observe-only regression guards, watchdog log-cap present, and the memory restore path documented.
 
 ## Reasoning Effort
 
-- **Persistent default: `xhigh`** — set via `CLAUDE_CODE_EFFORT_LEVEL` in `~/.claude/settings.json` `env` (the framework template ships `xhigh`). Valid persistent tiers: `low | medium | high | xhigh`. validate.sh + the SessionStart healthcheck reject any other value (drift → heal).
-- **Session-only (NOT persistable — by Anthropic design):**
-  - `max` — deeper single-context reasoning: run `/effort max` in a session. Invalid as an env value (silently ineffective if set there).
-  - `ultracode` — `xhigh` + standing multi-agent **workflow** orchestration: run `/effort ultracode`, or include the keyword `ultracode` in a prompt. Resets when the session ends.
-  - **Workflows have no persistent "on" switch** — they are gated behind explicit per-request opt-in (`ultracode`, the keyword, or asking for a workflow). Only `disableWorkflows: true` / `CLAUDE_CODE_DISABLE_WORKFLOWS=1` persist (to turn them OFF). So "ultracode + workflows by default" = `xhigh` persistent baseline + `/effort ultracode` per session when you want the fleet.
+- **Persistent default: `xhigh`** — `CLAUDE_CODE_EFFORT_LEVEL` in `~/.claude/settings.json` `env` (the framework template seeds `xhigh` on a fresh install only). Supported env values are `low | medium | high | xhigh | max | auto` (per the [model-config docs](https://code.claude.com/docs/en/model-config)). `.env` reconcile is **add-only**: an existing owner value among the supported set is preserved and never overwritten, and an unsupported value is reported and left unchanged. The SessionStart healthcheck only *reports* an unsupported value (`action: manual_repair_required`); it never heals or rewrites it.
+- **Session vs setting:** `/effort <level>` changes the effort for the current session; the `settings.json` value is the persistent setting. `max` and `auto` are valid in both.
+- **Ultracode** (standing multi-agent **workflow** orchestration) is a separate toggle, **independent of** the effort level and persistable in its own right since Claude Code 2.1.284. Enable it for a session with `/effort ultracode` (or the `ultracode` keyword, or by asking for a workflow), or persist it via its own setting. This framework ships neither an effort default change nor an ultracode enablement — it does not turn the feature on for you.
 
 ## Quick Start
 

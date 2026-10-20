@@ -8,9 +8,9 @@ Do not describe this as complete runtime parity.
 
 | Framework surface | Codex treatment | Verification or limit |
 |---|---|---|
-| 30 skills | 30 namespaced SKILL.md bundles | YAML parsed; resources retained; runtime procedures rewritten |
-| Commands | 12 additional skills | README excluded; actual inventory is 42 total workflows; 3 explicit-only |
-| 13 agents | Native standalone TOML | name/description/developer_instructions; model inherited; code-quality read-only sandbox |
+| 30 skills | 30 namespaced SKILL.md bundles | YAML parsed; resources retained; runtime procedures rewritten; ui-guidelines is explicit-only (narrow Ant Design knowledge, not generic frontend/charts) so it does not auto-activate |
+| Commands | 12 additional skills | README excluded; actual inventory is 42 total workflows; 4 explicit-only across workflows (commit-pr, create-jira, new-feature, ui-guidelines) |
+| 13 agents | Native standalone TOML | name/description/developer_instructions; model and parent approval/sandbox policy inherited; no sandbox_mode emitted, so read-only review is a developer instruction, not an independently enforced sandbox |
 | Specialist fallback | 13 additional role-guide skills | Apply inline or give procedure to generic worker when native roles are unavailable; no native sandbox enforcement claim |
 | Agent auto-selection | Descriptions guide Codex | Model judgment; not deterministic keyword routing |
 | Seven rules | Managed AGENTS guidance + rules resource | Instruction hierarchy respected; not enforced sandbox policy |
@@ -48,17 +48,21 @@ Each skill is accounted for:
 
 All command templates: build-fix, checkpoint, commit-pr, compact, create-jira,
 new-feature, optimize, quality-gate, resume-session, review-pr, save-session, tdd.
-Review-PR, Jira, branching, compact and session commands receive explicit portability
-rewrites. Commit/PR is exported from the provider-neutral canonical command, so both
-editions share one publication contract; it and the other five retain domain steps with
-invocation/path adaptation.
+Review-PR, compact and the session commands receive explicit portability rewrites via
+`codex/overrides`. Commit/PR, the Jira-issue and the new-feature-branch commands are
+exported from provider-neutral canonical commands (their obsolete Codex overrides
+removed), so both editions share one source — and, for commit/PR, one publication
+contract. The remaining five commands retain domain steps with invocation/path adaptation.
 
 All agents: api-backend, architecture-planner, code-quality, database-architect,
 devops-automation, documentation-maintainer, frontend-specialist, incident-commander,
 meta-agent, performance-optimizer, security-auditor, sre-specialist, test-automation.
 Meta-agent is rewritten so future generated agents use Codex TOML, not Claude Markdown.
 
-Independent reviewers reproduced these baseline defects before implementation:
+Independent reviewers reproduced these defects in the audited Claude baseline
+(`509d282a195cc7a0e3b4d63b51b5f791be519eed`) before implementation. The file/line
+references below are at that baseline commit and are historical audit evidence, not the
+current Claude source:
 
 - `global-config/hooks/file-protection.sh:8` reads only file_path/filePath. A dummy
   Claude Edit targeting .env exits 2; a Codex apply_patch targeting .env exits 0.
@@ -75,8 +79,14 @@ Independent reviewers reproduced these baseline defects before implementation:
   finding; the canonical command was later rewritten provider-neutral and the Codex
   override removed.)
 
-The existing Claude edition's defects are recorded here and preserved outside this
-adaptation's write scope. Passing new adapter tests does not certify those mechanisms.
+These were the Claude edition's state at the audited baseline and lay outside this
+adaptation's write scope; the Codex edition simply never reproduced them. They are kept
+here as historical audit evidence — **not** a claim that the current Claude edition still
+carries them. The Claude sources have since been revised under separate review (for
+example, the installer now preserves foreign hook files and settings bindings rather than
+pruning them, and the commit/PR command is provider-neutral with exact-head gates), so
+verify the current Claude source at its own HEAD rather than from these baseline lines.
+Passing the new adapter tests does not certify any Claude runtime mechanism either way.
 
 Dependency-safe follow-up for complete runtime coverage: first implement a versioned
 Codex telemetry/event adapter with no inferred pricing; then add notification/status

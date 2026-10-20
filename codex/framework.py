@@ -145,9 +145,12 @@ def build() -> dict[str, bytes]:
             body = adapt(body, inv)
         role = {'name': name, 'description': adapt(meta['description'], inv),
                 'developer_instructions': RUNTIME + '\n' + body}
-        # Read-only analysis is enforced by the native sandbox, not a copied tools allowlist.
-        if name == 'code-quality':
-            role['sandbox_mode'] = 'read-only'
+        # No sandbox_mode is emitted: sandbox_mode is a supported native field, but on a custom
+        # agent it does not replace the parent permission policy or create an independent
+        # read-only sandbox, so model and approval/sandbox policy are inherited unchanged.
+        # Read-only review stays a developer-instruction expectation (reinforced by the fallback
+        # disclaimer below); emitting the field would over-claim an enforced-sandbox effect it
+        # does not deliver, not advertise an unsupported field.
         text = ''.join(f'{key} = {json.dumps(value, ensure_ascii=False)}\n' for key, value in role.items())
         tomllib.loads(text)
         files[f'.codex/agents/{name}.toml'] = text.encode()
@@ -186,9 +189,6 @@ DESCRIPTIONS = {
     'skill-creator': 'Create or update a focused Codex skill with portable metadata, resources and behavior validation.',
     'investigate': 'Trace an unknown-cause defect through reproduction and source evidence, then verify an authorized fix. Handle known-cause fixes directly.',
     'compact': 'Write a verified handoff before user-invoked native compaction.',
-    'commit-pr': 'Commit and publish the requested scope with exact-head verification and project release policy.',
-    'create-jira': 'Create a requested issue through the configured Jira connector or project integration.',
-    'new-feature': 'Create a feature branch from the project-selected base while preserving existing work.',
 }
 
 
@@ -368,13 +368,29 @@ def hook_path(root: Path, rel: str) -> Path:
 
 
 def transaction(root: Path, writes: dict[Path, bytes | None], expected: dict[Path, bytes | None]) -> None:
-    """Lock, recheck and rollback all file changes if an I/O operation fails."""
+    """Lock, recheck and roll back only the mutations actually attempted on a caught error.
+
+    Rolling back every planned write (not just the attempted ones) would delete a later
+    destination this transaction never wrote -- e.g. a file a concurrent local writer created
+    after preflight -- because an originally absent path would be unlinked even though its
+    forward write never ran. Each path is appended to ``applied`` at its real mutation
+    boundary -- immediately before the ``atomic_write`` that replaces it (after all parent
+    directories are prepared) or immediately before its ``unlink`` -- and the handler reverses
+    only that list (mirrors scripts/install-delivery.py). Parent-directory creation is not a
+    mutation of the destination, so if a concurrent writer wins the mkdir race and our own
+    ``mkdir`` raises, the destination is never marked applied and its owner content is kept;
+    ``atomic_write`` replaces atomically, yet is tracked before the call so a replace-then-error
+    still restores the original bytes. A concurrent edit of a path whose write already succeeded
+    is still overwritten on rollback and remains an explicit limitation, as does
+    power-loss/process-kill recovery.
+    """
     if not writes:
         return
     root.mkdir(parents=True, exist_ok=True)
     lock = root / '.sdlc-codex-install.lock'
     fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     made_dirs: list[Path] = []
+    applied: list[Path] = []
     try:
         for path in expected:
             rel = path.relative_to(root).as_posix()
@@ -385,19 +401,25 @@ def transaction(root: Path, writes: dict[Path, bytes | None], expected: dict[Pat
             actual = path.read_bytes() if path.exists() else None
             if actual != expected[path]:
                 raise ValueError(f'concurrent modification: {rel}')
-        originals = {p: expected[p] for p in writes}
         for path, data in writes.items():
+            if data is None:
+                applied.append(path)  # mark applied immediately before the unlink
+                path.unlink(missing_ok=True)
+                continue
             for parent in reversed(path.parents):
                 if parent == root or root in parent.parents:
                     if not parent.exists():
                         parent.mkdir()
                         made_dirs.append(parent)
-            if data is None:
-                path.unlink(missing_ok=True)
-            else:
-                atomic_write(path, data)
+            # Mark applied only after all parent prep, immediately before atomic_write: if a
+            # parent mkdir raced and raised, this destination was never attempted and must not
+            # be rolled back (which would delete a concurrent writer's file there). atomic_write
+            # replaces atomically, but is tracked here so a replace-then-error still restores.
+            applied.append(path)
+            atomic_write(path, data)
     except BaseException:
-        for path, data in reversed(list(locals().get('originals', {}).items())):
+        for path in reversed(applied):
+            data = expected[path]
             if data is None:
                 path.unlink(missing_ok=True)
             elif not path.exists() or path.read_bytes() != data:

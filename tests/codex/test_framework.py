@@ -54,12 +54,16 @@ class FrameworkAcceptance(unittest.TestCase):
             self.assertTrue(role['developer_instructions'])
             self.assertNotIn('model', role)
             self.assertNotIn('tools', role)
-        for name in ('commit-pr', 'create-jira', 'new-feature'):
+            # No agent emits sandbox_mode: a custom role's sandbox_mode does not replace the
+            # inherited parent permission policy, so advertising it would over-claim an
+            # unsupported native effect (COMPAT-01). Read-only review stays an instruction.
+            self.assertNotIn('sandbox_mode', role)
+        for name in ('commit-pr', 'create-jira', 'new-feature', 'ui-guidelines'):
             policy = yaml.safe_load((self.root / f'.agents/skills/sdlc-{name}/agents/openai.yaml').read_text())
             self.assertFalse(policy['policy']['allow_implicit_invocation'])
         explicit = {p.parents[1].name for p in (self.root / '.agents/skills').glob('*/agents/openai.yaml')}
-        self.assertEqual(explicit, {'sdlc-commit-pr', 'sdlc-create-jira', 'sdlc-new-feature'})
-        self.assertEqual(len(skills) - len(explicit), 52)
+        self.assertEqual(explicit, {'sdlc-commit-pr', 'sdlc-create-jira', 'sdlc-new-feature', 'sdlc-ui-guidelines'})
+        self.assertEqual(len(skills) - len(explicit), 51)
         tomllib.loads((self.root / '.codex/framework/mcp.example.toml').read_text())
         # The footer fragment is one mergeable field of unique native IDs verified against the
         # Codex CLI footer item list; cost/credit estimates and unknown IDs are rejected.
@@ -125,7 +129,7 @@ class FrameworkAcceptance(unittest.TestCase):
         text = json.dumps(json.loads(result.stdout))
         inv = f.source_inventory()
         names = {'sdlc-' + n for n in inv['skills'] + inv['commands']} | {'sdlc-agent-' + n for n in inv['agents']}
-        expected = names - {'sdlc-commit-pr', 'sdlc-create-jira', 'sdlc-new-feature'}
+        expected = names - {'sdlc-commit-pr', 'sdlc-create-jira', 'sdlc-new-feature', 'sdlc-ui-guidelines'}
         self.assertEqual({n for n in names if n in text}, expected)
         self.assertIn('SDLC framework for Codex', text)
         self.assertIn('SDLC | <short task>', text)

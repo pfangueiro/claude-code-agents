@@ -17,7 +17,10 @@ cwd=$(echo "$input" | jq -r '.cwd // empty' 2>/dev/null)
 timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 if [[ -n "$session_id" ]]; then
-  jq -n \
+  # -c (compact): one JSON object per line. jq pretty-prints by default, which
+  # would split the record across lines and break the one-object-per-line JSONL
+  # contract the collector parses line-by-line.
+  jq -cn \
     --arg event "session_end" \
     --arg sid "$session_id" \
     --arg cwd "$cwd" \

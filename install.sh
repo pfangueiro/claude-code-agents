@@ -4,15 +4,26 @@
 # Claude Agents - User-Global Installer
 # ============================================================================
 # Installs the framework ONCE into ~/.claude, where Claude Code picks it up in
-# EVERY project. No per-project deployment. Self-healing: the SessionStart
-# healthcheck hook and the launchd watchdog fork `install.sh --update` to
-# reconcile ~/.claude against this source repo.
+# EVERY project. No per-project deployment. Core components install by default;
+# optional components are opt-in via positive flags. The background health checks
+# (the SessionStart hook and the launchd watchdog) are OBSERVE-ONLY — they report
+# drift and NEVER fork an installer or repair state. Repair is an explicit,
+# foreground `./install.sh --update`.
 #
 # Usage:
-#   ./install.sh            - Install / re-install into ~/.claude (canonical)
-#   ./install.sh --update   - Non-interactive reconcile of ~/.claude (self-heal)
+#   ./install.sh [--with-watchdog] [--with-analytics] [--with-notifications]
+#                           - Install / re-install into ~/.claude (canonical)
+#   ./install.sh --update   - Non-interactive foreground reconcile of ~/.claude
 #   ./install.sh --upgrade  - Migrate from old per-project copies (reconcile + confirm teardown + verify)
-#   ./install.sh --help      - Show this help message
+#   ./install.sh --help     - Show this help message
+#
+# Optional components are default-OFF; selection is recorded in
+# ~/.claude/.framework-version (analytics=/watchdog=/notifications= enabled|disabled):
+#   --with-watchdog         launchd diagnostics + backup daemon (macOS only)
+#   --with-analytics        observability dashboard assets, claude-obs alias, analytics hooks
+#   --with-notifications    desktop Notification hook (notify.sh)
+# Omitting a flag on an EXISTING install preserves that component as-is — it is
+# never deleted, disabled, recreated or reloaded by its absence.
 # ============================================================================
 
 set -e
@@ -32,12 +43,61 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
-# Installation mode (no-args = canonical install)
-MODE="${1:-install}"
-# --upgrade consent flag (read ONLY by the --upgrade teardown; harmless no-op on other modes).
-# Canonical flag order is `--upgrade [--yes]` (MODE reads $1); the skip one-liner emits that.
+# ----------------------------------------------------------------------------
+# Argument parsing: ONE mode + optional opt-in flags in ANY order.
+#   MODE  = the single operation (install / --update / --upgrade / ...).
+#   SEL_* = positive opt-in component flags (default OFF; core always installs).
+# Rejects (nonzero) an unknown option, a flag given more than once, and more than
+# one mode. No mode token => canonical `install`. `--yes`/`-y` is accepted in any
+# mode but is only meaningful to the --upgrade teardown consent (via
+# UPGRADE_ASSUME_YES); it is a harmless no-op elsewhere and changes no owner policy.
+# ----------------------------------------------------------------------------
+MODE=""
+MODE_SET=0
 UPGRADE_ASSUME_YES=0
-for _arg in "$@"; do case "$_arg" in --yes|-y) UPGRADE_ASSUME_YES=1 ;; esac; done
+SEL_WATCHDOG=0
+SEL_ANALYTICS=0
+SEL_NOTIFICATIONS=0
+
+for _arg in "$@"; do
+    case "$_arg" in
+        install|--install|--team-setup|--update|--upgrade|--migrate-legacy|--dry-run|-n|--uninstall|--help|-h)
+            if [ "$MODE_SET" -eq 1 ]; then
+                echo "install.sh: more than one mode given ('$MODE' and '$_arg') — choose one" >&2
+                echo "Run './install.sh --help' for usage." >&2
+                exit 1
+            fi
+            MODE="$_arg"; MODE_SET=1
+            ;;
+        --with-watchdog)
+            if [ "$SEL_WATCHDOG" -eq 1 ]; then
+                echo "install.sh: --with-watchdog given more than once" >&2; exit 1
+            fi
+            SEL_WATCHDOG=1
+            ;;
+        --with-analytics)
+            if [ "$SEL_ANALYTICS" -eq 1 ]; then
+                echo "install.sh: --with-analytics given more than once" >&2; exit 1
+            fi
+            SEL_ANALYTICS=1
+            ;;
+        --with-notifications)
+            if [ "$SEL_NOTIFICATIONS" -eq 1 ]; then
+                echo "install.sh: --with-notifications given more than once" >&2; exit 1
+            fi
+            SEL_NOTIFICATIONS=1
+            ;;
+        --yes|-y)
+            UPGRADE_ASSUME_YES=1
+            ;;
+        *)
+            echo "install.sh: unknown option '$_arg'" >&2
+            echo "Run './install.sh --help' for usage." >&2
+            exit 1
+            ;;
+    esac
+done
+[ "$MODE_SET" -eq 1 ] || MODE="install"
 
 # Component lists
 AGENTS=(
@@ -480,6 +540,149 @@ _sha_file() {
     fi
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Optional-component selection (small source-selection helpers — NOT an options
+# subsystem). The three flags gate what this run INSTALLS; the recorded marker
+# fields (analytics/watchdog/notifications = enabled|disabled|unknown) record the
+# standing selection so a later observe-only check and the statusline can tell a
+# deliberate default-off from a missing selected payload. Marker content is parsed
+# as DATA — never eval'd or sourced.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Read one selection field from ~/.claude/.framework-version WITHOUT eval/source.
+# Echoes: enabled | disabled | unknown (malformed/invalid/duplicate) | absent (no field).
+_marker_field() {
+    local name="$1" marker="$HOME/.claude/.framework-version" line
+    [ -f "$marker" ] || { echo "absent"; return 0; }
+    local -a vals=()
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            "${name}="*) vals+=("${line#"${name}="}") ;;
+        esac
+    done < "$marker"
+    case "${#vals[@]}" in
+        0) echo "absent" ;;
+        1) case "${vals[0]}" in enabled) echo "enabled" ;; disabled) echo "disabled" ;; *) echo "unknown" ;; esac ;;
+        *) echo "unknown" ;;   # duplicate field key → ambiguous → unknown (fail-closed)
+    esac
+}
+
+# Decide the value to RECORD for one selection field on this install.
+#   $1 = field name   $2 = this-run flag (1=selected)   $3 = 1 if a marker already existed
+# Flag wins (enabled). Else carry forward a clear prior value; a legacy marker with no
+# such field, or a malformed one, is 'unknown' (never inferred-enabled from artifacts).
+# No prior marker at all => deliberate fresh install => unselected is 'disabled'.
+_selection_field_value() {
+    local name="$1" sel="$2" marker_existed="$3" prior
+    if [ "$sel" -eq 1 ]; then echo "enabled"; return 0; fi
+    if [ "$marker_existed" -eq 1 ]; then
+        prior=$(_marker_field "$name")
+        case "$prior" in
+            enabled)  echo "enabled" ;;
+            disabled) echo "disabled" ;;
+            *)        echo "unknown" ;;   # absent-on-legacy or malformed → preserve as unknown
+        esac
+        return 0
+    fi
+    echo "disabled"
+}
+
+# Seed ~/.claude/settings.json from the template with optional hook EVENTS for
+# components NOT selected this run removed, so a fresh default install never wires
+# analytics/notification hooks. Atomic. Used only when settings.json is ABSENT
+# (fresh seed / full-delete recovery) — never to replace an existing settings
+# object.
+#
+# FAIL-CLOSED without jq: jq is what removes the UNSELECTED optional hook events from
+# the template. Without it there is no safe way to filter, so we REFUSE to write — a raw
+# copy of the full template would wire analytics/notification hooks that were never
+# selected (and an existing optional hook SCRIPT may already be on disk from a prior
+# install or a restored extras dir, so the "stray bindings are inert" assumption is
+# false). Missing jq must never grant optional-execution authority; the caller is told to
+# install jq and re-run, and the existing settings.json (if any) is left untouched.
+_seed_settings_from_template() {
+    local dest="$1"
+    local template="${SCRIPT_DIR}/global-config/settings.json.template"
+    [ -f "$template" ] || return 1
+    if ! command -v jq >/dev/null 2>&1; then
+        print_error "Cannot seed settings.json without jq (needed to filter unselected optional hook events). Install jq and re-run './install.sh --update'; settings.json left unwritten (no optional hooks wired)."
+        return 1
+    fi
+    local tmp
+    tmp=$(mktemp "${HOME}/.claude/.settings.seed.XXXXXX" 2>/dev/null) || return 1
+    local jqf="."
+    [ "$SEL_ANALYTICS" -eq 1 ]     || jqf="$jqf | del(.hooks.SubagentStart) | del(.hooks.SubagentStop) | del(.hooks.SessionEnd)"
+    [ "$SEL_NOTIFICATIONS" -eq 1 ] || jqf="$jqf | del(.hooks.Notification)"
+    if jq "$jqf" "$template" > "$tmp" 2>/dev/null && [ -s "$tmp" ] && jq -e . "$tmp" >/dev/null 2>&1; then
+        mv "$tmp" "$dest"; return 0
+    fi
+    rm -f "$tmp" 2>/dev/null || true
+    return 1
+}
+
+# Copy an OPTIONAL-component asset byte-safely: create when absent, no-op when
+# byte-equal, and PRESERVE (never silently overwrite) when it differs — the
+# deployed file may be the owner's customization, and a same basename is not proof
+# the framework owns those bytes. Used for analytics assets, which the observe-only
+# checks do NOT hash, so a preserved copy never becomes an unfixable drift.
+#   $1=src  $2=dst  $3=label
+#
+# SYMLINK-SAFE: a destination that is itself a symlink — INCLUDING a dangling one — is
+# foreign/custom state and must never be followed. `cp` through a symlink writes to the
+# link TARGET, which can be anywhere on the filesystem (a dangling link's target does not
+# even exist yet), escaping the intended ~/.claude tree. `-e` is false for a dangling
+# link, so the plain existence guards below would miss it; test -L independently FIRST.
+# The same applies when any ancestor directory of the destination is a symlink. In every
+# such case we PRESERVE the link (never follow, overwrite or delete it) and report a
+# manual step, rather than writing through it.
+_install_preserving_custom() {
+    local src="$1" dst="$2" label="$3"
+    if [ -L "$dst" ]; then
+        print_skip "Preserved existing $label (destination is a symlink — not followed or overwritten; remove it first to adopt the framework copy)"
+        return 0
+    fi
+    local _anc
+    _anc=$(dirname "$dst")
+    while [ -n "$_anc" ] && [ "$_anc" != "/" ] && [ "$_anc" != "." ]; do
+        if [ -L "$_anc" ]; then
+            print_skip "Preserved existing $label (destination path crosses a symlinked directory '$_anc' — not written; resolve it first)"
+            return 0
+        fi
+        [ "$_anc" = "$HOME/.claude" ] && break
+        [ "$_anc" = "$HOME" ] && break
+        _anc=$(dirname "$_anc")
+    done
+    if [ -e "$dst" ] && ! diff -q "$src" "$dst" >/dev/null 2>&1; then
+        print_skip "Preserved existing $label (differs from source; not overwritten — remove it first to adopt the framework copy)"
+        return 0
+    fi
+    if [ -e "$dst" ]; then
+        print_skip "$label already up to date"
+        return 0
+    fi
+    cp "$src" "$dst"
+    print_success "Installed $label"
+}
+
+# Map a hook-script basename to its component: analytics | notifications | core.
+_hook_component() {
+    case "$1" in
+        agent-tracker.sh|session-end.sh) echo analytics ;;
+        notify.sh)                       echo notifications ;;
+        *)                               echo core ;;
+    esac
+}
+
+# Is an optional component wanted (selected) THIS run? core is always wanted.
+_component_selected() {
+    case "$1" in
+        analytics)     [ "$SEL_ANALYTICS" -eq 1 ] ;;
+        notifications) [ "$SEL_NOTIFICATIONS" -eq 1 ] ;;
+        watchdog)      [ "$SEL_WATCHDOG" -eq 1 ] ;;
+        *)             return 0 ;;   # core
+    esac
+}
+
 # Autonomous, OPT-IN, guardrailed migration of OLD per-project framework copies to
 # user-global. Runs ONLY if ~/.claude/.framework-autonomy sets LEGACY_PROJECTS_DIR.
 # For each project under that dir carrying a per-project framework .claude/agents,
@@ -738,11 +941,16 @@ install_global_config() {
     mkdir -p ~/.claude/hooks
     mkdir -p ~/.claude/output-styles
 
-    # Copy hooks (executable shell scripts)
+    # Copy hooks (executable shell scripts). Core hooks always; an optional-component
+    # hook (analytics: agent-tracker/session-end, notifications: notify) only when
+    # that component is selected THIS run. An unselected optional hook already on disk
+    # from a prior install is left untouched (preserved) by sync_hooks' orphan prune,
+    # which keeps every source basename — it is never deleted by its omission here.
     for hook in "$src_dir"/hooks/*.sh; do
         [ -f "$hook" ] || continue
         local name
         name=$(basename "$hook")
+        _component_selected "$(_hook_component "$name")" || continue
         cp "$hook" ~/.claude/hooks/"$name"
         chmod +x ~/.claude/hooks/"$name"
         print_success "Installed hook $name"
@@ -766,13 +974,14 @@ install_global_config() {
         print_success "Installed statusline.sh"
     fi
 
-    # Handle settings.json — NON-INTERACTIVE. Seed from template on first run;
-    # otherwise leave the user's file untouched (sync_hooks reconciles the
-    # framework-owned keys: hooks / env / permissions / statusLine).
+    # Handle settings.json — NON-INTERACTIVE. Seed from the SELECTION-FILTERED
+    # template on first run (unselected optional hook events removed); otherwise
+    # leave the user's file untouched (sync_hooks reconciles the framework-owned
+    # keys: hooks / env / permissions / statusLine).
     if [ -f "$src_dir/settings.json.template" ]; then
         if [ ! -f ~/.claude/settings.json ]; then
-            cp "$src_dir/settings.json.template" ~/.claude/settings.json
-            print_success "Installed settings.json from template"
+            _seed_settings_from_template ~/.claude/settings.json \
+                && print_success "Installed settings.json from template"
         else
             print_skip "settings.json exists — leaving it (sync_hooks reconciles framework keys)"
         fi
@@ -800,6 +1009,30 @@ _atomic_settings_jq() {
     fi
 }
 
+# Reconcile ONE hook event's group array, preserving foreign bindings. Echoes the merged
+# array (sorted, compact) on stdout; "[]" when nothing remains.
+#   $1 = event name
+#   $2 = template groups for this event (JSON array; "[]" for an off-template event that
+#        should only have stale framework entries stripped, nothing re-added)
+#   $3 = recognized framework hook command PATHS (JSON array of strings)
+# Rule: within the user's existing groups, drop ONLY the hook sub-entries whose command
+# path (args stripped) is a recognized framework path, then drop any group left empty; the
+# template's canonical groups are appended. Foreign groups, foreign sub-entries inside a
+# MIXED framework group, and each group's matcher/metadata are all preserved verbatim. A
+# framework command is recognized ONLY by exact ~/.claude/hooks/<name> (or $HOME-expanded)
+# path — never by basename, so a foreign command that merely shares a basename is kept.
+# Idempotent: re-running yields the same array (the canonical binding appears exactly once).
+_merge_event_hooks() {
+    jq -Sc --arg e "$1" --argjson t "$2" --argjson fw "$3" '
+        ((.hooks[$e] // [])
+          | map(.hooks |= map(select(
+                (((.command // "") | split(" ") | .[0])) as $p | ($fw | index($p)) | not)))
+          | map(select((.hooks | length) > 0))
+        ) as $kept
+        | ($kept + $t)
+    ' ~/.claude/settings.json 2>/dev/null
+}
+
 sync_hooks() {
     echo -e "\n${BOLD}Syncing Hooks:${NC}"
 
@@ -812,17 +1045,25 @@ sync_hooks() {
 
     mkdir -p ~/.claude/hooks
 
-    # Build set of source hook basenames for orphan detection below
+    # Build set of ALL source hook basenames for orphan detection below. This set
+    # INTENTIONALLY includes optional-component hooks even when they are not selected
+    # this run, so that an optional hook preserved from a prior install is recognised
+    # as framework-shipped and is NEVER pruned by its omission (optional omission is
+    # not a stale/orphan condition).
     local -a src_hook_names=()
     for hook in "$src_dir"/*.sh "$src_dir"/*.json; do
         [ -f "$hook" ] || continue
         src_hook_names+=("$(basename "$hook")")
     done
 
+    # Copy core hooks always; an optional-component hook only when selected THIS run.
+    # Unselected optional hooks are neither copied nor removed — an existing one is
+    # preserved untouched by the orphan prune (which keeps every source basename).
     for hook in "$src_dir"/*.sh; do
         [ -f "$hook" ] || continue
         local name
         name=$(basename "$hook")
+        _component_selected "$(_hook_component "$name")" || continue
         cp "$hook" ~/.claude/hooks/"$name"
         chmod +x ~/.claude/hooks/"$name"
         print_success "Synced hook $name"
@@ -836,48 +1077,29 @@ sync_hooks() {
         print_success "Synced hook config $name"
     done
 
-    # Orphan detection: prune deployed hook files that are no longer in source.
-    # sync_hooks copies forward but never reverse-prunes; before this block,
-    # files removed from source persisted in ~/.claude/hooks/ forever
-    # (e.g. stop-phrase-guard.sh after v2.9.2 removal needed manual rm).
-    local pruned=0
-    for deployed in ~/.claude/hooks/*.sh ~/.claude/hooks/*.json; do
-        [ -f "$deployed" ] || continue
-        local dname
-        dname=$(basename "$deployed")
-        local found=0
-        for src_name in "${src_hook_names[@]}"; do
-            [ "$src_name" = "$dname" ] && { found=1; break; }
-        done
-        if [ "$found" -eq 0 ]; then
-            rm -f "$deployed"
-            pruned=$((pruned + 1))
-            print_skip "Pruned orphan hook $dname (no longer in source)"
-        fi
-    done
-    [ "$pruned" -eq 0 ] && print_skip "No orphan hooks to prune"
+    # NOTE: there is deliberately NO broad "prune every deployed hook file not in source"
+    # step here. A file in ~/.claude/hooks/ whose basename is not a current source name
+    # has no ownership proof — it may be the owner's own hook, not a retired framework one
+    # — and deleting it on a plain update would silently unwire legacy/custom behavior.
+    # Foreign hook files are retained. (Retiring a framework hook is handled explicitly, by
+    # name, the same fail-closed way as RETIRED_LIB_FILES / RETIRED_SKILLS — never by a
+    # broad omission sweep.) The event-level reconcile below likewise touches only exact
+    # recognized framework command paths, never a basename look-alike.
 
-    # Recover from a full DELETE of settings.json (not just an emptied {} wipe) OR a settings.json
-    # that is not a usable JSON OBJECT — either unparseable (truncated write) or valid JSON of the
-    # wrong shape (array / scalar). The per-block reconcile reads the file with jq and either can't
-    # parse it or can't index a non-object, so every _atomic_settings_jq below no-ops — leaving the
-    # damage unhealed AND blocking the whole settings reconcile. Requiring type=="object" (not just
-    # parseable) covers the full class. The bad file is preserved (settings.json.corrupt-<ts>) for
-    # forensics / manual recovery before reseeding. Atomic cp so a reader never sees half.
-    local _settings_reseed=0
+    # Recover from a full DELETE of settings.json by seeding a fresh SELECTION-FILTERED
+    # copy. A settings.json that is PRESENT but not a usable JSON OBJECT (unparseable
+    # truncated write, or valid JSON of the wrong shape) is PRESERVED as-is and reported
+    # as a manual-repair item — it is NEVER silently reset to the template. A forensic
+    # copy (settings.json.corrupt-<ts>) is written for recovery, but the live malformed
+    # file is left untouched so an owner edit/snapshot is never clobbered by a reseed.
     if [ ! -f ~/.claude/settings.json ]; then
-        _settings_reseed=1
+        _seed_settings_from_template ~/.claude/settings.json \
+            && print_success "Recreated settings.json from template"
     elif command -v jq >/dev/null 2>&1 && ! jq -e 'type == "object"' ~/.claude/settings.json >/dev/null 2>&1; then
         local _corrupt_ts
         _corrupt_ts=$(date -u +%Y%m%d-%H%M%S 2>/dev/null || echo backup)
         cp ~/.claude/settings.json ~/.claude/settings.json.corrupt-"$_corrupt_ts" 2>/dev/null || true
-        print_error "settings.json was not a valid JSON object — backed up to settings.json.corrupt-${_corrupt_ts} and reseeding from template" || true
-        _settings_reseed=1
-    fi
-    if [ "$_settings_reseed" -eq 1 ] && [ -f "${SCRIPT_DIR}/global-config/settings.json.template" ]; then
-        cp "${SCRIPT_DIR}/global-config/settings.json.template" ~/.claude/settings.json.recreate.$$ \
-            && mv ~/.claude/settings.json.recreate.$$ ~/.claude/settings.json \
-            && print_success "Recreated settings.json from template"
+        print_error "settings.json is not a valid JSON object — preserved as-is (forensic copy: settings.json.corrupt-${_corrupt_ts}). Fix it by hand or restore from a snapshot; the installer will not overwrite it." || true
     fi
 
     # Reconcile hook events and env vars in settings.json against template.
@@ -889,19 +1111,44 @@ sync_hooks() {
         if [ -f "$template" ]; then
             local tmpl_events
             tmpl_events=$(jq -r '.hooks | keys[]' "$template" 2>/dev/null)
+
+            # Recognized framework hook command PATHS (both the tilde form the template uses
+            # and the $HOME-expanded form), one per shipped hook basename. Reconcile touches
+            # ONLY these exact paths — never a basename look-alike — so a foreign command that
+            # merely shares a basename (e.g. /owner/session-end.sh) is treated as foreign and
+            # preserved. Built once as a JSON array for the jq merge helper.
+            local _fwpaths_json="[]" _hn
+            for _hn in "${src_hook_names[@]}"; do
+                [ -n "$_hn" ] || continue
+                _fwpaths_json=$(jq -c --arg t "~/.claude/hooks/$_hn" --arg h "$HOME/.claude/hooks/$_hn" \
+                    '. + [$t, $h]' <<<"$_fwpaths_json")
+            done
+
             local reconciled=false
             for event in $tmpl_events; do
-                local tmpl_cfg usr_cfg
-                tmpl_cfg=$(jq -Sc ".hooks[\"$event\"]" "$template")
+                # Only ADD/RECONCILE an optional-component event when that component is
+                # selected THIS run. Skipping leaves an existing optional (or foreign)
+                # binding for that event untouched on a plain update, and keeps the event
+                # unwired on a fresh default install.
+                case "$event" in
+                    SubagentStart|SubagentStop|SessionEnd) [ "$SEL_ANALYTICS" -eq 1 ]     || continue ;;
+                    Notification)                          [ "$SEL_NOTIFICATIONS" -eq 1 ] || continue ;;
+                esac
+                # MERGE, never wholesale-replace: keep foreign groups and foreign sub-entries
+                # inside a mixed framework group (with their matcher/metadata), reconcile only
+                # the framework's own entries, and ensure the canonical binding appears exactly
+                # once. A group is never deleted just because one framework command sat in it.
+                local tmpl_groups usr_cfg merged_cfg
+                tmpl_groups=$(jq -c ".hooks[\"$event\"]" "$template")
                 usr_cfg=$(jq -Sc ".hooks[\"$event\"] // null" ~/.claude/settings.json)
-                if [ "$tmpl_cfg" != "$usr_cfg" ]; then
-                    local event_config
-                    event_config=$(jq ".hooks[\"$event\"]" "$template")
-                    _atomic_settings_jq ".hooks[\"$event\"] = $event_config" || true
+                merged_cfg=$(_merge_event_hooks "$event" "$tmpl_groups" "$_fwpaths_json")
+                [ -n "$merged_cfg" ] || continue
+                if [ "$merged_cfg" != "$usr_cfg" ]; then
+                    _atomic_settings_jq ".hooks[\"$event\"] = $merged_cfg" || true
                     if [ "$usr_cfg" = "null" ]; then
                         print_success "Added hook event $event to settings.json"
                     else
-                        print_success "Reconciled drifted hook event $event (was: ${usr_cfg:0:80}...)"
+                        print_success "Reconciled framework hooks in event $event (foreign bindings preserved)"
                     fi
                     reconciled=true
                 fi
@@ -910,64 +1157,73 @@ sync_hooks() {
                 print_skip "All hook events match template"
             fi
 
-            # Reverse-prune hook EVENTS: the forward loop above adds/repairs every event the
-            # template HAS, but never removes an event the template DROPPED. A stale event
-            # still bound to a framework hook script (e.g. `Stop -> session-end.sh` after
-            # session-end.sh moved to SessionEnd) then double-fires that script every turn,
-            # forever. Framework-scoped: only prune an off-template event whose command is one
-            # of THIS framework's hook scripts — a user's own event/script is left alone.
-            # Mirrors the hook-FILE orphan prune above (files were pruned; event keys weren't).
+            # Reverse-reconcile OFF-template events: the forward loop repairs every event the
+            # template HAS, but a framework hook can also linger on an event the template
+            # DROPPED (e.g. `Stop -> session-end.sh` after session-end.sh moved to SessionEnd),
+            # double-firing forever. Strip ONLY the exact framework command paths from such an
+            # event — any foreign sub-entries/groups are kept — then delete the event key only
+            # if nothing foreign remains. A purely foreign off-template event is left entirely
+            # alone (it never contained a recognized framework path).
             local usr_events uevent
             usr_events=$(jq -r '.hooks | keys[]' ~/.claude/settings.json 2>/dev/null)
             for uevent in $usr_events; do
                 printf '%s\n' "$tmpl_events" | grep -qx "$uevent" && continue
-                local runs_fw=0 ucmd ubase src_name
-                while IFS= read -r ucmd; do
-                    [ -n "$ucmd" ] || continue
-                    ubase=$(basename "$ucmd")
-                    for src_name in "${src_hook_names[@]}"; do
-                        [ "$ubase" = "$src_name" ] && runs_fw=1
-                    done
-                done < <(jq -r ".hooks[\"$uevent\"][]?.hooks[]?.command // empty" ~/.claude/settings.json 2>/dev/null)
-                if [ "$runs_fw" -eq 1 ]; then
+                local off_cur off_merged
+                off_cur=$(jq -Sc ".hooks[\"$uevent\"] // []" ~/.claude/settings.json)
+                off_merged=$(_merge_event_hooks "$uevent" "[]" "$_fwpaths_json")
+                [ -n "$off_merged" ] || continue
+                [ "$off_merged" = "$off_cur" ] && continue
+                if [ "$off_merged" = "[]" ]; then
                     _atomic_settings_jq "del(.hooks[\"$uevent\"])" || true
-                    print_skip "Pruned stale hook event $uevent (ran a framework hook the template dropped)"
+                    print_skip "Pruned stale hook event $uevent (only framework hooks the template dropped; any foreign bindings kept)"
+                else
+                    _atomic_settings_jq ".hooks[\"$uevent\"] = $off_merged" || true
+                    print_skip "Reconciled off-template event $uevent (removed stale framework hook; preserved foreign bindings)"
                 fi
             done
 
-            # Merge new env vars into existing settings.json. Add-only, so a deliberate user
-            # value is preserved — EXCEPT for a key whose valid set the framework knows and
-            # whose current value is outside it.
+            # Merge new env vars into existing settings.json. ADD-ONLY: a missing template
+            # key is added with the template default; an EXISTING owner value is always
+            # preserved and never overwritten by the framework default.
             #
-            # Why the exception exists: validate.sh --quick FAILS on an invalid
-            # CLAUDE_CODE_EFFORT_LEVEL, and that failure is what the watchdog reacts to by
-            # running `install.sh --update`. With a purely add-only merge the value was never
-            # corrected, so the very next check failed identically — an hourly heal that heals
-            # nothing, forever. Reproduced with `max` (a real, documented session-only tier a
-            # user would plausibly try to persist): errors before heal, same error after.
-            # This is the repo's own rule from docs/FAILURE-MODES.md — a check that convicts
-            # must be paired with a heal that can actually fix it, or it must not run in the
-            # automated path at all.
+            # CLAUDE_CODE_EFFORT_LEVEL specifically must not be clobbered: the current
+            # official model-config documentation (code.claude.com/docs/en/model-config)
+            # lists `max` and `auto` as supported environment values alongside the tiers
+            # low|medium|high|xhigh. A prior version force-rewrote an existing `max`/`auto`
+            # back to the template's `xhigh`, destroying a valid owner choice — removed here.
+            # An existing value that is NOT one of the supported set is a manual-repair item:
+            # it is reported but LEFT UNCHANGED, and the raw value is NOT echoed back (it is
+            # arbitrary text — never trust it into output or let it drive an overwrite).
             local new_env_keys
             new_env_keys=$(jq -r '.env | keys[]' "$template" 2>/dev/null)
             for key in $new_env_keys; do
+                # CLAUDE_CODE_EFFORT_LEVEL is NOT add-only-seeded onto an existing settings
+                # object: an ABSENT key is a deliberate owner/native-default preference and
+                # must stay absent (forcing the template's xhigh would silently override that
+                # choice). A fresh install still carries the template default — the seed path
+                # above copies the whole env block — so this add-only merge never reintroduces
+                # it. An EXISTING value is validated and left untouched: supported values
+                # (including an explicit empty string) are preserved silently; any other value
+                # is reported as a manual-repair item but never overwritten, and its raw text
+                # is never echoed back into installer output.
+                if [ "$key" = "CLAUDE_CODE_EFFORT_LEVEL" ]; then
+                    if jq -e '.env["CLAUDE_CODE_EFFORT_LEVEL"]' ~/.claude/settings.json &>/dev/null; then
+                        local cur_eff
+                        cur_eff=$(jq -r '.env["CLAUDE_CODE_EFFORT_LEVEL"] // ""' ~/.claude/settings.json 2>/dev/null)
+                        case "$cur_eff" in
+                            ""|low|medium|high|xhigh|max|auto) : ;;   # supported (incl. empty) — preserve the owner's choice
+                            *)
+                                print_error "CLAUDE_CODE_EFFORT_LEVEL has an unsupported value — left unchanged (not overwritten). Set it by hand to one of low|medium|high|xhigh|max|auto." || true
+                                ;;
+                        esac
+                    fi
+                    continue
+                fi
                 if ! jq -e ".env[\"$key\"]" ~/.claude/settings.json &>/dev/null; then
                     local val
                     val=$(jq ".env[\"$key\"]" "$template")
                     _atomic_settings_jq ".env[\"$key\"] = $val" || true
                     print_success "Added env var $key to settings.json"
-                elif [ "$key" = "CLAUDE_CODE_EFFORT_LEVEL" ]; then
-                    local cur_eff
-                    cur_eff=$(jq -r '.env["CLAUDE_CODE_EFFORT_LEVEL"] // ""' ~/.claude/settings.json 2>/dev/null)
-                    case "$cur_eff" in
-                        low|medium|high|xhigh) : ;;   # a valid choice — never overwrite it
-                        *)
-                            local eff_val
-                            eff_val=$(jq '.env["CLAUDE_CODE_EFFORT_LEVEL"]' "$template")
-                            _atomic_settings_jq ".env[\"CLAUDE_CODE_EFFORT_LEVEL\"] = $eff_val" || true
-                            print_success "Healed invalid CLAUDE_CODE_EFFORT_LEVEL ('$cur_eff' → $eff_val); persistent tiers are low|medium|high|xhigh"
-                            ;;
-                    esac
                 fi
             done
 
@@ -1038,6 +1294,12 @@ sync_hooks() {
 }
 
 install_analytics() {
+    # OPT-IN: only runs when --with-analytics was given THIS run. Not selected =>
+    # leave any existing analytics assets/alias exactly as they are (preserve; never
+    # install, remove or re-run the collector). Selection only copies assets + alias;
+    # it NEVER runs the collector — scanning session history stays owner-invoked.
+    [ "$SEL_ANALYTICS" -eq 1 ] || return 0
+
     echo -e "\n${BOLD}Installing Analytics (Observability Dashboard):${NC}"
 
     local src_dir="${SCRIPT_DIR}/observability"
@@ -1049,11 +1311,12 @@ install_analytics() {
 
     mkdir -p ~/.claude/analytics
 
+    # Assets are copied BYTE-SAFELY: a deployed copy that differs is preserved, not
+    # overwritten (a same basename is not proof the framework owns those bytes).
     local errors=0
     for file in collector.py server.py dashboard.html schema.sql; do
         if [ -f "$src_dir/$file" ]; then
-            cp "$src_dir/$file" ~/.claude/analytics/"$file"
-            print_success "Installed analytics $file"
+            _install_preserving_custom "$src_dir/$file" ~/.claude/analytics/"$file" "analytics $file"
         else
             print_error "Missing observability/$file"
             ((errors++)) || true
@@ -1085,17 +1348,33 @@ install_analytics() {
 }
 
 write_framework_path_marker() {
-    # Records the repo root so the SessionStart healthcheck hook and the watchdog
-    # can locate it (they cd here to fork install.sh --update).
+    # Records the repo root so the observe-only SessionStart hook and watchdog can
+    # locate the source to COMPARE against (they report drift; they do not fork an
+    # installer). Read back with a single-line read that preserves embedded spaces.
     mkdir -p "$HOME/.claude"
     echo "$SCRIPT_DIR" > "$HOME/.claude/.framework-path"
     print_success "Wrote framework path marker ($SCRIPT_DIR)"
 }
 
 write_framework_version_marker() {
-    # Records the installed framework version and source SHA under ~/.claude so
-    # downstream tooling can tell what's deployed.
+    # Records the installed framework version, source SHA, and the standing optional-
+    # component selection under ~/.claude so downstream tooling can tell what's deployed
+    # and distinguish a deliberate default-off from a missing selected payload.
+    # Selection marker syntax (one key per line, parsed as data, never eval'd):
+    #   analytics=enabled|disabled|unknown
+    #   watchdog=enabled|disabled|unknown
+    #   notifications=enabled|disabled|unknown
     mkdir -p "$HOME/.claude"
+    local marker="$HOME/.claude/.framework-version"
+    local marker_existed=0
+    [ -f "$marker" ] && marker_existed=1
+
+    # Compute each field from THIS run's flags + the prior marker, BEFORE overwriting.
+    local f_analytics f_watchdog f_notifications
+    f_analytics=$(_selection_field_value analytics "$SEL_ANALYTICS" "$marker_existed")
+    f_watchdog=$(_selection_field_value watchdog "$SEL_WATCHDOG" "$marker_existed")
+    f_notifications=$(_selection_field_value notifications "$SEL_NOTIFICATIONS" "$marker_existed")
+
     local sha="unknown" ahead=0
     if command -v git >/dev/null 2>&1; then
         sha=$(git -C "$SCRIPT_DIR" rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -1114,11 +1393,21 @@ write_framework_version_marker() {
         echo "sha=${sha}"
         echo "ahead=${ahead}"
         echo "installed_at=${ts}"
-    } > "$HOME/.claude/.framework-version"
-    print_success "Wrote framework version marker (v${SCRIPT_VERSION} @ ${sha})"
+        echo "analytics=${f_analytics}"
+        echo "watchdog=${f_watchdog}"
+        echo "notifications=${f_notifications}"
+    } > "$marker"
+    print_success "Wrote framework version marker (v${SCRIPT_VERSION} @ ${sha}; analytics=${f_analytics} watchdog=${f_watchdog} notifications=${f_notifications})"
 }
 
 install_watchdog() {
+    # OPT-IN: only runs when --with-watchdog was given THIS run. Not selected =>
+    # never create/register/reload/kickstart; an existing job, plist and sha marker
+    # are preserved untouched (this slice never unloads or deletes an existing job).
+    # The watchdog is diagnostics + the existing backup policy only — not auto-repair,
+    # and never analytics/collector authority.
+    [ "$SEL_WATCHDOG" -eq 1 ] || return 0
+
     # macOS-only launchd watchdog
     if [[ "$(uname -s)" != "Darwin" ]]; then
         print_info "Not macOS — skipping watchdog daemon"
@@ -1347,8 +1636,13 @@ update_installation() {
     echo -e "\n${BOLD}Updating Installation${NC}"
     echo "Reconciling ~/.claude against source (non-interactive)"
 
-    # Reconcile the shared set + hooks/settings/analytics/statusline/markers/watchdog.
-    # NO personalize_setup — never clobber the user's own ~/.claude/CLAUDE.md edits.
+    # Reconcile the CORE shared set + hooks/settings/statusline/markers. Optional
+    # components (analytics/watchdog) are only installed when their flag is given this
+    # run; otherwise install_analytics/install_watchdog no-op and existing extras are
+    # preserved. NO personalize_setup — never clobber the user's own ~/.claude/CLAUDE.md.
+    # NO reconcile_legacy_projects here: legacy teardown is NOT implicit on an update
+    # (a .framework-autonomy marker is not a background mutation grant). It runs only on
+    # an explicit --upgrade (with consent) or --migrate-legacy.
     install_shared_set
     sync_hooks
     install_analytics || print_error "Analytics installation failed"
@@ -1357,7 +1651,6 @@ update_installation() {
     write_framework_path_marker
     write_framework_version_marker
     install_watchdog || true
-    reconcile_legacy_projects
 }
 
 # ============================================================================
@@ -1461,6 +1754,11 @@ sync_output_styles() {
 #   settings.json (merged in place — see _uninstall_clean_settings), CLAUDE.md,
 #   analytics/*.jsonl telemetry, snapshots/, projects/, todos/.
 _framework_owned_paths() {
+    # $1 = "selected" → emit only paths this run's selection would write (for the
+    # dry-run preview). Default (any other/empty) → the COMPLETE ownership enumeration,
+    # which --uninstall needs so a previously-selected optional extra stays removable
+    # even after it is no longer selected. Selection never narrows uninstall ownership.
+    local mode="${1:-all}"
     local d f base
     for d in agents rules commands; do
         [ -d "$SCRIPT_DIR/.claude/$d" ] || continue
@@ -1488,6 +1786,10 @@ _framework_owned_paths() {
         for f in "$SCRIPT_DIR/global-config/hooks"/*; do
             [ -f "$f" ] || continue
             base=$(basename "$f"); case "$base" in ._*) continue ;; esac
+            # In selected mode, omit an optional-component hook that is not selected.
+            if [ "$mode" = selected ]; then
+                _component_selected "$(_hook_component "$base")" || continue
+            fi
             echo "$HOME/.claude/hooks/$base"
         done
     fi
@@ -1498,14 +1800,18 @@ _framework_owned_paths() {
             echo "$HOME/.claude/output-styles/$base"
         done
     fi
-    for base in collector.py server.py dashboard.html schema.sql; do
-        [ -f "$SCRIPT_DIR/observability/$base" ] && echo "$HOME/.claude/analytics/$base"
-    done
+    if [ "$mode" != selected ] || [ "$SEL_ANALYTICS" -eq 1 ]; then
+        for base in collector.py server.py dashboard.html schema.sql; do
+            [ -f "$SCRIPT_DIR/observability/$base" ] && echo "$HOME/.claude/analytics/$base"
+        done
+    fi
     echo "$HOME/.claude/statusline.sh"
-    echo "$HOME/.claude/daemon/claude-framework-watchdog.sh"
+    if [ "$mode" != selected ] || [ "$SEL_WATCHDOG" -eq 1 ]; then
+        echo "$HOME/.claude/daemon/claude-framework-watchdog.sh"
+        echo "$HOME/.claude/.watchdog-plist.sha"
+    fi
     echo "$HOME/.claude/.framework-path"
     echo "$HOME/.claude/.framework-version"
-    echo "$HOME/.claude/.watchdog-plist.sha"
 }
 
 _WATCHDOG_PLIST="$HOME/Library/LaunchAgents/com.claude-code-agents.framework-watchdog.plist"
@@ -1515,7 +1821,14 @@ cmd_dry_run() {
     echo -e "${BOLD}DRY RUN — nothing is written.${NC}"
     echo "Source: $SCRIPT_DIR"
     echo "Target: $HOME/.claude"
+    local _on="on" _off="off"
+    printf 'Optional components this run: analytics=%s  watchdog=%s  notifications=%s\n' \
+        "$([ "$SEL_ANALYTICS" -eq 1 ] && echo "$_on" || echo "$_off")" \
+        "$([ "$SEL_WATCHDOG" -eq 1 ] && echo "$_on" || echo "$_off")" \
+        "$([ "$SEL_NOTIFICATIONS" -eq 1 ] && echo "$_on" || echo "$_off")"
+    echo "  (unselected optional components already installed would be PRESERVED, not changed)"
     echo ""
+    # SELECTED paths only: the preview reflects exactly what THIS invocation would write.
     while IFS= read -r p; do
         target="${p%/}"
         if [ -e "$target" ]; then
@@ -1523,10 +1836,10 @@ cmd_dry_run() {
         else
             printf '  %bcreate%b     %s\n' "$GREEN" "$NC" "$p"; n_create=$((n_create + 1))
         fi
-    done < <(_framework_owned_paths)
+    done < <(_framework_owned_paths selected)
     echo ""
     echo -e "${BOLD}Merged in place (never replaced wholesale):${NC}"
-    echo "  $HOME/.claude/settings.json   — hook bindings, statusLine, env"
+    echo "  $HOME/.claude/settings.json   — hook bindings, statusLine, env (unselected optional hook events omitted on a fresh seed; an existing file is reconciled, never reset)"
     echo ""
     # Written by a BARE install but deliberately NOT in the owned set above, because --uninstall
     # must not delete them: CLAUDE.md becomes the user's own file the moment it exists, and a
@@ -1538,19 +1851,26 @@ cmd_dry_run() {
     else
         echo "  $HOME/.claude/CLAUDE.md   — created from template (prompts for name/email); never overwritten once it exists"
     fi
-    local _rc="(none found)"
-    [ -f "$HOME/.zshrc" ] && _rc="$HOME/.zshrc" || { [ -f "$HOME/.bashrc" ] && _rc="$HOME/.bashrc"; }
-    echo "  $_rc   — one 'claude-obs' alias line appended (idempotent)"
-    if [ "$(uname -s)" = "Darwin" ]; then
-        echo -e "${BOLD}Background daemon (macOS):${NC}"
-        echo "  $_WATCHDOG_PLIST"
-        echo "  loaded via launchctl; runs hourly to self-heal drift under ~/.claude"
+    if [ "$SEL_ANALYTICS" -eq 1 ]; then
+        local _rc="(none found)"
+        [ -f "$HOME/.zshrc" ] && _rc="$HOME/.zshrc" || { [ -f "$HOME/.bashrc" ] && _rc="$HOME/.bashrc"; }
+        echo "  $_rc   — one 'claude-obs' alias line appended (idempotent; --with-analytics)"
+    fi
+    if [ "$SEL_WATCHDOG" -eq 1 ]; then
+        if [ "$(uname -s)" = "Darwin" ]; then
+            echo -e "${BOLD}Background daemon (macOS, --with-watchdog):${NC}"
+            echo "  $_WATCHDOG_PLIST"
+            echo "  loaded via launchctl; runs hourly OBSERVE-ONLY diagnostics + backups (no auto-repair)"
+        else
+            echo -e "${BOLD}Background daemon:${NC} skipped — not macOS (no launchd)"
+        fi
     else
-        echo -e "${BOLD}Background daemon:${NC} skipped — not macOS (no launchd; SessionStart hook only)"
+        echo -e "${BOLD}Background daemon:${NC} not selected (add --with-watchdog to install it)"
     fi
     echo ""
     echo -e "${BOLD}NOT touched:${NC}"
     echo "  your own skills/agents/commands in ~/.claude (anything this framework does not ship)"
+    echo "  unselected optional components already installed (analytics/watchdog/notifications)"
     echo "  ~/.claude/CLAUDE.md · projects/ · todos/ · snapshots/ · analytics/*.jsonl telemetry"
     echo ""
     printf '%s path(s): %s new, %s overwritten.\n' "$((n_create + n_over))" "$n_create" "$n_over"
@@ -1693,7 +2013,9 @@ main() {
             write_framework_path_marker
             write_framework_version_marker
             install_watchdog || true
-            reconcile_legacy_projects
+            # NO reconcile_legacy_projects here: legacy teardown is never implicit. It
+            # runs only on an explicit --upgrade (with consent) or --migrate-legacy; a
+            # preexisting .framework-autonomy marker is not a background mutation grant.
             verify_installation
             print_summary
             echo -e "${CYAN}Migrating from old per-project .claude copies? Run ./install.sh --upgrade${NC}"
@@ -1732,9 +2054,9 @@ main() {
             print_summary
             ;;
         --migrate-legacy)
-            # Opt-in autonomous legacy teardown ONLY (marker-gated, idempotent, fast).
-            # The watchdog runs this every cycle so a newly-set ~/.claude/.framework-autonomy
-            # marker triggers the teardown within the hour — independent of shared-set drift.
+            # Opt-in legacy teardown ONLY (marker-gated, idempotent, fast). This is an
+            # EXPLICIT, foreground invocation — nothing runs it automatically (the
+            # observe-only background checks never fork an installer or migration).
             reconcile_legacy_projects
             ;;
         --dry-run|-n)
@@ -1746,22 +2068,31 @@ main() {
             exit $?
             ;;
         --help|-h)
-            echo "Usage: ./install.sh [OPTION]"
+            echo "Usage: ./install.sh [MODE] [--with-watchdog] [--with-analytics] [--with-notifications]"
             echo ""
             echo "Installs the Claude Agents framework once into ~/.claude, where"
             echo "Claude Code picks it up in EVERY project (no per-project setup)."
+            echo "Core components install by default; the three opt-in flags are OFF"
+            echo "unless given, and may appear in any order with a mode or alone."
             echo ""
-            echo "Options:"
-            echo "  (no option)    Install / re-install into ~/.claude (canonical)"
-            echo "  --dry-run      Print every path that would be written; changes nothing"
+            echo "Modes:"
+            echo "  (no mode)      Install / re-install into ~/.claude (canonical)"
+            echo "  --dry-run      Print every path THIS selection would write; changes nothing"
             echo "  --uninstall    Remove the framework from ~/.claude (snapshot first, asks first)"
-            echo "  --update       Non-interactive reconcile of ~/.claude (self-heal path)"
+            echo "  --update       Non-interactive foreground reconcile of ~/.claude"
             echo "  --upgrade [--yes]  Migrate from old per-project copies: reconcile, confirm + teardown, self-verify"
-            echo "  --migrate-legacy  Opt-in teardown of old per-project copies (needs ~/.claude/.framework-autonomy)"
+            echo "  --migrate-legacy  Explicit opt-in teardown of old per-project copies (needs ~/.claude/.framework-autonomy)"
             echo "  --help         Show this help message"
             echo ""
-            echo "The SessionStart healthcheck hook and launchd watchdog fork"
-            echo "'install.sh --update' automatically to heal drift under ~/.claude."
+            echo "Optional components (default OFF; omitting a flag on an existing install"
+            echo "PRESERVES that component — it is never disabled, deleted or reloaded):"
+            echo "  --with-watchdog       launchd diagnostics + backup daemon (macOS only)"
+            echo "  --with-analytics      observability dashboard assets, claude-obs alias, analytics hooks (never runs the collector)"
+            echo "  --with-notifications  desktop Notification hook (notify.sh)"
+            echo ""
+            echo "The SessionStart hook and launchd watchdog are OBSERVE-ONLY: they report"
+            echo "drift to ~/.claude/analytics/framework-health.jsonl and never fork an"
+            echo "installer or repair anything. Repair is an explicit './install.sh --update'."
             exit 0
             ;;
         *)

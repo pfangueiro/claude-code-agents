@@ -288,6 +288,28 @@ def migrate_schema(conn):
     conn.commit()
 
 
+class ShrinkDetectedError(Exception):
+    """Raised when a JSONL file shrank below its stored byte watermark.
+
+    A file smaller than its last ingested position was truncated, rotated or
+    replaced since the previous run. Neither recovery is safe for incremental
+    collection: resuming at 0 replays the retained prefix and double-counts its
+    API usage/costs (api_calls carry no replay identity and tool counts are
+    additive on conflict), while skipping silently drops the new content. So the
+    collector refuses and leaves the existing database, history and watermark
+    untouched; rebuilding the database is an explicit owner action via --full,
+    which clears and re-ingests from scratch and never happens automatically.
+    """
+
+    def __init__(self, path):
+        self.path = path
+        super().__init__(
+            f"{path} shrank below its last ingested position "
+            f"(truncated, rotated or replaced). Re-run with --full to rebuild "
+            f"the database from scratch."
+        )
+
+
 def get_watermark(conn, jsonl_path):
     """Get the last ingested byte position for a file."""
     row = conn.execute(
@@ -309,10 +331,88 @@ def set_watermark(conn, jsonl_path, byte_pos):
     )
 
 
+def resume_watermark(conn, path, file_size, full_mode):
+    """Return the byte offset to resume ingestion from for ``path``.
+
+    In ``--full`` mode ingestion always restarts at 0 (``main`` has already cleared
+    the database, so there is nothing to double-count). Otherwise the stored byte
+    watermark is returned for normal append-only growth.
+
+    A file smaller than its stored watermark was truncated, rotated or replaced.
+    There is no safe incremental recovery — resuming at 0 would replay the retained
+    prefix and inflate counts/costs, and keeping the stale offset would silently
+    skip the new content — so this raises ``ShrinkDetectedError`` before any write.
+    The caller surfaces it as a nonzero CLI exit telling the owner to rebuild with
+    ``--full``; the database, history and watermark are left untouched.
+    """
+    if full_mode:
+        return 0
+    watermark = get_watermark(conn, path)
+    if watermark > file_size:
+        raise ShrinkDetectedError(path)
+    return watermark
+
+
+def read_complete_records(f, start_pos):
+    """Yield ``(record, pos_after)`` for each complete line of a JSONL file.
+
+    ``f`` must be a **binary** file handle. Reading bytes is what makes ``f.tell()``
+    a true byte offset: a text ``TextIOWrapper`` paused between a CR and its LF
+    returns an opaque decoder cookie far larger than the file, which later overflows
+    the SQLite integer watermark. Binary ``readline`` splits only on ``b"\\n"``, so a
+    ``\\r\\n`` terminator (or a bare ``\\r`` awaiting its ``\\n``) is handled by the
+    ``strip`` below rather than by newline translation, and ``pos_after`` is always a
+    byte offset. Each complete line is decoded as UTF-8 (undecodable bytes replaced)
+    only after it is read, so multi-byte content split across the resume boundary is
+    held, not corrupted.
+
+    Resumes at ``start_pos`` and walks forward one line at a time. ``record`` is the
+    parsed object, or ``None`` for a complete-but-malformed line whose bytes should
+    still be consumed. ``pos_after`` is the byte offset immediately after the line;
+    the caller advances its watermark only to yielded ``pos_after`` values, so it
+    never moves past bytes it did not fully consume.
+
+    A trailing line with no newline terminator that fails to parse is treated as an
+    in-progress append: the generator stops without yielding it, leaving the
+    watermark before it so a later pass ingests the finished record exactly once. A
+    trailing line with no newline that parses is accepted as a finished file's last
+    line (object-per-line JSONL never leaves a partial object that parses as valid
+    JSON, so a parseable unterminated tail is complete, not half-written).
+    """
+    f.seek(start_pos)
+    while True:
+        line = f.readline()
+        if not line:
+            return
+        pos_after = f.tell()
+        has_newline = line.endswith(b"\n")
+        stripped = line.decode("utf-8", "replace").strip()
+        if not stripped:
+            if has_newline:
+                # blank separator line — consume it and continue
+                yield None, pos_after
+                continue
+            # trailing whitespace with no terminator may be a partial write — hold
+            return
+        try:
+            record = json.loads(stripped)
+        except json.JSONDecodeError:
+            if has_newline:
+                # a complete row that will never parse — skip it, but consume its
+                # bytes so one bad line cannot block the rest of the file forever
+                yield None, pos_after
+                continue
+            # no terminator and unparseable — writer is mid-append; stop and hold
+            return
+        yield record, pos_after
+        if not has_newline:
+            return
+
+
 def process_jsonl_file(conn, jsonl_path, project, full_mode=False):
     """Process a single JSONL file, extracting all record types."""
-    watermark = 0 if full_mode else get_watermark(conn, jsonl_path)
     file_size = os.path.getsize(jsonl_path)
+    watermark = resume_watermark(conn, jsonl_path, file_size, full_mode)
 
     if watermark >= file_size:
         return 0  # Nothing new
@@ -325,22 +425,11 @@ def process_jsonl_file(conn, jsonl_path, project, full_mode=False):
     tool_batch = {}  # (session_id, tool_name) -> count
     turn_durations = []
 
-    with open(jsonl_path, "r", encoding="utf-8", errors="replace") as f:
-        if watermark > 0:
-            f.seek(watermark)
-
-        while True:
-            line = f.readline()
-            if not line:
-                break
-
-            line = line.strip()
-            if not line:
-                continue
-
-            try:
-                record = json.loads(line)
-            except json.JSONDecodeError:
+    safe_pos = watermark
+    with open(jsonl_path, "rb") as f:
+        for record, pos_after in read_complete_records(f, watermark):
+            safe_pos = pos_after
+            if record is None:
                 continue
 
             rec_type = record.get("type")
@@ -447,7 +536,7 @@ def process_jsonl_file(conn, jsonl_path, project, full_mode=False):
 
             records_processed += 1
 
-        final_pos = f.tell()
+    final_pos = safe_pos
 
     # --- Write to database ---
 
@@ -565,23 +654,17 @@ def ingest_agent_events(conn, events_file, full_mode=False):
     if not os.path.exists(events_file):
         return 0
 
-    watermark = 0 if full_mode else get_watermark(conn, events_file)
     file_size = os.path.getsize(events_file)
+    watermark = resume_watermark(conn, events_file, file_size, full_mode)
     if watermark >= file_size:
         return 0
 
     records = 0
-    with open(events_file, "r", encoding="utf-8", errors="replace") as f:
-        if watermark > 0:
-            f.seek(watermark)
-
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
+    safe_pos = watermark
+    with open(events_file, "rb") as f:
+        for event, pos_after in read_complete_records(f, watermark):
+            safe_pos = pos_after
+            if event is None:
                 continue
 
             event_type = event.get("event")
@@ -642,8 +725,7 @@ def ingest_agent_events(conn, events_file, full_mode=False):
 
             records += 1
 
-        final_pos = f.tell()
-
+    final_pos = safe_pos
     set_watermark(conn, events_file, final_pos)
     conn.commit()
     return records
@@ -654,23 +736,17 @@ def ingest_hook_events(conn, jsonl_file, event_type, full_mode=False):
     if not os.path.exists(jsonl_file):
         return 0
 
-    watermark = 0 if full_mode else get_watermark(conn, jsonl_file)
     file_size = os.path.getsize(jsonl_file)
+    watermark = resume_watermark(conn, jsonl_file, file_size, full_mode)
     if watermark >= file_size:
         return 0
 
     records = 0
-    with open(jsonl_file, "r", encoding="utf-8", errors="replace") as f:
-        if watermark > 0:
-            f.seek(watermark)
-
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
+    safe_pos = watermark
+    with open(jsonl_file, "rb") as f:
+        for event, pos_after in read_complete_records(f, watermark):
+            safe_pos = pos_after
+            if event is None:
                 continue
 
             conn.execute(
@@ -686,8 +762,7 @@ def ingest_hook_events(conn, jsonl_file, event_type, full_mode=False):
             )
             records += 1
 
-        final_pos = f.tell()
-
+    final_pos = safe_pos
     set_watermark(conn, jsonl_file, final_pos)
     conn.commit()
     return records
@@ -758,31 +833,46 @@ def main():
     start_time = time.time()
     print(f"Found {total_files} JSONL files to scan")
 
-    for idx, jsonl_path in enumerate(jsonl_files, 1):
-        if idx % 100 == 0 or idx == total_files:
-            print(f"  Processing {idx}/{total_files}...", end="\r")
+    try:
+        for idx, jsonl_path in enumerate(jsonl_files, 1):
+            if idx % 100 == 0 or idx == total_files:
+                print(f"  Processing {idx}/{total_files}...", end="\r")
 
-        slug = slug_from_path(jsonl_path, projects_dir)
-        project = slug_map.get(slug, "unknown")
-        records = process_jsonl_file(conn, jsonl_path, project, full_mode)
-        total_records += records
-        if records > 0:
-            files_with_new_data += 1
+            slug = slug_from_path(jsonl_path, projects_dir)
+            project = slug_map.get(slug, "unknown")
+            records = process_jsonl_file(conn, jsonl_path, project, full_mode)
+            total_records += records
+            if records > 0:
+                files_with_new_data += 1
 
-    # Ingest hook-generated event files (real-time agent tracking, audits)
-    analytics_dir = os.path.expanduser("~/.claude/analytics")
-    hook_event_files = {
-        "agent-events.jsonl": "agent_event",
-        "session-summaries.jsonl": "session_end",
-        "permission-audit.jsonl": "permission_request",
-    }
-    hook_records = 0
-    for fname, etype in hook_event_files.items():
-        fpath = os.path.join(analytics_dir, fname)
-        if fname == "agent-events.jsonl":
-            hook_records += ingest_agent_events(conn, fpath, full_mode)
-        else:
-            hook_records += ingest_hook_events(conn, fpath, etype, full_mode)
+        # Ingest hook-generated event files (real-time agent tracking, audits)
+        analytics_dir = os.path.expanduser("~/.claude/analytics")
+        hook_event_files = {
+            "agent-events.jsonl": "agent_event",
+            "session-summaries.jsonl": "session_end",
+            "permission-audit.jsonl": "permission_request",
+        }
+        hook_records = 0
+        for fname, etype in hook_event_files.items():
+            fpath = os.path.join(analytics_dir, fname)
+            if fname == "agent-events.jsonl":
+                hook_records += ingest_agent_events(conn, fpath, full_mode)
+            else:
+                hook_records += ingest_hook_events(conn, fpath, etype, full_mode)
+    except ShrinkDetectedError as exc:
+        # A truncated/rotated/replaced file cannot be reconciled incrementally
+        # without replaying or dropping owner data. Refuse here (nothing was
+        # written for that file), name it, and exit nonzero so no partial or
+        # inflated summary count is ever claimed. Rebuilding is explicit: --full.
+        conn.close()
+        print(file=sys.stderr)
+        print(f"ERROR: {exc}", file=sys.stderr)
+        print(
+            "  Incremental collection refuses rather than replay or drop data. "
+            "Run:\n      python3 collector.py --full",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     if hook_records > 0:
         print(f"\n  Hook events ingested: {hook_records}")

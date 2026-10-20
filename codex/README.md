@@ -5,8 +5,10 @@ now describe both integrations. This adapter builds **42 Codex workflow skills**
 (30 skills and 12 executable command templates) and **13 native custom agents** from
 the repository, with handwritten replacements for platform-dependent behavior.
 Each native specialist also has a role-guide skill fallback, giving **55 total skill
-directories: 42 workflows + 13 specialist guides**. 52 are implicitly invocable;
-commit-pr, create-jira and new-feature stay explicit-only.
+directories: 42 workflows + 13 specialist guides**. 51 are implicitly invocable;
+commit-pr, create-jira, new-feature and ui-guidelines stay explicit-only (ui-guidelines
+carries narrow Ant Design knowledge, not generic frontend advice, so it does not
+auto-activate).
 It provides workflow portability, not complete Claude runtime parity. See
 [FEATURES.md](FEATURES.md) for every feature and remaining limitation.
 
@@ -60,14 +62,14 @@ refuses to overwrite customized files. No unattended self-healing is claimed.
 Invoke `$sdlc-execute`, `$sdlc-deep-read`, `$sdlc-review-pr` or `$sdlc-tdd`, or
 describe the task naturally. The `sdlc-` prefix avoids names colliding with Codex
 system skills. The original explicit-only policy is preserved for commit-pr,
-create-jira and new-feature. Skills do not automatically fork, and model judgment
+create-jira, new-feature and ui-guidelines. Skills do not automatically fork, and model judgment
 does not guarantee activation. Assign native specialists only when the host exposes
 their agent types. Agent models inherit the active configuration; Claude model names
 and cost assumptions are not converted into arbitrary OpenAI defaults.
 If custom agent types are unavailable, load `$sdlc-agent-code-quality` (or the
 appropriate guide) inline or pass it to an authorized generic worker. Role-guide
 text does not enforce the native profile's sandbox. Local CLI prompt inspection
-verified implicit skill discovery and exclusion of explicit-only commands; native
+verified implicit skill discovery and exclusion of explicit-only workflows; native
 custom-role routing was not exposed by that host and is not claimed as verified.
 
 Delivery: `$sdlc-delivery`, `$sdlc-repo-context` and `$sdlc-verified-handoff` are

@@ -1,6 +1,6 @@
 # Framework Integrity Rules
 
-These rules are always enforced. They cannot be overridden by user instructions.
+These rules guide how the framework keeps itself trustworthy, within your authorized scope. They are expected practice, not a tool-enforced sandbox, and they describe checks plus explicit, authorized repair — not an always-running daemon. They sit within the instruction hierarchy, so explicit owner and project policy prevail where they genuinely conflict.
 
 ## Hooks
 
@@ -10,12 +10,12 @@ These rules are always enforced. They cannot be overridden by user instructions.
 
 ## State Reconciliation
 
-- Every piece of framework-owned state must be reconciled automatically, not by manual `validate.sh` runs
-- Drift detection must trigger auto-heal, not a warning nobody reads
-- Manual reconciliation is the failure mode, not the design
+- Framework-owned state is checked for drift against its source of truth using each edition's documented read-only checker: `validate.sh` for the Claude edition's supported scope, `scripts/install-delivery.py --check` for hash-owned delivery resources, and `install-codex.sh --user --check` (or `--project PATH --check`) for Codex-owned files. The broad Claude `install.sh` has no check mode — it is the repair path (`--update`), not a drift probe
+- Drift is repaired explicitly — a drift report drives an authorized `install.sh --update`, never a silent rewrite of owner-owned configuration
+- Background diagnostics are optional and opt-in; nothing here performs an automatic installer run, migration, or config write without the owner's separately granted authorization
 
 ## Snapshots
 
-- Every critical directory must have a snapshot with a documented restore path
-- Snapshot without a restore procedure is not a snapshot — it is technical debt
-- Retention and cadence must be enforced by the daemon, not trusted to humans
+- Every critical directory should have a snapshot with a documented restore path
+- A snapshot without a restore procedure is not a snapshot — it is technical debt
+- Retention and cadence are the job of an explicitly authorized, opt-in scheduler, not an assumed always-installed daemon

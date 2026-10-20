@@ -79,6 +79,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Root documentation reconciled to the current **observe-only installer contract**
+  (supersedes the earlier "`~/.claude/hooks/` pruned to exactly the current source set"
+  wording in the bullets below). The Claude installer now ships **core** components by
+  default (agents, skills, commands, rules, core hooks, statusline, settings) and gates the
+  observability dashboard, the launchd watchdog and desktop notifications behind opt-in
+  `--with-analytics` / `--with-watchdog` / `--with-notifications` flags; omitting a flag on
+  an existing install preserves that component rather than removing it. The SessionStart
+  hook and the launchd watchdog are **observe-only**: they report drift to
+  `framework-health.jsonl` (`action: manual_repair_required`) and keep backups, but never
+  fork the installer, migrate or repair — repair is an explicit foreground `./install.sh
+  --update`, and `validate.sh --heal` is retired (rejected, performs no repair). Foreign
+  hook files and foreign `settings.json` bindings are now **preserved** (the reconcile
+  matches the exact framework command path, with no broad prune; a retired framework hook is
+  removed explicitly by name). A valid owner `CLAUDE_CODE_EFFORT_LEVEL`
+  (`low|medium|high|xhigh|max|auto`) is preserved and never overwritten. The statusline
+  glyph reports honest health — `✓` only on a recent admitted `validation_result` from the
+  watchdog's `validate.sh --quick --json` run (its completed quick installed-integrity scope,
+  which does NOT certify the default full `validate.sh` repository validator, the project test
+  suites or CI), `⚠` on drift/failure, `?` when unknown — with no self-healing glyph and no
+  automatic green certification. README, INSTALL, SELF-HEALING, CLAUDE.md, AGENTS.md and
+  MEMORY.md are updated to match, and the `codex/FEATURES.md` baseline-defect list is marked
+  as historical rather than still-present. This is a combined installer, hook and statusline
+  change reconciled with the documentation — not documentation alone — and ships no new release
+  or version.
 - Documentation now describes agent/skill selection and specialist coordination as
   model-directed, not deterministic keyword activation or automatic hand-off. The README
   reframes the agent table's "Activates On" column as non-binding "Typical cues", replaces
@@ -140,6 +164,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   proof/consent/coverage gates and the `verified-handoff` v1 schema unchanged, and scales to
   the question. README credits the REA project for the reporting approach, not its runtime.
   Documentation only; no inventory or version change.
+- The `new-feature` and `create-jira` workflow commands are provider-neutral and explicit-only
+  (`disable-model-invocation`). `new-feature` resolves the base branch from project policy or the
+  remote's recorded `origin/HEAD` (never assuming `master`), freezes the exact base SHA with a
+  no-destination fetch, refuses to touch a dirty tree, and creates the branch once after a
+  collision check; `create-jira` discovers the tracker from the authorized configuration and
+  returns an honest draft when no connector exists. The two Codex overrides that shadowed them
+  (`codex/overrides/new-feature.md`, `codex/overrides/create-jira.md`) are removed so one canonical
+  body serves both editions. Alongside, `execute` decomposes only as far as the work's dependencies
+  and acceptance criteria require (no fixed subtask quota), the `tdd`/`fix-quality` guidance keeps a
+  failing test (RED) before a bug fix, and the rules read as instruction guidance within the
+  instruction hierarchy, not an enforced sandbox (input `3618b31`).
+- `ui-guidelines` is now explicit-only (`disable-model-invocation`) and deliberately narrow: one
+  application's Ant Design house style — tokens, spacing and antd component patterns — with no
+  general-UI, accessibility or data-visualization scope, so it no longer auto-activates on unrelated
+  frontend work. Moving it to explicit-only makes the current Codex inventory 55 installed bundles =
+  51 implicit + 4 explicit-only (`commit-pr`, `create-jira`, `new-feature`, `ui-guidelines`),
+  superseding the `52 implicit, 3 explicit-only` first-add count above (input `3618b31`).
+- Documented the Codex native-profile assurance precisely: the 13 native TOML agents carry
+  `name`/`description`/`developer_instructions` and inherit the active model and the parent
+  approval/sandbox policy. No `sandbox_mode` is emitted, so a review agent's read-only intent is a
+  developer instruction, not an independently enforced read-only sandbox; this widens no security
+  policy and changes no default (input `3618b31`).
 
 ### Fixed
 
@@ -181,6 +227,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dependency gate with an injected missing import and restored control. The same missing
   Requests error was reproduced with the original manifest in a clean Python 3.11 env;
   preserve the failing gate rather than skipping resource execution.
+
+- `/checkpoint` and its new helper (`.claude/skills/verified-handoff/scripts/checkpoint.py`) no
+  longer run the old `git stash`/branch-switch/`checkout` recipe, which could apply an unrelated
+  stash and disturb the caller's state. A checkpoint is now captured into a `refs/checkpoint/<name>`
+  ref via Git plumbing and a throwaway temp index, leaving the caller's branch, real index, working
+  tree and existing stashes untouched; states the single-tree snapshot cannot round-trip honestly
+  (unborn HEAD, merge/conflict, submodules, a nested repo, a configured content filter,
+  skip-worktree/assume-unchanged flags, an active `reference-transaction`/`post-index-change` hook)
+  are refused before any object or ref is written, and recovery stays explicit (input `3618b31`).
+- Codex install rollback on a caught error now restores only the paths whose write or delete was
+  actually attempted, not every planned write — so a file a concurrent local writer created after
+  preflight is preserved instead of unlinked. A concurrent edit of an already-written path is still
+  overwritten, and this is caught-error rollback only: it makes no power-loss or process-kill
+  transactionality claim (input `3618b31`).
+- The Claude lifecycle hooks (`agent-tracker`, `session-end`, `smart-guard`) now emit compact
+  one-object-per-line JSONL (`jq -c`); jq's default pretty-printing split each record across lines
+  and broke the one-object-per-line contract the collector parses, dropping every event. The
+  observability collector reads each log as bytes so its resume watermark is a true byte offset — a
+  CR/LF or multi-byte UTF-8 sequence split across the boundary is not corrupted and an incomplete
+  trailing record is held, not consumed — and when a file has shrunk below its watermark
+  (truncated/rotated/replaced) it refuses with a nonzero exit, leaving the database, history and
+  watermark untouched until an explicit `--full` rebuild rather than silently skipping or truncating
+  history (input `3618b31`).
+- The observability dashboard server (`observability/server.py`) now authenticates every `/api/*`
+  request with a per-launch capability token (fail-closed, never logged), requires a well-formed
+  loopback `Host`/`Origin` at the bound port (rejecting foreign, duplicate or malformed
+  authorities), and serves only a fixed asset allowlist — the SQLite DB, its WAL/SHM sidecars, the
+  raw JSONL logs, the server source and directory listings all return 404, replacing the old
+  directory-wide handler that exposed the whole analytics directory — while serving concurrent
+  requests (`ThreadingHTTPServer`). The browser dashboard still loads Chart.js from a CDN, so this
+  is not an offline or dependency-free server (input `3618b31`).
 
 ### Removed
 

@@ -21,7 +21,8 @@ worktrees. Discover tools at runtime; do not assume a named MCP is connected.
 Adapter checks: `python3 -m unittest discover -s tests/codex -v`.
 Claude checks: `./validate.sh` and `bash tests/gap/run.sh --prove --jobs 4`.
 Run installed-environment checks in a disposable home, not against personal
-configuration. Never invoke `validate.sh --heal` as a verification gate.
+configuration. `validate.sh` observes only — `--heal` is retired (no repair; rejected) —
+so never treat any `--heal` as a verification gate; repair is an explicit `install.sh --update`.
 Read-only checks of a real installed system and global installation are allowed when
 the user explicitly requests them; preserve personal config and instruction content.
 
