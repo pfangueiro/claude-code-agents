@@ -391,7 +391,11 @@ class RulesAreGuidanceNotInviolable(unittest.TestCase):
         # It must instead name the read-only checkers each edition actually ships.
         self.assertIn('validate.sh', text)
         self.assertRegex(text, r'install-delivery\.py --check')
-        self.assertRegex(text, r'install-codex\.sh --check')
+        # Codex's checker requires an explicit scope (framework.py main() makes
+        # --user/--project a required mutually-exclusive group); the bare
+        # `install-codex.sh --check` is itself an invalid phantom form, so pin the
+        # valid scoped syntax the rule actually documents.
+        self.assertRegex(text, r'install-codex\.sh --user --check')
 
 
 if __name__ == '__main__':
