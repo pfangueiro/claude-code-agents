@@ -80,7 +80,7 @@ cd claude-code-agents
 
 That's it. Everything installs **once**, user-global to `~/.claude`. Claude Code natively loads `~/.claude/{agents,skills,commands,rules}`, so every project on your machine gets the agents automatically — there is no per-project step.
 
-The install includes: agents, skills, commands, rules, hooks, statusline, output styles, the observability dashboard, and global settings. It also registers an hourly background daemon on macOS. MCP servers are **not** registered — that is a manual, machine-specific step (see [MCP](#mcp-servers-are-not-auto-installed)).
+The **core** install includes: agents, skills, commands, rules, core hooks, statusline, output styles, and global settings. The observability dashboard, the hourly macOS watchdog daemon and desktop notifications are **opt-in**, each behind a positive flag (`--with-analytics`, `--with-watchdog`, `--with-notifications`); a bare install adds none of them. MCP servers are **not** registered — that is a manual, machine-specific step (see [MCP](#mcp-servers-are-not-auto-installed)).
 
 **Not sure what it will touch?** `./install.sh --dry-run` prints every path it would write, resolved against your actual `$HOME`, and changes nothing.
 
@@ -88,11 +88,12 @@ The install includes: agents, skills, commands, rules, hooks, statusline, output
 
 | Command | What it does |
 |---------|-------------|
-| `./install.sh` | Install everything user-global to `~/.claude` |
-| `./install.sh --dry-run` | Print every path the install would touch. Makes no changes. |
-| `./install.sh --update` | Non-interactive reconcile of an existing install (the self-heal path). Replaces framework-owned files so drift heals; preserves your own content. |
+| `./install.sh` | Install core components user-global to `~/.claude` |
+| `./install.sh [--with-analytics] [--with-watchdog] [--with-notifications]` | Add opt-in components (dashboard + `claude-obs` alias; macOS watchdog; notify hook). Default-off; may accompany any mode or stand alone; omitting a flag on an existing install preserves that component. |
+| `./install.sh --dry-run` | Print every path **this selection** would touch. Makes no changes. |
+| `./install.sh --update` | Non-interactive foreground reconcile of an existing install (the explicit repair path). Replaces framework-owned files so drift heals; preserves your own content. |
 | `./install.sh --upgrade` | One-command migration from the old per-project layout: reconcile `~/.claude`, then confirm + tear down old per-project copies (snapshot-first) and self-verify. Run from inside your checkout. See [Upgrading from the old per-project framework](#upgrading-from-the-old-per-project-framework) below. |
-| `./install.sh --migrate-legacy` | Marker-gated teardown-only mode (the watchdog runs this every cycle; also runnable manually for an immediate migration). |
+| `./install.sh --migrate-legacy` | Marker-gated teardown-only mode, run explicitly (the observe-only watchdog does **not** run it). |
 | `./install.sh --uninstall` | Remove the framework's own components. See [Uninstallation](#uninstallation). |
 | `./install.sh --help` | Show all options |
 
@@ -104,18 +105,18 @@ Most of it lands under `~/.claude/` and is loaded by Claude Code in every projec
 ~/.claude/
 ├── agents/                # 13 specialized agents
 ├── commands/              # 12 executable templates + directory README
-├── skills/                # 27 modular knowledge packages
-├── rules/                 # 6 instruction sets; permissions/hooks are separate mechanisms
+├── skills/                # 30 modular knowledge packages
+├── rules/                 # 7 instruction sets; permissions/hooks are separate mechanisms
 ├── lib/                   # Templates, patterns, coordination protocol, MCP guide
-├── hooks/                 # 9 command hooks + 2 reference configs
-├── daemon/                # launchd watchdog — macOS only
-├── analytics/             # Observability dashboard (claude-obs alias)
+├── hooks/                 # 6 core command hooks (+ analytics/notify hooks when selected) + 2 reference configs
+├── daemon/                # launchd watchdog — opt-in (--with-watchdog), macOS only
+├── analytics/             # Observability dashboard (claude-obs alias) — opt-in (--with-analytics)
 ├── output-styles/
 │   └── concise.md         # Code-first output style
-├── statusline.sh          # Rich status bar — line-1 framework-status glyph (⚙<version> + ✓/⟳/⚠)
-├── settings.json          # Model, env, permissions, 10 hook events, statusline
+├── statusline.sh          # Rich status bar — line-1 framework-status glyph (⚙<version> + ✓/⚠/?; no self-healing glyph)
+├── settings.json          # Model, env, permissions, hook events (core wired by default), statusline
 ├── CLAUDE.md              # Personal coding preferences (created only if absent)
-├── .framework-path        # Marker: where this checkout lives, read by the self-heal paths
+├── .framework-path        # Marker: where this checkout lives, read by the observer and installer
 ├── .framework-version     # Marker: installed version + source SHA
 └── .watchdog-plist.sha    # Marker: sha of the loaded daemon plist
 ```
@@ -126,11 +127,11 @@ Most of it lands under `~/.claude/` and is loaded by Claude Code in every projec
 |---|---|---|
 | `agents/`, `commands/`, `rules/`, `lib/` | The framework's `.md` / `.json` files | Each framework-owned file is **replaced** so drift heals. Framework files deleted from source are pruned. |
 | `skills/` | 30 skill directories | Each framework skill directory is `rm -rf`'d and re-copied, so files deleted *inside* a skill heal too. |
-| `hooks/` | 9 `.sh` scripts (made executable) + 2 reference `.json` configs | Replaced. Hook files no longer in source are pruned, as are stale `settings.json` hook-event bindings that point at a framework script. |
+| `hooks/` | 6 core `.sh` hooks (made executable) always, plus analytics/notify hooks when their flag is set; 2 reference `.json` configs | Framework hooks replaced. **Foreign hook files are preserved** (no broad prune); a retired framework hook is removed explicitly by name. `settings.json` bindings are reconciled by exact framework command path, so foreign bindings are kept. |
 | `output-styles/concise.md` | Code-first output style | Written on a **bare install only** — `--update` does not reconcile it. |
 | `statusline.sh` | Status bar script | Replaced **only when it differs from source** (byte-compare); skipped when identical. |
-| `analytics/` | `collector.py`, `server.py`, `dashboard.html`, `schema.sql` | Replaced. |
-| `daemon/` | `claude-framework-watchdog.sh` | Replaced. **Skipped entirely on non-macOS.** |
+| `analytics/` | `collector.py`, `server.py`, `dashboard.html`, `schema.sql` | **Only with `--with-analytics`.** A customized copy is preserved, not overwritten. |
+| `daemon/` | `claude-framework-watchdog.sh` | **Only with `--with-watchdog`.** Skipped entirely on non-macOS. |
 | `settings.json` | See below | Seeded from the template only if the file is absent; otherwise **merged key-by-key**, never wholesale-replaced. |
 | `CLAUDE.md` | Generated from `global-config/CLAUDE.md.template`, with your name and email taken from `git config` (it asks you to confirm) | **Only written if the file does not already exist.** Never overwritten, never touched by `--update`. |
 
@@ -140,11 +141,11 @@ Only these keys are framework-owned. Everything else you have set is left untouc
 
 | Key | Policy |
 |---|---|
-| `.hooks` | Replace-on-drift, **per event**. Each of the 10 template events is compared and restored if it differs. Off-template events are pruned only if they invoke a framework hook script. |
+| `.hooks` | Replace-on-drift, **per event**, matched by exact framework command path so **foreign bindings are preserved verbatim**. A fresh seed wires only the core events; the analytics events (`SubagentStart`/`SubagentStop`/`SessionEnd`) and the `Notification` event are added only with their flag. |
 | `.permissions` | Replace-on-drift (whole block) — security-sensitive, so the framework owns it. |
 | `.attribution` | Replace-on-drift. Keeps the commit trailer empty (no AI-attribution trailers) and restores the standard PR footer. |
 | `.statusLine` | Replace-on-drift — points at `~/.claude/statusline.sh`. |
-| `.env` | **Add-only.** Missing template keys are added; **your values are never overwritten.** |
+| `.env` | **Add-only.** Missing template keys are added and **your values are never overwritten** — with one exception: an **absent** `CLAUDE_CODE_EFFORT_LEVEL` is *not* seeded onto an existing settings object (leaving it absent keeps your native/owner effort default). The template's `xhigh` default lands only on a **fresh** settings file; an existing supported value (including empty) is preserved, and an unsupported value is reported but left unchanged. |
 
 Want custom permissions, attribution, or a different statusline? Put them in
 `~/.claude/settings.local.json`, which has higher precedence and is never reconciled.
@@ -153,16 +154,16 @@ Want custom permissions, attribution, or a different statusline? Put them in
 
 | Path | Why | Notes |
 |---|---|---|
-| `~/Library/LaunchAgents/com.claude-code-agents.framework-watchdog.plist` | Registers the hourly self-heal daemon | **macOS only.** The source plist carries `__HOME__` placeholders; your `$HOME` is substituted at install time. |
-| `~/.zshrc`, or `~/.bashrc` if no `.zshrc` exists | Appends a comment plus one line: `alias claude-obs="…"` | Idempotent — guarded by a `grep`, so it is added at most once. Nothing else in your shell rc is modified. |
+| `~/Library/LaunchAgents/com.claude-code-agents.framework-watchdog.plist` | Registers the hourly observe-only watchdog daemon (reports + backups, no repair) | **macOS only, `--with-watchdog`.** The source plist carries `__HOME__` placeholders; your `$HOME` is substituted at install time. |
+| `~/.zshrc`, or `~/.bashrc` if no `.zshrc` exists | Appends a comment plus one line: `alias claude-obs="…"` | **Only with `--with-analytics`.** Idempotent — guarded by a `grep`, so it is added at most once. Nothing else in your shell rc is modified. |
 
 ### Created later, at runtime — not by the installer
 
-- `~/.claude/analytics/framework-health.jsonl` — drift and self-heal events
-- `~/.claude/analytics/watchdog-alerts.jsonl`, `watchdog.log` — daemon output (macOS)
-- `~/.claude/analytics/agent-events.jsonl`, `session-summaries.jsonl`, `permission-audit.jsonl` — written by hooks
+- `~/.claude/analytics/framework-health.jsonl` — drift findings (action `manual_repair_required`), written by the observe-only checks
+- `~/.claude/analytics/watchdog-alerts.jsonl`, `watchdog.log` — watchdog output (macOS, `--with-watchdog`)
+- `~/.claude/analytics/agent-events.jsonl`, `session-summaries.jsonl`, `permission-audit.jsonl` — written by the analytics/permission hooks
 - `~/.claude/analytics/claude-obs.db` — SQLite, built by `collector.py` when you run `claude-obs`
-- `~/.claude/snapshots/` — daily repo/config/memory snapshots written by the daemon, 7-day retention
+- `~/.claude/snapshots/` — daily repo/config/memory snapshots written by the watchdog when installed, 7-day retention
 - `~/.claude/sessions/` — pre-compact auto-snapshots, 10 kept per project
 
 ### It is framework-scoped — your own content is preserved
@@ -177,11 +178,14 @@ exception: a personal file that shares a currently-shipped basename (e.g. your o
 `code-quality.md`) is **overwritten** by the shipped copy, and one left at an explicitly-retired
 framework name is **eligible for pruning**.
 
-`~/.claude/hooks/` is the exception. It is reconciled to **exactly the current source set**: any
-`.sh`/`.json` there that the current framework does not ship is pruned, so a personal hook script
-left in that directory is **not** preserved (see the `hooks/` row above). In `settings.json`,
-framework-owned hook-event arrays and the `.permissions` block are likewise replaced wholesale on
-drift — put custom permissions in `settings.local.json`.
+`~/.claude/hooks/` is also framework-scoped, and **foreign hooks are preserved**. The install copies
+the current source hooks (core always; the analytics/notify hooks with their flag) and makes them
+executable, but runs **no** broad "prune everything not in source" sweep: a `.sh`/`.json` whose name
+the framework does not currently ship has no ownership proof and is **retained**, not removed (see
+the `hooks/` row above). Retiring a framework hook is handled explicitly, by name. In
+`settings.json`, framework hook events are reconciled by exact command path so foreign bindings are
+kept verbatim, while the `.permissions` block is replaced wholesale on drift — put custom permissions
+in `settings.local.json`.
 
 Measured, not assumed. With a personal skill, agent, command and rule planted in a throwaway `HOME`,
 two consecutive `./install.sh --update` runs left all four **byte-identical**, and the skills
@@ -210,29 +214,32 @@ are listed in the [README](./README.md#mcp-integration).
 `settings.json`, so without it the hook/permission/statusline healing is skipped; `npx` is only used
 by the MCP setup commands you run yourself.
 
-## The background daemon (macOS)
+## The background daemon (opt-in — `--with-watchdog`, macOS)
 
-On macOS the install registers a `launchd` agent, `com.claude-code-agents.framework-watchdog`, that
-runs **once an hour** (`StartInterval 3600`, plus once at load). Each cycle it:
+With `--with-watchdog` on macOS the install registers a `launchd` agent,
+`com.claude-code-agents.framework-watchdog`, that runs **once an hour** (`StartInterval 3600`, plus
+once at load). It is **observe-only**. Each cycle it:
 
-1. runs `validate.sh --quick --json`, and forks `install.sh --update` if it reports drift;
+1. runs `validate.sh --quick --json` (no `--heal`) and **records** any drift to
+   `framework-health.jsonl` — it does **not** fork `install.sh`, migrate or repair;
 2. runs `git fsck` on the checkout, logging corruption to `watchdog-alerts.jsonl`;
 3. writes daily snapshots — a git bundle of the repo, a tarball of `~/.claude/hooks` +
    `settings.json`, and a separate tarball of project memory — to `~/.claude/snapshots/`;
 4. prunes snapshots older than 7 days and caps the diagnostic JSONL logs.
 
-It makes **no network requests** and runs as your user, not root.
+It makes **no network requests** and runs as your user, not root. A bare install (no
+`--with-watchdog`) registers no daemon.
 
 ```bash
 launchctl list | grep claude-code-agents                                    # is it loaded?
 tail -f ~/.claude/analytics/watchdog.log                                    # what is it doing?
-tail -5 ~/.claude/analytics/framework-health.jsonl                          # drift/heal events
+tail -5 ~/.claude/analytics/framework-health.jsonl                          # drift findings
 launchctl bootout gui/$(id -u)/com.claude-code-agents.framework-watchdog    # stop it (this boot)
 rm -f ~/Library/LaunchAgents/com.claude-code-agents.framework-watchdog.plist  # stop it for good
 ```
 
-Removing the plist disables the hourly reconcile and the daily snapshots. The SessionStart hook
-keeps healing drift at session start.
+Removing the plist disables the hourly checks and the daily snapshots. The SessionStart hook still
+reports drift at session start, but neither path repairs it — run `./install.sh --update` yourself.
 
 Full runbook — cadence, retention, restore commands, the settings-sync-wipe recovery mechanism:
 **[SELF-HEALING.md](./SELF-HEALING.md)**.
@@ -242,23 +249,26 @@ Full runbook — cadence, retention, restore commands, the settings-sync-wipe re
 | Capability | macOS | Linux / WSL |
 |---|---|---|
 | Agents, skills, commands, rules, lib | Yes | Yes |
-| Hooks, statusline, `settings.json` reconcile | Yes | Yes |
-| Observability dashboard + `claude-obs` alias | Yes | Yes |
-| SessionStart self-heal hook | Yes | Yes |
-| Hourly watchdog daemon | **Yes** | **No** |
-| Daily snapshots and 7-day retention | **Yes** | **No** |
+| Core hooks, statusline, `settings.json` reconcile | Yes | Yes |
+| Observability dashboard + `claude-obs` alias (`--with-analytics`) | Yes | Yes |
+| SessionStart drift check (observe-only) | Yes | Yes |
+| Hourly watchdog daemon (`--with-watchdog`) | **Yes** | **No** |
+| Daily snapshots and 7-day retention (watchdog) | **Yes** | **No** |
 
 The daemon is gated on `uname -s` being `Darwin`; on Linux and WSL `install_watchdog` prints
 `Not macOS — skipping watchdog daemon` and returns. Nothing else differs.
 
-**What you lose on Linux/WSL:** drift is detected and healed **only at session start**. There is no
-out-of-band recovery and no automatic snapshots. That matters for one specific failure: if something
-external wholesale-rewrites `~/.claude/settings.json` and drops the `.hooks` block, it also removes
-the SessionStart hook — which is the thing that would have healed it. On macOS the watchdog runs
-independently of `settings.json` and recovers this; on Linux/WSL you recover it by running
-`./install.sh --update` by hand. Symptom: the statusline disappears and hooks stop firing.
+**Nothing auto-heals on either platform.** The SessionStart check and the watchdog only **detect and
+report** drift to `framework-health.jsonl`; repair is always an explicit `./install.sh --update`. The
+watchdog's extra value on macOS is out-of-band visibility and backups: if something external
+wholesale-rewrites `~/.claude/settings.json` and drops the `.hooks` block (which also removes the
+SessionStart hook), the watchdog still runs independently of `settings.json`, records the drift and
+keeps a `userconfig-*.tgz` snapshot — but you still recover by running `./install.sh --update`
+yourself. Without the watchdog (Linux/WSL, or macOS without the flag) there is no out-of-band
+observer at all. Symptom: the statusline disappears and hooks stop firing.
 
-Consider a cron entry as a substitute:
+If you want a scheduled explicit reconcile, add your own cron entry (this runs the foreground
+installer on your schedule — it is not background self-heal):
 
 ```cron
 17 * * * * cd /path/to/claude-code-agents && ./install.sh --update >/dev/null 2>&1
@@ -266,24 +276,24 @@ Consider a cron entry as a substitute:
 
 ## Update & migrate other machines
 
-The framework is **self-updating**: after a `git pull` on any machine, the SessionStart healthcheck and the launchd watchdog automatically fork `install.sh --update` to reconcile `~/.claude` — you don't have to run the installer by hand. `git pull` is the one deliberate trigger (there is deliberately **no auto-pull**).
+Updating is **explicit**: pull the source, then run the installer. The SessionStart check and the opt-in watchdog only **report** drift to `framework-health.jsonl` — neither forks the installer or reconciles on its own, and there is deliberately **no auto-pull**.
 
 Full operational runbook — watchdog cadence, settings-sync-wipe recovery, and snapshot restore commands: **[SELF-HEALING.md](./SELF-HEALING.md)**.
 
 ```bash
-cd claude-code-agents && git pull --ff-only    # the one manual step; the rest is autonomous
-./install.sh --update                          # optional: reconcile now instead of waiting for self-heal
+cd claude-code-agents && git pull --ff-only    # 1. get the new source
+./install.sh --update                          # 2. reconcile ~/.claude explicitly
 ```
 
 `--update` re-copies the framework's shared set to `~/.claude` (replacing framework files so drift heals) while preserving your own `~/.claude/CLAUDE.md`, your non-colliding personal files, and settings (a personal file sharing a shipped or retired framework basename is the exception — see [framework-scoped](#it-is-framework-scoped--your-own-content-is-preserved) above).
 
-**Optional — autonomously migrate old per-project `.claude/` copies.** If you previously deployed the framework into individual projects, create an opt-in marker so `--update` migrates them to user-global for you:
+**Optional — migrate old per-project `.claude/` copies.** If you previously deployed the framework into individual projects, create an opt-in marker that points the explicit migration commands at those projects:
 
 ```bash
 echo 'LEGACY_PROJECTS_DIR=/absolute/path/to/your/projects' > ~/.claude/.framework-autonomy
 ```
 
-With the marker set, the framework removes its own shared-set subdirs from projects under that dir — **only when git-untracked** (never rewrites a repo's history), **framework-scoped** (your custom agents/skills are never touched), **snapshot-first** (to `~/.claude/snapshots/`), and idempotent. No marker → nothing happens. The watchdog re-runs this every cycle, so setting the marker migrates old copies within the hour; run `./install.sh --migrate-legacy` to do it immediately.
+With the marker set, an explicit `./install.sh --migrate-legacy` (or `--upgrade`) removes the framework's own shared-set subdirs from projects under that dir — **only when git-untracked** (never rewrites a repo's history), **framework-scoped** (your custom agents/skills are never touched), **snapshot-first** (to `~/.claude/snapshots/`), and idempotent. `--update` does **not** run legacy teardown — the marker is not a background-mutation grant, so an update leaves old project copies in place. No marker → nothing happens, and the observe-only watchdog never runs this either; you run `--migrate-legacy`/`--upgrade` yourself.
 
 ### Upgrading from the old per-project framework
 
@@ -319,14 +329,15 @@ What the installer actually guarantees — and, just as importantly, what it doe
 - **Snapshot-first teardown.** The legacy-migration paths (`--upgrade`, `--migrate-legacy`) abort
   and remove nothing if the pre-teardown snapshot cannot be written and read back.
 - **Concurrency-locked.** A `mkdir`-based lock (with stale-PID recovery) keeps a manual run from
-  racing the hourly watchdog on `settings.json`.
+  racing another run (or the hourly watchdog's validation, when installed) on `settings.json`.
 - **Verified after install.** The bare install checks that `agents/`, `skills/`, `commands/`,
   `rules/`, `hooks/` and `settings.json` are present, and reports warnings if not.
 
 **It does not take a backup of your existing install.** Framework-owned files are replaced in
 place — that is how drift heals. Your own content is preserved because it is never touched, not
 because it is copied somewhere first. The recovery path for the framework's own state is the
-daemon's daily snapshots under `~/.claude/snapshots/` (macOS), documented in
+watchdog's daily snapshots under `~/.claude/snapshots/` (macOS, only when installed with
+`--with-watchdog`), documented in
 [SELF-HEALING.md](./SELF-HEALING.md#snapshot-restore-claudesnapshots).
 
 ## Installation Summary
@@ -362,8 +373,8 @@ Agents auto-activate based on your words — no commands needed.
 
 ## What the observability dashboard reads
 
-The install places a dashboard under `~/.claude/analytics/` and adds a `claude-obs` alias. Nothing
-runs until you invoke it.
+With `--with-analytics`, the install places a dashboard under `~/.claude/analytics/` and adds a
+`claude-obs` alias (a bare install adds neither). Nothing runs until you invoke it.
 
 When you do run it, `collector.py` reads **Claude Code's own session transcripts** —
 `~/.claude/projects/**/*.jsonl`, across **every project on the machine**, not just this one — plus
@@ -376,7 +387,8 @@ It stays on your machine:
 
 - `collector.py` makes **no network calls at all**.
 - `server.py` binds `127.0.0.1:3141` — loopback only, not reachable from your network.
-- Both are Python stdlib only; no third-party packages, nothing fetched at runtime.
+- The collector and server are Python stdlib only; they require no third-party packages and fetch nothing at runtime. Your data (the JSONL transcripts, the SQLite database, and the API that serves them) never leaves the machine.
+- One browser-side exception: `dashboard.html` loads Chart.js from a CDN (`cdn.jsdelivr.net`), so rendering the charts needs your browser to reach that CDN. Offline, the page and its local API still work but the charts will not draw. No framework data is sent to the CDN.
 - Nothing is uploaded, phoned home, or shared with the maintainer.
 
 Delete `~/.claude/analytics/claude-obs.db` whenever you like; the next `claude-obs` run rebuilds it

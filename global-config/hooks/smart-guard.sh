@@ -44,7 +44,10 @@ esac
 
 # Log non-trivial permission requests for audit
 timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-jq -n \
+# -c (compact): one JSON object per line. jq pretty-prints by default, which would
+# split the audit record across lines and break the one-object-per-line JSONL
+# contract the collector parses line-by-line.
+jq -cn \
   --arg event "permission_request" \
   --arg tool "$tool_name" \
   --arg path "$file_path" \

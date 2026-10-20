@@ -11,17 +11,33 @@ Usage:
     python3 server.py --db /path/to.db   # Custom DB path
 """
 
+import hmac
 import json
 import os
+import secrets
 import sqlite3
 import sys
 import time
 import webbrowser
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
 DB_PATH = os.path.expanduser("~/.claude/analytics/claude-obs.db")
 DASHBOARD_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Hostnames that identify this loopback server. Requests whose Origin or Host
+# names anything else are rejected (defends the local API against DNS-rebinding
+# and foreign-origin browser reads). The server only ever binds 127.0.0.1.
+LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+# The only files served over HTTP. Everything else — the SQLite DB, its -wal/-shm
+# sidecars, the raw JSONL event logs, server.py/schema.sql, and directory listings —
+# returns 404 even to an authenticated client. Replaces the old directory-wide
+# SimpleHTTPRequestHandler fallback that exposed the whole analytics directory.
+UI_ASSETS = {
+    "/": "dashboard.html",
+    "/dashboard.html": "dashboard.html",
+}
 
 # Simple TTL cache (30 seconds)
 _cache = {}
@@ -38,9 +54,9 @@ def _cached(key, fn):
     return result
 
 
-def get_db():
+def get_db(db_path):
     """Open a read-only SQLite connection with performance pragmas."""
-    conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA mmap_size=268435456")
     conn.execute("PRAGMA cache_size=-64000")
@@ -81,12 +97,12 @@ def parse_int_param(params, name, default):
 # API endpoint handlers
 # ---------------------------------------------------------------------------
 
-def api_summary(params):
+def api_summary(params, db_path):
     days = parse_int_param(params, "days", 14)
-    cache_key = f"summary:{days}"
+    cache_key = f"{db_path}|summary:{days}"
 
     def compute():
-        conn = get_db()
+        conn = get_db(db_path)
         try:
             dfc = day_filter_clause("timestamp", days)
 
@@ -170,12 +186,12 @@ def api_summary(params):
     return _cached(cache_key, compute)
 
 
-def api_daily(params):
+def api_daily(params, db_path):
     days = parse_int_param(params, "days", 14)
-    cache_key = f"daily:{days}"
+    cache_key = f"{db_path}|daily:{days}"
 
     def compute():
-        conn = get_db()
+        conn = get_db(db_path)
         try:
             dfc = day_filter_clause("timestamp", days)
             rows = conn.execute(f"""
@@ -197,12 +213,12 @@ def api_daily(params):
     return _cached(cache_key, compute)
 
 
-def api_projects(params):
+def api_projects(params, db_path):
     days = parse_int_param(params, "days", 14)
-    cache_key = f"projects:{days}"
+    cache_key = f"{db_path}|projects:{days}"
 
     def compute():
-        conn = get_db()
+        conn = get_db(db_path)
         try:
             dfc = day_filter_clause("a.timestamp", days)
             # Single query with LEFT JOIN for top agent — eliminates N+1
@@ -228,12 +244,12 @@ def api_projects(params):
     return _cached(cache_key, compute)
 
 
-def api_agents(params):
+def api_agents(params, db_path):
     days = parse_int_param(params, "days", 14)
-    cache_key = f"agents:{days}"
+    cache_key = f"{db_path}|agents:{days}"
 
     def compute():
-        conn = get_db()
+        conn = get_db(db_path)
         try:
             dfc = day_filter_clause("timestamp", days)
             rows = conn.execute(f"""
@@ -256,12 +272,12 @@ def api_agents(params):
     return _cached(cache_key, compute)
 
 
-def api_models(params):
+def api_models(params, db_path):
     days = parse_int_param(params, "days", 14)
-    cache_key = f"models:{days}"
+    cache_key = f"{db_path}|models:{days}"
 
     def compute():
-        conn = get_db()
+        conn = get_db(db_path)
         try:
             dfc = day_filter_clause("timestamp", days)
             rows = conn.execute(f"""
@@ -289,13 +305,13 @@ def api_models(params):
     return _cached(cache_key, compute)
 
 
-def api_sessions(params):
+def api_sessions(params, db_path):
     days = parse_int_param(params, "days", 14)
     limit = max(1, min(parse_int_param(params, "limit", 25), 1000))
     offset = max(0, parse_int_param(params, "offset", 0))
     project_filter = params.get("project", [""])[0]
     search = params.get("search", [""])[0]
-    conn = get_db()
+    conn = get_db(db_path)
     try:
         dfc = day_filter_clause("s.started_at", days)
         clauses = []
@@ -350,13 +366,13 @@ def api_sessions(params):
         conn.close()
 
 
-def api_tools(params):
+def api_tools(params, db_path):
     """Top tools by usage count."""
     days = parse_int_param(params, "days", 14)
-    cache_key = f"tools:{days}"
+    cache_key = f"{db_path}|tools:{days}"
 
     def compute():
-        conn = get_db()
+        conn = get_db(db_path)
         try:
             dfc = day_filter_clause("timestamp", days)
             rows = conn.execute(f"""
@@ -377,13 +393,13 @@ def api_tools(params):
     return _cached(cache_key, compute)
 
 
-def api_hooks(params):
+def api_hooks(params, db_path):
     """Hook event counts by type."""
     days = parse_int_param(params, "days", 14)
-    cache_key = f"hooks:{days}"
+    cache_key = f"{db_path}|hooks:{days}"
 
     def compute():
-        conn = get_db()
+        conn = get_db(db_path)
         try:
             dfc = day_filter_clause("he.timestamp", days)
             rows = conn.execute(f"""
@@ -403,13 +419,13 @@ def api_hooks(params):
     return _cached(cache_key, compute)
 
 
-def api_session_detail(params):
+def api_session_detail(params, db_path):
     """Full detail for a single session."""
     session_id = params.get("session_id", [""])[0]
     if not session_id:
         return {"error": "session_id required"}
 
-    conn = get_db()
+    conn = get_db(db_path)
     try:
         # Session metadata
         session = conn.execute(
@@ -474,51 +490,259 @@ API_ROUTES = {
 }
 
 
-class DashboardHandler(SimpleHTTPRequestHandler):
-    """HTTP handler that serves the dashboard and JSON API."""
+def _parse_port(text):
+    """Return the integer port for an ASCII-decimal ``text`` in range, else None.
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=DASHBOARD_DIR, **kwargs)
+    Only bytes ``0-9`` are accepted, so ``str.isdigit`` false-positives (Unicode
+    superscripts, full-width digits that ``int`` would still parse) cannot slip a
+    bogus port through. Empty, signed or out-of-range strings return None.
+    """
+    if not text or not all(c in "0123456789" for c in text):
+        return None
+    try:
+        port = int(text)
+    except ValueError:
+        # An all-digit run thousands of characters long trips CPython's
+        # int-string conversion digit limit (ValueError on 3.11+). A real port
+        # is at most five digits, so such input is never a valid port: reject it
+        # here instead of letting the exception escape parse_host_authority and
+        # abort the request before the Host/Origin check can answer 403.
+        return None
+    return port if 0 <= port <= 65535 else None
+
+
+def parse_host_authority(value):
+    """Parse a Host-header authority into ``(hostname_lower, port_or_None)``.
+
+    Returns None for anything that is not a clean ``host`` or ``host:port`` (or the
+    bracketed ``[ipv6]`` / ``[ipv6]:port`` form): userinfo, a path/garbage suffix, a
+    missing/non-numeric/out-of-range port, an unterminated or trailing-garbage IPv6
+    bracket, or embedded whitespace/slashes. This is the narrow authority grammar
+    this loopback server accepts, not a general URL parser.
+    """
+    if value is None:
+        return None
+    value = value.strip()
+    if not value or "@" in value:  # userinfo is never valid in a Host header
+        return None
+    if value.startswith("["):
+        end = value.find("]")
+        if end == -1:
+            return None  # unterminated IPv6 literal
+        hostname = value[1:end]
+        rest = value[end + 1:]
+        if rest == "":
+            port = None
+        elif rest.startswith(":"):
+            port = _parse_port(rest[1:])
+            if port is None:
+                return None
+        else:
+            return None  # garbage after the bracket, e.g. [::1]evil.invalid
+    elif value.count(":") > 1:
+        return None  # a bare (unbracketed) IPv6 authority is not accepted here
+    elif ":" in value:
+        hostname, _, port_str = value.partition(":")
+        port = _parse_port(port_str)
+        if port is None:
+            return None
+    else:
+        hostname = value
+        port = None
+    if not hostname or "/" in hostname or any(c.isspace() for c in hostname):
+        return None
+    return hostname.lower(), port
+
+
+class DashboardHandler(BaseHTTPRequestHandler):
+    """Serves the dashboard UI and JSON API for a single loopback client.
+
+    Security boundary:
+      - Origin/Host must name this loopback server (rejects foreign-origin browser
+        reads and DNS-rebinding), checked on every GET/HEAD including static assets.
+      - /api/* requires the per-launch capability token in an Authorization header;
+        there is no no-auth default. The token is never written to logs.
+      - Only the assets in UI_ASSETS are served; everything else returns 404, so the
+        colocated SQLite DB and raw JSONL logs are not reachable over HTTP.
+    """
+
+    server_version = "ClaudeObs/1.0"
+
+    # Bounded per-connection read timeout. With ThreadingHTTPServer each
+    # connection runs in its own (daemon) thread, so a client that opens a
+    # socket and never sends a request no longer blocks other clients — but it
+    # would otherwise hold that thread and its fd for the server's whole life.
+    # This timeout reclaims an idle/half-open connection: the handler's socket
+    # read raises socket.timeout, which BaseHTTPRequestHandler turns into a
+    # clean connection close. It is comfortably above any real dashboard
+    # request, so legitimate requests and keep-alive polling are unaffected.
+    timeout = 30
+
+    def _bound_port(self):
+        """The real TCP port this server is listening on (resolved even for --port 0)."""
+        return self.server.server_address[1]
+
+    def _port_ok(self, port):
+        """True when an authority port matches the bound port.
+
+        A missing port is only the implicit ``http`` default (80); this loopback
+        dashboard never runs there by default, so an omitted port is accepted only
+        if the server genuinely bound 80.
+        """
+        if port is None:
+            return self._bound_port() == 80
+        return port == self._bound_port()
+
+    def _host_allowed(self):
+        """Require an explicit, well-formed loopback Host authority at the bound port.
+
+        Rejects duplicate Host headers, foreign/garbage authorities, wrong ports and
+        malformed IPv6 suffixes. A missing Host is tolerated only for HTTP/1.0, which
+        predates the required header; HTTP/1.1 must send one.
+        """
+        hosts = self.headers.get_all("Host") or []
+        if len(hosts) > 1:
+            return False  # ambiguous/smuggled duplicate Host — reject
+        if not hosts:
+            return self.request_version == "HTTP/1.0"
+        parsed = parse_host_authority(hosts[0])
+        if parsed is None:
+            return False
+        hostname, port = parsed
+        return hostname in LOOPBACK_HOSTS and self._port_ok(port)
+
+    def _accepted_origins(self):
+        """Exact Origin strings this server accepts: http + loopback alias + bound port.
+
+        Building the small exact set (rather than parsing) means wrong scheme, wrong
+        port, userinfo, a path/query/fragment or any trailing garbage all fail by not
+        matching — no permissive URL parsing to be fooled by.
+        """
+        port = self._bound_port()
+        origins = {f"http://{h}:{port}" for h in ("localhost", "127.0.0.1", "[::1]")}
+        if port == 80:
+            origins.update(f"http://{h}" for h in ("localhost", "127.0.0.1", "[::1]"))
+        return origins
+
+    def _origin_allowed(self):
+        origins = self.headers.get_all("Origin") or []
+        if not origins:
+            return True  # same-origin GET/HEAD frequently omit Origin
+        if len(origins) > 1:
+            return False  # duplicate Origin headers are never legitimate
+        return origins[0].strip() in self._accepted_origins()
+
+    def _token_valid(self):
+        expected = getattr(self.server, "auth_token", None)
+        if not expected:
+            return False  # fail closed — never serve the API without a token
+        header = self.headers.get("Authorization", "")
+        prefix = "Bearer "
+        if not header.startswith(prefix):
+            return False
+        return hmac.compare_digest(header[len(prefix):], expected)
 
     def do_GET(self):
+        self._handle(include_body=True)
+
+    def do_HEAD(self):
+        self._handle(include_body=False)
+
+    def _handle(self, include_body):
+        if not self._host_allowed() or not self._origin_allowed():
+            self.send_json(403, {"error": "Forbidden origin or host"}, include_body)
+            return
+
         parsed = urlparse(self.path)
         path = parsed.path
 
-        # Serve dashboard at root
-        if path == "/" or path == "":
-            self.path = "/dashboard.html"
-            return super().do_GET()
-
-        # API routes
         if path in API_ROUTES:
+            if not self._token_valid():
+                self.send_json(401, {"error": "Missing or invalid capability token"}, include_body)
+                return
             params = parse_qs(parsed.query)
+            db_path = getattr(self.server, "db_path", DB_PATH)
             try:
-                result = API_ROUTES[path](params)
-                self.send_json(200, result)
+                result = API_ROUTES[path](params, db_path)
+                self.send_json(200, result, include_body)
             except Exception as e:
-                self.send_json(500, {"error": "Query failed"})
+                self.send_json(500, {"error": "Query failed"}, include_body)
                 print(f"API error on {path}: {e}", file=sys.stderr)
             return
 
-        # Static files
-        return super().do_GET()
+        asset = UI_ASSETS.get(path)
+        if asset:
+            self.serve_asset(asset, include_body)
+            return
 
-    def send_json(self, status, data):
+        self.send_json(404, {"error": "Not found"}, include_body)
+
+    def serve_asset(self, filename, include_body):
+        # filename comes only from the fixed UI_ASSETS allowlist, never from the
+        # request path, so there is no traversal surface here.
+        try:
+            with open(os.path.join(DASHBOARD_DIR, filename), "rb") as fh:
+                body = fh.read()
+        except OSError:
+            self.send_json(404, {"error": "Not found"}, include_body)
+            return
+        ctype = "text/html; charset=utf-8" if filename.endswith(".html") else "application/octet-stream"
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+        if include_body:
+            self.wfile.write(body)
+
+    def send_json(self, status, data, include_body=True):
+        # No Access-Control-Allow-Origin: responses are for the same-origin UI only.
         body = json.dumps(data).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
-        self.wfile.write(body)
+        if include_body:
+            self.wfile.write(body)
 
     def log_message(self, format, *args):
-        # Suppress request logging for cleaner output
+        # Suppress request logging — keeps the capability token out of any log.
         pass
+
+
+def build_server(host="127.0.0.1", port=3141, token=None, db_path=None):
+    """Construct the dashboard HTTP server bound to a loopback address.
+
+    ``token`` is the per-launch capability required on every API request; when not
+    supplied a fresh high-entropy one is generated. Tests inject a known fixture
+    token here (never via a CLI flag) so there is no unauthenticated path to ship.
+
+    Uses the stdlib ``ThreadingHTTPServer`` (one daemon thread per connection) so a
+    client that opens a socket without sending a request — browsers routinely
+    pre-open connections — cannot stall every other request behind a single-threaded
+    accept loop. The loopback bind, auth, Origin/Host and asset allowlist are
+    unchanged; only request dispatch is now concurrent.
+    """
+    httpd = ThreadingHTTPServer((host, port), DashboardHandler)
+    httpd.auth_token = token if token is not None else secrets.token_urlsafe(32)
+    httpd.db_path = db_path if db_path is not None else DB_PATH
+    return httpd
+
+
+def format_launch_url(host, port, token):
+    """Build the launch URL that carries the capability in the fragment (#token=…).
+
+    The fragment is never sent in an HTTP request line or query string, so the token
+    stays out of server access logs; the dashboard JS reads it from location.hash.
+    """
+    hostname = "127.0.0.1" if host in ("0.0.0.0", "", None) else host
+    return f"http://{hostname}:{port}/#token={token}"
 
 
 def main():
     port = 3141
+    host = "127.0.0.1"
     auto_open = False
     global DB_PATH
 
@@ -550,11 +774,14 @@ def main():
         print("Run collector.py first to ingest JSONL data.", file=sys.stderr)
         sys.exit(1)
 
-    url = f"http://localhost:{port}"
-    server = HTTPServer(("127.0.0.1", port), DashboardHandler)
+    token = secrets.token_urlsafe(32)
+    server = build_server(host, port, token=token, db_path=DB_PATH)
+    actual_port = server.server_address[1]  # resolves the real port when --port 0
+    url = format_launch_url(host, actual_port, token)
 
     print(f"Claude Code Observability Dashboard")
     print(f"  URL:      {url}")
+    print(f"  (open the URL above — it carries a per-launch access token after '#', valid until this server stops)")
     print(f"  Database: {DB_PATH}")
     print(f"  Endpoints: {len(API_ROUTES)} API routes")
     print(f"  Cache TTL: {_CACHE_TTL}s")

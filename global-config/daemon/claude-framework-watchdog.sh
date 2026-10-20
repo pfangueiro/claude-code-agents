@@ -2,8 +2,12 @@
 # ============================================================================
 # Claude Framework Watchdog — hourly slow-path reconciliation & snapshots
 # ============================================================================
-# Runs under launchd (StartInterval 3600). Responsibilities:
-#   1. Quick validation (./validate.sh --quick --json) → framework-health.jsonl
+# Runs under launchd (StartInterval 3600). OBSERVE-ONLY for framework state —
+# it reports health and keeps backups; it does NOT repair, migrate, reseed or
+# run the analytics collector. Drift is reported for an explicit foreground
+# `./install.sh --update` by the owner. Responsibilities:
+#   1. Strict validation admission (./validate.sh --quick --json, no --heal) →
+#      one `validation_result` event in framework-health.jsonl
 #   2. Repo .git integrity (git fsck) → watchdog-alerts.jsonl on corruption
 #   3. Rolling git bundle snapshots (~/.claude/snapshots/) — daily cadence
 #   4. User config tarball snapshots (~/.claude/hooks, settings.json) — daily
@@ -13,6 +17,8 @@
 #
 # All stdout/stderr captured to ~/.claude/analytics/watchdog.log by launchd.
 # This script soft-fails on every check — never exit non-zero from a check.
+# A nonblocking exit 0 is NOT a health signal: the real validation outcome is
+# retained in the emitted `validation_result` event, never in the exit code.
 # ============================================================================
 
 set -uo pipefail
@@ -57,73 +63,214 @@ trim_jsonl() {
     fi
 }
 
+# The health verdict emitter is defined HERE — before repo resolution — so an
+# unresolved marker can still record exactly one terminal `validation_result`
+# instead of exiting silently (a silent exit leaves prior success unqualified
+# for downstream consumers).
+_emit_validation_result() {
+    # $1 status, $2 exit_code (integer or the literal null), $3 reason,
+    # $4 checks, $5 errors, $6 warnings (counts empty when unavailable)
+    local status="$1" ec="$2" reason="$3" c="${4:-}" e="${5:-}" w="${6:-}"
+    # `complete` is a typed boolean the statusline requires true before it shows a
+    # green glyph. It is derived from the terminal status: a healthy or drift verdict
+    # means the predeclared scope completed; every unknown (malformed/interrupted/
+    # ambiguous/incomplete) outcome is complete:false — it is NEVER coerced to true.
+    local complete="false"
+    case "$status" in healthy|drift) complete="true" ;; esac
+    local body
+    body="\"event\":\"validation_result\",\"source\":\"watchdog\",\"status\":\"$status\",\"exit_code\":$ec,\"reason\":\"$reason\",\"complete\":$complete"
+    # Attach the numeric summary only when all three were admitted as integers.
+    if [ -n "$c" ] && [ -n "$e" ] && [ -n "$w" ]; then
+        body="$body,\"checks\":$c,\"errors\":$e,\"warnings\":$w"
+    fi
+    log_jsonl "$HEALTH_LOG" "$body"
+    log "watchdog: validation_result status=$status exit_code=$ec reason=$reason complete=$complete"
+}
+
 # -------- Resolve repo --------
-# Read framework source path from the marker written by install.sh. No
+# Read the framework source path from the marker written by install.sh. No
 # hardcoded user-specific paths (this script is distributed to multiple users).
+# The path is read with `IFS= read -r` so embedded spaces are preserved — a
+# `tr -d '[:space:]'` corrupts any valid path containing a space. The marker
+# content is only ever TESTED as a directory; it is never eval'd or sourced.
 REPO=""
-if [ -f "$FRAMEWORK_PATH_MARKER" ]; then
-    candidate=$(cat "$FRAMEWORK_PATH_MARKER" 2>/dev/null | tr -d '[:space:]')
-    if [ -n "$candidate" ] && [ -d "$candidate/.claude/agents" ]; then
+repo_reason=""
+if [ ! -e "$FRAMEWORK_PATH_MARKER" ]; then
+    repo_reason="framework_path_marker_missing"
+elif [ ! -r "$FRAMEWORK_PATH_MARKER" ]; then
+    repo_reason="framework_path_unreadable"
+else
+    candidate=""
+    IFS= read -r candidate < "$FRAMEWORK_PATH_MARKER" 2>/dev/null || true
+    candidate="${candidate%$'\r'}"   # tolerate a CRLF marker; keep inner spaces
+    if [ -z "$candidate" ]; then
+        repo_reason="framework_path_empty"
+    elif [ -d "$candidate/.claude/agents" ]; then
         REPO="$candidate"
+    else
+        repo_reason="framework_path_invalid"
     fi
 fi
 
 if [ -z "$REPO" ]; then
-    log "watchdog: no repo found — exiting"
+    # Unresolved source: record one terminal UNKNOWN (exit_code null, no counts,
+    # qualified static reason) so downstream consumers never read stale success.
+    _emit_validation_result unknown null "$repo_reason" "" "" ""
+    log "watchdog: repo unresolved ($repo_reason) — recorded unknown, exiting"
     exit 0
 fi
 
 log "watchdog: run start (repo=$REPO)"
 
-# -------- Task 1: validate.sh --quick --json, then HEAL on drift --------
-# CRITICAL: the watchdog is the ONLY self-heal component that survives a
-# settings.json .hooks wipe (it runs under launchd, independent of the wiped
-# SessionStart hook). It must therefore HEAL, not merely detect — otherwise a
-# wipe removes the SessionStart healer and nothing recovers. Parse the errors
-# count from the --json summary; on errors>0, run install.sh --update (the
-# reconcile re-injects hooks/statusLine from template via _atomic_settings_jq)
-# and re-validate. Snapshot-before is covered by the daily userconfig tarball.
+# -------- Task 1: strict validation admission (NO automatic repair) --------
+# The watchdog OBSERVES and reports; it does NOT repair. Earlier revisions ran
+# `install.sh --update` on drift (and a per-cycle `--migrate-legacy`). Both are
+# removed: a detached installer is a broad background write with wide blast
+# radius, and admitting "0 errors" from erased/malformed validator output hid
+# real failures. Drift is now surfaced for an explicit foreground
+# `./install.sh --update` by the owner — never launched here. A legacy
+# `.framework-autonomy` marker does NOT re-grant background mutation.
+#
+# Admission rules: run validate.sh WITHOUT --heal, capture stdout and stderr
+# SEPARATELY, and preserve the real exit code (no `|| true` erasing it). A
+# health verdict is admitted only from a single, well-formed JSON summary whose
+# checks/errors/warnings are nonnegative integers below 2^53, whose checks count
+# is nonzero (a real run happened), whose totals are internally consistent
+# (errors + warnings <= checks), and whose DOCUMENTED exit code (0 clean,
+# 1 errors) agrees with the error count. Everything else — malformed/noisy/
+# multiple JSON, missing jq or validator, impossible totals, a signal or any
+# other exit code (interrupted/faulted run), rc/result disagreement — is UNKNOWN
+# and is NEVER coerced to 0 errors or admitted as a completed drift/healthy check.
+
+_admit_validation() {
+    # $1 = real exit code, $2 = captured stdout
+    local rc="$1" out="$2"
+    local arrlen vtype counts checks errors warnings comp
+
+    if ! command -v jq >/dev/null 2>&1; then
+        _emit_validation_result unknown "$rc" "jq_missing" "" "" ""
+        return
+    fi
+    if [ -z "$(printf '%s' "$out" | tr -d '[:space:]')" ]; then
+        _emit_validation_result unknown "$rc" "empty_output" "" "" ""
+        return
+    fi
+    # Exactly one top-level JSON value. jq -s slurps whitespace-separated values
+    # and fails outright on any non-JSON (noisy) content, so a leading log line,
+    # trailing garbage or a second object all land here as UNKNOWN.
+    arrlen=$(printf '%s' "$out" | jq -s 'length' 2>/dev/null)
+    if [ "$arrlen" != "1" ]; then
+        _emit_validation_result unknown "$rc" "not_single_json_object" "" "" ""
+        return
+    fi
+    # arrlen==1 proved exactly one top-level value, so the single object reads as
+    # `.` without slurping (no `.[0]` indexing, which would error on an object).
+    vtype=$(printf '%s' "$out" | jq -r 'type' 2>/dev/null)
+    if [ "$vtype" != "object" ]; then
+        _emit_validation_result unknown "$rc" "json_not_object" "" "" ""
+        return
+    fi
+    # Extract all three counts in ONE jq pass. jq performs every numeric test so
+    # bash never does arithmetic on an untrusted value: each count must be a
+    # nonnegative integer BELOW 2^53 (exactly representable as a double AND safely
+    # within bash's signed-64-bit range — this also rejects Infinity/NaN and any
+    # scientific/float rendering that would break `[ ]` arithmetic). Any failure
+    # yields empty output -> rejected as invalid.
+    counts=$(printf '%s' "$out" | jq -r '
+        def _ok($x): ($x|type)=="number" and $x>=0 and ($x|floor)==$x and $x<9007199254740992;
+        if _ok(.checks) and _ok(.errors) and _ok(.warnings)
+        then "\(.checks) \(.errors) \(.warnings)" else empty end' 2>/dev/null)
+    if [ -z "$counts" ]; then
+        _emit_validation_result unknown "$rc" "invalid_or_missing_counts" "" "" ""
+        return
+    fi
+    read -r checks errors warnings <<<"$counts"
+    # Optional `complete` flag from the validator summary (additive, backward
+    # compatible). A legacy summary WITHOUT the field is treated as complete
+    # (compat=true); a present value MUST be a boolean. Resolves to exactly one of
+    # absent | true | false | invalid; an empty read is treated as invalid (fail
+    # closed), since the object already parsed for its counts.
+    comp=$(printf '%s' "$out" | jq -r '
+        if (has("complete")|not) then "absent"
+        elif (.complete|type)=="boolean" then (.complete|tostring)
+        else "invalid" end' 2>/dev/null)
+    [ -z "$comp" ] && comp="invalid"
+    if [ "$checks" -le 0 ]; then
+        # No meaningful check actually ran — cannot certify health.
+        _emit_validation_result unknown "$rc" "zero_checks" "$checks" "$errors" "$warnings"
+        return
+    fi
+    # The real validator counts every WARN and ERROR as a CHECK, so a well-formed
+    # summary always satisfies errors + warnings <= checks. A total that exceeds
+    # the check count is internally impossible (corrupt/foreign output) and is
+    # never admitted as health or drift evidence. Both operands are < 2^53, so
+    # the sum stays well inside int64 — no shell overflow.
+    if [ "$((errors + warnings))" -gt "$checks" ]; then
+        _emit_validation_result unknown "$rc" "inconsistent_counts" "$checks" "$errors" "$warnings"
+        return
+    fi
+    # The `complete` flag is admitted here, with the real rc/counts preserved: an
+    # invalid (non-boolean) type is corrupt output, and an explicit false means the
+    # validator could not finish its scope. Either is UNKNOWN — never healthy/drift —
+    # so a partial or malformed run cannot be laundered into a verdict. absent/true
+    # fall through to the normal rc/errors decision below.
+    if [ "$comp" = "invalid" ]; then
+        _emit_validation_result unknown "$rc" "invalid_complete" "$checks" "$errors" "$warnings"
+        return
+    fi
+    if [ "$comp" = "false" ]; then
+        _emit_validation_result unknown "$rc" "validator_incomplete" "$checks" "$errors" "$warnings"
+        return
+    fi
+    # Only the validator's DOCUMENTED exits are admissible evidence: 0 = clean,
+    # 1 = errors found. A signal (rc >= 128) or any other code means the run was
+    # interrupted or faulted — UNKNOWN, never a completed drift/healthy verdict,
+    # even when the captured stdout happened to look like a valid summary.
+    if [ "$rc" -eq 0 ] && [ "$errors" -eq 0 ]; then
+        _emit_validation_result healthy "$rc" "ok" "$checks" "$errors" "$warnings"
+    elif [ "$rc" -eq 1 ] && [ "$errors" -gt 0 ]; then
+        _emit_validation_result drift "$rc" "validation_errors" "$checks" "$errors" "$warnings"
+    elif [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ]; then
+        _emit_validation_result unknown "$rc" "rc_result_disagreement" "$checks" "$errors" "$warnings"
+    elif [ "$rc" -ge 128 ]; then
+        _emit_validation_result unknown "$rc" "validator_signaled" "$checks" "$errors" "$warnings"
+    else
+        _emit_validation_result unknown "$rc" "unexpected_exit_code" "$checks" "$errors" "$warnings"
+    fi
+}
+
 if [ -x "$REPO/validate.sh" ]; then
-    validate_out=$(cd "$REPO" && ./validate.sh --quick --json 2>&1 || true)
-    validate_snippet=$(printf '%s' "$validate_out" | head -c 4000 | tr '\n' ' ' | sed 's/"/\\"/g')
-    log_jsonl "$HEALTH_LOG" "\"event\":\"validate_quick\",\"output\":\"$validate_snippet\""
-    log "watchdog: validate.sh --quick --json completed"
-
-    err_count=0
+    verr_tmp="$ANALYTICS_DIR/.validate-stderr.$$"
+    v_out=$(cd "$REPO" && ./validate.sh --quick --json 2>"$verr_tmp")
+    v_rc=$?
+    # Bounded diagnostics (framework metadata only; no credential/transcript
+    # content). Byte-bound first, then JSON-encode the raw strings with `jq -cn
+    # --arg` so arbitrary bytes — backslashes, quotes, newlines, control chars —
+    # can NEVER produce a malformed JSONL line. The predecessor hand-escaped only
+    # quotes/newlines and corrupted the line on any other backslash (BH-05).
+    v_out_snippet=$(printf '%s' "$v_out" | head -c 4000)
+    v_err_snippet=$(head -c 2000 "$verr_tmp" 2>/dev/null)
+    rm -f "$verr_tmp" 2>/dev/null || true
     if command -v jq >/dev/null 2>&1; then
-        err_count=$(printf '%s' "$validate_out" | jq -r '.errors // 0' 2>/dev/null || echo 0)
+        vq_line=$(jq -cn \
+            --arg ts "$(_ts)" \
+            --argjson ec "$v_rc" \
+            --arg out "$v_out_snippet" \
+            --arg err "$v_err_snippet" \
+            '{ts:$ts,event:"validate_quick",exit_code:$ec,stdout:$out,stderr:$err}' \
+            2>/dev/null)
+        # Append only a well-formed encoder result — never a raw/partial line.
+        [ -n "$vq_line" ] && printf '%s\n' "$vq_line" >> "$HEALTH_LOG" 2>/dev/null
+    else
+        # jq unavailable: emit TYPED numeric metadata only, never raw unescaped
+        # diagnostic text (which could itself break the JSONL line).
+        log_jsonl "$HEALTH_LOG" "\"event\":\"validate_quick\",\"exit_code\":$v_rc,\"stdout_bytes\":${#v_out_snippet},\"stderr_bytes\":${#v_err_snippet}"
     fi
-    case "$err_count" in ''|*[!0-9]*) err_count=0 ;; esac
-    if [ "$err_count" -gt 0 ]; then
-        log_jsonl "$HEALTH_LOG" "\"event\":\"heal_triggered\",\"source\":\"watchdog\",\"errors\":$err_count,\"action\":\"install.sh --update\""
-        log "watchdog: drift ($err_count errors) — running install.sh --update to heal"
-        (cd "$REPO" && CLAUDE_WATCHDOG_RUN=1 ./install.sh --update >/dev/null 2>&1) || true
-        heal_out=$(cd "$REPO" && ./validate.sh --quick --json 2>&1 || true)
-        heal_errs=0
-        if command -v jq >/dev/null 2>&1; then
-            heal_errs=$(printf '%s' "$heal_out" | jq -r '.errors // 0' 2>/dev/null || echo 0)
-        fi
-        case "$heal_errs" in ''|*[!0-9]*) heal_errs=0 ;; esac
-        if [ "$heal_errs" -eq 0 ]; then
-            log_jsonl "$HEALTH_LOG" "\"event\":\"heal_succeeded\",\"source\":\"watchdog\""
-            log "watchdog: heal succeeded (0 errors after install --update)"
-        else
-            log_jsonl "$ALERT_LOG" "\"event\":\"heal_failed\",\"source\":\"watchdog\",\"errors_remaining\":$heal_errs"
-            log "watchdog: heal FAILED — $heal_errs errors remain after install --update"
-        fi
-    fi
+    log "watchdog: validate.sh --quick --json completed (rc=$v_rc)"
+    _admit_validation "$v_rc" "$v_out"
 else
-    log "watchdog: validate.sh not found or not executable"
-fi
-
-# -------- Task 1b: autonomous legacy migration (opt-in via marker) --------
-# Runs EVERY cycle so a newly-set ~/.claude/.framework-autonomy marker triggers the
-# old-per-project teardown within the hour, independent of shared-set drift (the
-# heal path above only fires on validate errors). Marker-gated + idempotent inside
-# install.sh: no marker → instant no-op; nothing to migrate → no-op + no snapshot.
-if [ -x "$REPO/install.sh" ]; then
-    (cd "$REPO" && ./install.sh --migrate-legacy >/dev/null 2>&1) || true
-    log "watchdog: legacy migration check complete"
+    _emit_validation_result unknown null "validator_absent" "" "" ""
+    log "watchdog: validate.sh not found or not executable — validation unknown"
 fi
 
 # -------- Task 2: git fsck --------
@@ -301,34 +448,12 @@ if [ -d "$SNAPSHOT_DIR" ]; then
     done
 fi
 
-# -------- Task 6: regenerate claude-obs.db when missing --------
-# Closes the "deferred_regen" loop from the SessionStart healthcheck hook.
-# If the DB file is missing (e.g. purged for schema migration) but the
-# collector is present, run it with a timeout and soft-fail.
-OBS_DB="$HOME/.claude/analytics/claude-obs.db"
-OBS_COLLECTOR="$HOME/.claude/analytics/collector.py"
-if [ ! -f "$OBS_DB" ] && [ -f "$OBS_COLLECTOR" ] && command -v python3 >/dev/null 2>&1; then
-    log "watchdog: claude-obs.db missing — invoking collector"
-    # Use `timeout` if available (macOS via coreutils); fall back to bare python3.
-    if command -v timeout >/dev/null 2>&1; then
-        regen_out=$(timeout 120 python3 "$OBS_COLLECTOR" 2>&1 || true)
-    elif command -v gtimeout >/dev/null 2>&1; then
-        regen_out=$(gtimeout 120 python3 "$OBS_COLLECTOR" 2>&1 || true)
-    else
-        regen_out=$(python3 "$OBS_COLLECTOR" 2>&1 || true)
-    fi
-    if [ -f "$OBS_DB" ]; then
-        log_jsonl "$HEALTH_LOG" "\"event\":\"deferred_regen_success\",\"db\":\"$OBS_DB\""
-        log "watchdog: claude-obs.db regenerated"
-    else
-        esc=$(printf '%s' "$regen_out" | head -c 2000 | tr '\n' ' ' | sed 's/"/\\"/g')
-        log_jsonl "$ALERT_LOG" "\"event\":\"deferred_regen_failed\",\"output\":\"$esc\""
-        log "watchdog: claude-obs.db regen FAILED"
-    fi
-elif [ ! -f "$OBS_DB" ]; then
-    log_jsonl "$HEALTH_LOG" "\"event\":\"deferred_regen_skipped\",\"reason\":\"collector_or_python_missing\""
-    log "watchdog: claude-obs.db missing but collector/python3 unavailable — skipped"
-fi
+# -------- Task 6: (removed) analytics DB regeneration --------
+# The watchdog no longer runs the observability collector. Regenerating
+# claude-obs.db means POSTing session history to the collector — an analytics
+# action, not a framework-health diagnostic. Analytics is an explicit, owner
+# invoked opt-in; coupling it to the hourly watchdog is a background write the
+# owner never authorized here. Missing DB is left for explicit owner action.
 
 # -------- Task 7: cap append-only diagnostic logs (the statusline only tail-reads them and
 # nothing ingests them into a DB, so old lines are disposable). Runs every cycle, atomic.

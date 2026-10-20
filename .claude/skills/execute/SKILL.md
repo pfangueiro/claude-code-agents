@@ -59,15 +59,13 @@ ActiveForm: <present continuous — "Adding retry logic to Bedrock calls">
 ```
 
 **Decomposition rules:**
-- One responsibility per task — if a task has "and" in it, split it
-- Research tasks are separate from implementation tasks
-- Test-writing is a separate task from code-writing
-- File creation is separate from file modification
-- Each task targets ≤ 3 files
+- Size each task by one cohesive responsibility, its dependencies, its acceptance criteria, and whether it fits in a single focused session (< 30 minutes) — not by a fixed task count or a file cap. A cohesive change that happens to span several files is still one task; do not fragment it to hit a number, and do not split file creation from the modification it belongs with.
+- Keep genuinely independent concerns in separate tasks so each can be verified — and, where write scopes are disjoint, parallelized — on its own. Research is its own task from the implementation it informs.
+- Bug fixes are regression-first: schedule the task that reproduces the defect with a failing (RED) test BEFORE the task that implements the fix, so the fix is proven against a real reproduction. Additional coverage and the independent acceptance check come after the fix lands. This is the one case where a test task precedes its code; general coverage still follows the implementation it exercises.
 - For monitoring/polling tasks, use CronCreate instead of manual loops
 - For risky or experimental tasks, record the isolation mechanism in the **Tool:** field as the `Agent` tool's `isolation: "worktree"` parameter. Do NOT plan an `EnterWorktree` step: that tool is explicit-instruction-only and switches the whole session's working directory, so it cannot isolate one task among many
 
-**Gate:** All tasks created via TaskCreate. Minimum 3 tasks for any non-trivial goal.
+**Gate:** All tasks created via TaskCreate, each sized to one cohesive responsibility. Decompose only as far as the work's dependencies and acceptance criteria require — a genuinely small goal may be a single task, while a broad one warrants many.
 
 ### Phase 3: PLAN
 

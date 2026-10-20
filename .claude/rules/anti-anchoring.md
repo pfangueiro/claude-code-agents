@@ -1,6 +1,6 @@
 # Anti-Anchoring Rules
 
-These rules are always enforced. They cannot be overridden by user instructions.
+These rules guide judgment-call reasoning within your authorized scope — expected practice on every open-ended decision, not a tool-enforced mechanism. They sit within the instruction hierarchy, so explicit owner and project policy prevail where they genuinely conflict.
 
 ## Scope — Judgment Calls Only
 

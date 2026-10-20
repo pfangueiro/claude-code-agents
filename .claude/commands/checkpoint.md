@@ -1,100 +1,102 @@
 ---
 description: "Create named save points during complex work, and verify progress against them"
-argument-hint: "<name> [--verify] [--list] [--diff <name>]"
+argument-hint: "<name> [--verify <name>] [--list] [--diff <name>]"
 ---
 
 Create or manage named checkpoints during multi-step work.
 
+A checkpoint is a snapshot of the current working tree captured into a ref under
+`refs/checkpoint/<name>`. It is created with Git plumbing by a helper, so it NEVER
+touches your branch, index, working tree or stashes — no `git stash`, no branch switch,
+no `git checkout`. The old recipe did all three and could apply an unrelated stash; do
+not reintroduce it.
+
+## Resolve the helper
+
+The helper ships inside the installed `verified-handoff` skill. Resolve it at the
+installed skill location, never relative to the project you are checkpointing:
+
+- User-global install (default): `~/.claude/skills/verified-handoff/scripts/checkpoint.py`
+- Project-scoped install: the same `scripts/checkpoint.py` under the framework's installed
+  skills directory for that project.
+
+Run it with the interpreter and pass the target repository explicitly:
+
+```bash
+python3 <resolved>/checkpoint.py <subcommand> [name] --repo <path-to-repo>
+```
+
+`--repo` defaults to the current directory; pass the repository root when the working
+directory differs. Exit codes: `0` ok, `1` git/runtime error, `2` usage error, `3`
+refused before any change (unsafe name, existing checkpoint, unborn/merge-in-progress,
+skip-worktree/assume-unchanged flags, submodule, an untracked embedded/nested repository,
+a configured content filter on any staged or untracked path, or an active
+`reference-transaction`/`post-index-change` hook that could mutate your state).
+
 ## Arguments
 
 Parse `$ARGUMENTS` for:
-- `<name>` — checkpoint name (e.g., "before-refactor", "auth-working", "v1-baseline")
+- `<name>` — checkpoint name (e.g., `before-refactor`, `auth-working`, `v1-baseline`)
 - `--verify <name>` — compare current state against a named checkpoint
-- `--list` — list all checkpoints in this session
-- `--diff <name>` — show file diff against a named checkpoint
+- `--list` — list all checkpoints
+- `--diff <name>` — show the file diff against a named checkpoint
 
 ## Modes
 
-### Create Checkpoint (default): `/checkpoint <name>`
+### Create checkpoint (default): `/checkpoint <name>`
 
-1. **Capture current state**:
-   - Run `git status` to identify all modified, added, and deleted files
-   - Run `git diff --stat` to summarize changes
-   - Run project tests (if quick — under 30 seconds) and record pass/fail counts
-   - Record current git HEAD commit hash
-
-2. **Create the checkpoint**:
-   - Create a git stash with a descriptive name: `git stash push -m "checkpoint: <name> [$(date +%Y-%m-%d_%H:%M)]"`
-   - Immediately pop the stash to restore working state: `git stash pop`
-   - This creates a recoverable snapshot without affecting the working tree
-
-3. **Also create a lightweight commit** on a temporary branch for easy diffing:
-   - `git stash push -m "checkpoint-temp"` (stash current changes)
-   - `git checkout -b checkpoint/<name>` from current HEAD
-   - `git stash pop` and `git add -A` and `git commit -m "checkpoint: <name>"`
-   - `git checkout -` (return to original branch)
-   - `git stash pop` (if anything was left — usually clean)
-   - Note: this creates checkpoint/<name> branch pointing at the snapshot
-
-4. **Report**:
+1. **Record context** (optional but useful): run project tests if they are quick (under
+   30 seconds) and note pass/fail counts to compare later.
+2. **Create the snapshot**:
+   ```bash
+   python3 <resolved>/checkpoint.py save <name> --repo <repo>
    ```
-   Checkpoint '<name>' created
-   - Branch: checkpoint/<name>
-   - Files changed: <count> (+<added> -<deleted> ~<modified>)
-   - Tests: <pass>/<total> passing
-   - Time: <timestamp>
+   The helper captures staged, unstaged, deleted and non-ignored untracked files into
+   `refs/checkpoint/<name>` and leaves your working state untouched. Ignored files are
+   excluded. If it exits `3`, report the printed reason verbatim and stop — it refused
+   before changing anything.
+3. **Report** the helper's output: ref, commit, parent, branch, and the change summary
+   versus HEAD. Mention how to recover (the helper prints the exact commands):
+   - new branch: `git switch -c <name>-restore refs/checkpoint/<name>`
+   - files only: `git restore --source=refs/checkpoint/<name> -- <path>`
+
+### Verify against checkpoint: `/checkpoint --verify <name>`
+
+1. Show what changed since the checkpoint:
+   ```bash
+   python3 <resolved>/checkpoint.py diff <name> --repo <repo>
    ```
+2. Re-run tests if they are quick and compare pass/fail counts against what you recorded
+   at checkpoint time.
+3. Report a verdict — BETTER | SAME | WORSE | MIXED — grounded in the diff and the test
+   delta, naming what improved or regressed.
 
-### Verify Against Checkpoint: `/checkpoint --verify <name>`
+### List checkpoints: `/checkpoint --list`
 
-1. **Compare current state against checkpoint**:
-   - `git diff checkpoint/<name>..HEAD` — commits since checkpoint
-   - `git diff checkpoint/<name>` — all changes (committed + uncommitted)
-   - Count files changed, lines added/removed
+```bash
+python3 <resolved>/checkpoint.py list --repo <repo>
+```
 
-2. **Run tests** and compare against checkpoint test results (if recorded)
+Lists each `refs/checkpoint/*` with its short commit, creation time and subject.
 
-3. **Report**:
-   ```
-   ## Checkpoint Verification: <name>
+### Diff against checkpoint: `/checkpoint --diff <name>`
 
-   ### File Changes Since Checkpoint
-   - Files modified: <count>
-   - Lines added: <count>
-   - Lines removed: <count>
+```bash
+python3 <resolved>/checkpoint.py diff <name> --repo <repo>
+```
 
-   ### Test Comparison
-   - At checkpoint: <pass>/<total> passing
-   - Now: <pass>/<total> passing
-   - Delta: +<new_passing> / -<new_failing>
-
-   ### Verdict
-   <BETTER | SAME | WORSE | MIXED>
-   <explanation of what improved or regressed>
-   ```
-
-### List Checkpoints: `/checkpoint --list`
-
-1. List all `checkpoint/*` branches with their creation dates:
-   ```
-   Checkpoints:
-   1. before-refactor (2026-03-20 14:30) — 5 files changed
-   2. auth-working (2026-03-20 15:45) — 12 files changed
-   ```
-
-### Diff Against Checkpoint: `/checkpoint --diff <name>`
-
-1. Show `git diff checkpoint/<name>` with full file diffs
-2. Summarize: files changed, lines added/removed, new files, deleted files
+Prints the stat summary and full patch between the checkpoint and the current working
+tree. Summarize files changed and lines added/removed.
 
 ## Cleanup
 
-- Checkpoint branches are local only — never pushed
-- Clean up with: `git branch -D checkpoint/<name>` (manual, not automatic)
-- Old checkpoints are harmless — lightweight git branches cost nothing
+- Checkpoint refs are local only — never pushed. The helper never pushes.
+- Remove one with `git update-ref -d refs/checkpoint/<name>`.
+- Old checkpoints are harmless lightweight refs.
 
 **Important notes:**
-- Checkpoints are local git branches — they survive across sessions
-- Never force-push or modify checkpoint branches after creation
-- If working tree has uncommitted changes, they're included in the checkpoint
-- If git operations fail (not in a repo, dirty state), report the error clearly
+- Checkpoints survive across sessions; they are refs, not branches, so they will not be
+  checked out by accident.
+- Recovery is explicit — the helper snapshots and inspects, it never restores for you.
+- If a save is refused (exit `3`), surface the exact reason; do not work around it by
+  running `git stash`, switching branches, or disabling hooks.

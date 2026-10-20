@@ -183,13 +183,42 @@ ctx="${bar} ${C_GRAY}${pct}% of ${max_k}k tokens"
 
 # ── Framework status ────────────────────────────────────────────────────────
 # Cheap, cached (60s) health of the claude-code-agents framework itself — NEVER a
-# live validation in the hot path. Version comes from ~/.claude/.framework-version;
-# the health glyph is DERIVED from the diagnostic stream the watchdog/healthcheck
-# already write (framework-health.jsonl) plus corruption alerts. Emits nothing if
-# the framework isn't installed here, so a plain Claude Code user sees no change.
-#   ✓ healthy   ⟳ self-healing in progress   ⚠ watchdog stalled / heal failed / recent corruption
+# live validation, Git, or network call in the hot path, only the bounded cache
+# and a tail of the diagnostic log. Version comes from ~/.claude/.framework-version;
+# the glyph is DERIVED only from the structured records the observe-only
+# watchdog/healthcheck already wrote to framework-health.jsonl, plus corruption
+# alerts. Emits nothing if the framework isn't installed here, so a plain Claude
+# Code user sees no change.
+#
+# Honest, fail-closed reporting (there is no repair to report):
+#   ✓  a RECENT, admitted validation_result from the watchdog's `validate.sh --quick
+#      --json` run — status healthy, complete true, exit_code 0, errors 0, with
+#      meaningful, internally consistent counts. Here "complete" means that QUICK
+#      installed-integrity scope finished (deployed hooks / env / shared-set / hook
+#      wiring under ~/.claude); --quick deliberately exits BEFORE the full-only source
+#      checks, so ✓ attests the completed watchdog quick installed-integrity scope
+#      ONLY — it does NOT certify the default full `validate.sh` repository validator,
+#      the project test suites, or CI.
+#   ⚠  a current drift / failed validation, a drift from the SessionStart check,
+#      or a recent corruption/backup alert
+#   ?  default — no admitted evidence yet (version-only), or evidence that is
+#      missing / malformed / stale / future / inconsistent
+# The LAST-APPENDED relevant record wins (physical JSONL order — the append-only
+# log's own write order, read whitespace-tolerantly). A self-reported timestamp only
+# QUALIFIES whether the selected record is admissible (fresh / not future); it never
+# reorders records, so an invalid/stale/future stamp on the latest record fails closed
+# to ? and never lets selection fall back to an earlier green. A scope-qualified
+# SessionStart healthcheck_result can downgrade or confirm but never certifies green
+# (only an admitted watchdog --quick validation_result can). Retired heal_* records are historical and ignored; an
+# unselected watchdog that simply never ran is not "stalled" (absence of evidence is ?,
+# not ⚠).
 fw_seg=""; fw_ver=""
-FW_CACHE="/tmp/statusline-fw-cache-${UID:-$(id -u 2>/dev/null || echo x)}"
+# Fingerprint the cache by $HOME so two homes sharing one UID (e.g. test sandboxes)
+# can never read each other's cached verdict — a /tmp-per-UID cache could leak a
+# green from one HOME into another. cksum is POSIX; fall back to a sanitized path.
+_fw_home_fp=$(printf '%s' "$HOME" | cksum 2>/dev/null | cut -d' ' -f1)
+[[ -z "$_fw_home_fp" ]] && _fw_home_fp=$(printf '%s' "$HOME" | tr -c 'A-Za-z0-9' '_')
+FW_CACHE="/tmp/statusline-fw-cache-${UID:-x}-${_fw_home_fp}"
 _fw_cache_stale() {
     [[ -f "$FW_CACHE" ]] || return 0
     local m; m=$(stat -f %m "$FW_CACHE" 2>/dev/null || stat -c %Y "$FW_CACHE" 2>/dev/null || echo 0)
@@ -197,68 +226,108 @@ _fw_cache_stale() {
 }
 # Parse an ISO-8601 Z (UTC) timestamp → epoch. macOS `date -j -f` IGNORES the trailing Z and
 # parses in LOCAL time, so `-u` is REQUIRED to read it as UTC — without it the age is off by the
-# local UTC offset (a UTC+1 machine inflates every age by 60 min → false ⚠). GNU `date -d` honors
-# the Z; `-u` is harmless there (epoch is timezone-absolute).
+# local UTC offset. GNU `date -d` honors the Z; `-u` is harmless there. Unparseable → 0, which the
+# caller treats as "no usable timestamp" (fail-closed), never as fresh.
 _iso_epoch() { date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s 2>/dev/null || date -u -d "$1" +%s 2>/dev/null || echo 0; }
 if _fw_cache_stale; then
     _v=$(grep -m1 '^version=' "$HOME/.claude/.framework-version" 2>/dev/null | cut -d= -f2)
-    # Distinguish "on the release" from "N commits past it". Without this, everyone on a team
-    # sees the same ⚙<version> no matter which commit they actually run — two people could be
-    # 18 commits apart and compare glyphs that agree. `ahead` is computed by install.sh at
-    # install time and read from the marker, so this stays out of the hot path (no git call).
+    # Distinguish "on the release" from "N commits past it". `ahead` is computed by
+    # install.sh at install time and read from the marker, so this stays out of the
+    # hot path (no git call).
     _ahead=$(grep -m1 '^ahead=' "$HOME/.claude/.framework-version" 2>/dev/null | cut -d= -f2)
     if [[ -n "$_v" && "${_ahead:-0}" =~ ^[0-9]+$ && "${_ahead:-0}" -gt 0 ]]; then
         _v="${_v}+${_ahead}"
     fi
     if [[ -n "$_v" ]]; then
-        _g="✓"; _c="$C_GREEN"; _now=$(date +%s)
+        # DEFAULT is unknown: a version marker alone is NOT evidence of health.
+        _g="?"; _c="$C_GRAY"; _now=$(date +%s)
+        _fresh=9000   # 2.5× the hourly watchdog cadence; older evidence is stale → ?
         _H="$HOME/.claude/analytics/framework-health.jsonl"
         _A="$HOME/.claude/analytics/watchdog-alerts.jsonl"
-        # Current-health anchor: epoch of the most recent CLEAN validate_quick (errors==0).
-        # Any heal_/alert event OLDER than this has been superseded by a passing validate → it is
-        # RESOLVED and must not latch the glyph. Without this, a fixed incident (e.g. a heal loop
-        # that later converged) held ⚠ for up to 24h even though the framework was healthy again.
-        _last_ok_ts=0
+
+        # --- Latest watchdog --quick validation_result (the only record that can certify ✓) ---
+        # Select the LAST such record by physical append order, matching the event
+        # whitespace-tolerantly (compact OR spaced JSON) so a later record is never
+        # invisible. grep -n carries the line index as "N:line"; _vr_idx is the index,
+        # _vr the content. A recognizable-but-malformed latest line stays the selected
+        # candidate (jq fails → unk below); we never scan back to an earlier green.
+        _vr_cls="none"; _vr_ts=0; _vr_idx=""
         if [[ -f "$_H" ]]; then
-            _vq=$(grep '"event":"validate_quick"' "$_H" 2>/dev/null | tail -1)
-            if [[ -n "$_vq" ]] && [[ "$(printf '%s' "$_vq" | jq -r '(.output|fromjson?|.errors) // 1' 2>/dev/null)" == "0" ]]; then
-                _last_ok_ts=$(_iso_epoch "$(printf '%s' "$_vq" | jq -r '.ts // empty' 2>/dev/null)")
-            fi
-        fi
-        if [[ -f "$_H" ]]; then
-            # freshness: the watchdog logs hourly; >150min of silence (≥2 missed cycles) = likely
-            # stalled. Threshold is 2.5× the 60-min cadence so normal jitter / one missed cycle
-            # never trips it; a genuinely dead watchdog still surfaces within ~2.5h. (A machine that
-            # was asleep >150min shows ⚠ until launchd fires the watchdog on wake — self-clears.)
-            _lts=$(tail -1 "$_H" | jq -r '.ts // empty' 2>/dev/null)
-            if [[ -n "$_lts" ]]; then _le=$(_iso_epoch "$_lts"); [[ "$_le" -gt 0 && $((_now-_le)) -gt 9000 ]] && { _g="⚠"; _c="$C_YELLOW"; }; fi
-            # heal state: most recent heal_* event — but only if a clean validate has NOT since
-            # superseded it (else a resolved heal loop latches ⟳/⚠ until it scrolls out of view).
-            _hln=$(tail -40 "$_H" | grep -E '"event":"heal_(triggered|succeeded|failed)"' | tail -1)
-            if [[ -n "$_hln" ]]; then
-                _hts=$(_iso_epoch "$(printf '%s' "$_hln" | jq -r '.ts // empty' 2>/dev/null)")
-                if [[ "$_hts" -gt "$_last_ok_ts" ]]; then
-                    case "$(printf '%s' "$_hln" | jq -r '.event' 2>/dev/null)" in
-                        heal_failed)    _g="⚠"; _c="$C_RED" ;;
-                        heal_triggered) _g="⟳"; _c="$C_YELLOW" ;;
-                    esac
+            _vr_hit=$(grep -n -E '"event"[[:space:]]*:[[:space:]]*"validation_result"' "$_H" 2>/dev/null | tail -1)
+            if [[ -n "$_vr_hit" ]]; then
+                _vr_idx=${_vr_hit%%:*}; _vr=${_vr_hit#*:}
+                _vr_cls=$(printf '%s' "$_vr" | jq -r '
+                    def _int($x): ($x|type)=="number" and $x>=0 and ($x|floor)==$x and $x<9007199254740992;
+                    if (.status=="healthy" and .complete==true and .exit_code==0
+                        and _int(.checks) and .checks>0 and _int(.errors) and .errors==0
+                        and _int(.warnings) and ((.errors+.warnings)<=.checks)) then "green"
+                    elif (.status=="drift" and .complete==true and _int(.errors) and .errors>0) then "drift"
+                    else "unk" end' 2>/dev/null)
+                [[ -z "$_vr_cls" ]] && _vr_cls="unk"
+                _vr_ts=$(_iso_epoch "$(printf '%s' "$_vr" | jq -r '.ts // empty' 2>/dev/null)")
+                # stale / future / unparseable timestamp → not usable evidence
+                if [[ "${_vr_ts:-0}" -le 0 || "$_vr_ts" -gt "$_now" || $((_now - _vr_ts)) -gt "$_fresh" ]]; then
+                    _vr_cls="unk"
                 fi
             fi
         fi
-        # a corruption alert within the last 24h trumps everything — EXCEPT a heal_failed that a
-        # newer clean validate has already resolved (heal_failed is transient/recoverable, not
-        # corruption; genuine git-corruption alerts still latch the full 24h regardless).
+
+        # --- Latest scope-qualified SessionStart healthcheck_result ---
+        # Same whitespace-tolerant, line-indexed selection as validation_result above.
+        _hc_cls="none"; _hc_ts=0; _hc_idx=""
+        if [[ -f "$_H" ]]; then
+            _hc_hit=$(grep -n -E '"event"[[:space:]]*:[[:space:]]*"healthcheck_result"' "$_H" 2>/dev/null | tail -1)
+            if [[ -n "$_hc_hit" ]]; then
+                _hc_idx=${_hc_hit%%:*}; _hc=${_hc_hit#*:}
+                case "$(printf '%s' "$_hc" | jq -r '.status // empty' 2>/dev/null)" in
+                    healthy) _hc_cls="clean" ;;
+                    drift)   _hc_cls="drift" ;;
+                    *)       _hc_cls="unk" ;;
+                esac
+                _hc_ts=$(_iso_epoch "$(printf '%s' "$_hc" | jq -r '.ts // empty' 2>/dev/null)")
+                if [[ "${_hc_ts:-0}" -le 0 || "$_hc_ts" -gt "$_now" || $((_now - _hc_ts)) -gt "$_fresh" ]]; then
+                    _hc_cls="unk"
+                fi
+            fi
+        fi
+
+        # --- Combine: the record appended LAST (higher line index) governs — NOT the
+        #     one with the larger self-reported timestamp. This is what stops a later
+        #     unknown/malformed record (epoch 0, or a same-second tie) from losing a
+        #     strict `>` and reverting to an earlier green. The timestamp checks above
+        #     already demoted any inadmissible selected record to unk, so a bad stamp
+        #     fails closed here. Only an admitted watchdog `--quick` validation_result can
+        #     go green; a scope (healthcheck) check can only downgrade or confirm an
+        #     already-admitted green. ---
+        if [[ -n "$_hc_idx" && ( -z "$_vr_idx" || "$_hc_idx" -gt "$_vr_idx" ) ]]; then
+            case "$_hc_cls" in
+                drift) _g="⚠"; _c="$C_RED" ;;
+                clean) if [[ "$_vr_cls" == "green" ]]; then _g="✓"; _c="$C_GREEN"; else _g="?"; _c="$C_GRAY"; fi ;;
+                *)     _g="?"; _c="$C_GRAY" ;;
+            esac
+        elif [[ -n "$_vr_idx" ]]; then
+            case "$_vr_cls" in
+                green) _g="✓"; _c="$C_GREEN" ;;
+                drift) _g="⚠"; _c="$C_RED" ;;
+                *)     _g="?"; _c="$C_GRAY" ;;
+            esac
+        fi
+
+        # --- A recent (within 24h) corruption/backup alert trumps to ⚠. Only the
+        #     alerts the current watchdog actually emits are honored (allowlist), so
+        #     a retired/legacy record in the log is ignored, never relabeled. ---
         if [[ -f "$_A" ]]; then
-            _ats=$(tail -1 "$_A" | jq -r '.ts // empty' 2>/dev/null)
-            if [[ -n "$_ats" ]]; then
-                _ae=$(_iso_epoch "$_ats")
-                if [[ "$_ae" -gt 0 && $((_now-_ae)) -lt 86400 ]]; then
-                    if [[ "$(tail -1 "$_A" | jq -r '.event // empty' 2>/dev/null)" == "heal_failed" ]]; then
-                        [[ "$_ae" -gt "$_last_ok_ts" ]] && { _g="⚠"; _c="$C_RED"; }
-                    else
-                        _g="⚠"; _c="$C_RED"
-                    fi
-                fi
+            _al=$(tail -1 "$_A" 2>/dev/null)
+            if [[ -n "$_al" ]]; then
+                case "$(printf '%s' "$_al" | jq -r '.event // empty' 2>/dev/null)" in
+                    git_fsck_error|bundle_failed|userconfig_snapshot_failed|memory_snapshot_failed)
+                        _ae=$(_iso_epoch "$(printf '%s' "$_al" | jq -r '.ts // empty' 2>/dev/null)")
+                        if [[ "${_ae:-0}" -gt 0 && "$_ae" -le "$_now" && $((_now - _ae)) -lt 86400 ]]; then
+                            _g="⚠"; _c="$C_RED"
+                        fi
+                        ;;
+                    *) : ;;
+                esac
             fi
         fi
         printf '%s\n%s\n' "$_v" "${_c}${_g}${C_RESET}" > "$FW_CACHE"

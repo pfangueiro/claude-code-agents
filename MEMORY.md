@@ -17,7 +17,7 @@ AGENTS.md and relevant source before relying on these notes.
   The command directory also contains a README, not a thirteenth workflow.
 - Codex builds 42 workflow skills plus 13 specialist guides (55 bundles), and 13
   native TOML definitions. Namespaced guides avoid collisions with built-ins.
-  52 are implicit; commit-pr, create-jira and new-feature stay explicit-only.
+  51 are implicit; commit-pr, create-jira, new-feature and ui-guidelines stay explicit-only.
 - An override in `codex/overrides/` shadows its canonical source. The commit-pr override
   once diverged from the corrected neutral command (review before commit); it was
   removed so one publication contract exports to both editions.
@@ -60,9 +60,11 @@ AGENTS.md and relevant source before relying on these notes.
   in `tests/delivery/` through a bridge, so CI runs new cases without a list edit. Native discovery is explicitly skipped without
   a CLI; do not call that an end-to-end pass. Claude checks remain independent:
   `./validate.sh` and `bash tests/gap/run.sh --prove --jobs 4`.
-- Test failure/destructive paths in disposable homes/projects; `validate.sh --heal`
-  repairs state and is not an acceptance gate. Real-machine validation requires the
-  user's requested scope and preservation of personal configuration.
+- Test failure/destructive paths in disposable homes/projects; `validate.sh` observes
+  only — `--heal` is retired (it performs no repair and exits nonzero), so it is never an
+  acceptance gate and repair stays an explicit foreground `install.sh --update`.
+  Real-machine validation requires the user's requested scope and preservation of
+  personal configuration.
 - Validate Python resources in a clean virtual environment populated only from declared
   dependencies. A passing system-Python run can hide missing dependencies; the first
   Linux Codex CI run caught an undeclared Requests import in the bundled health checker.

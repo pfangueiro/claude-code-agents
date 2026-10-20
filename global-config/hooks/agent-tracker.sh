@@ -31,7 +31,10 @@ if [[ "$EVENT_TYPE" == "stop" ]]; then
   fi
   status=$(echo "$input" | jq -r '.status // "completed"' 2>/dev/null)
 
-  jq -n \
+  # -c (compact): one JSON object per line. jq pretty-prints by default, which
+  # would split each event across many lines and break the one-object-per-line
+  # JSONL contract the collector parses line-by-line (it would drop every event).
+  jq -cn \
     --arg event "agent_stop" \
     --arg sid "$session_id" \
     --arg agent "$agent_type" \
@@ -42,7 +45,7 @@ if [[ "$EVENT_TYPE" == "stop" ]]; then
     '{event: $event, session_id: $sid, agent_type: $agent, description: $desc, duration_ms: $dur, status: $status, timestamp: $ts}' \
     >> "$EVENTS_FILE"
 else
-  jq -n \
+  jq -cn \
     --arg event "agent_start" \
     --arg sid "$session_id" \
     --arg agent "$agent_type" \

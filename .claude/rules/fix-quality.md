@@ -1,6 +1,6 @@
 # Fix Quality Rules
 
-These rules are always enforced. They cannot be overridden.
+These rules guide how to fix defects within your authorized scope — expected practice on every fix, not a tool-enforced mechanism. They sit within the instruction hierarchy, so explicit owner and project policy prevail where they genuinely conflict.
 
 ## Investigation Before Fixing
 

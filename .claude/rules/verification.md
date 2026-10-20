@@ -1,6 +1,6 @@
 # Verification Rules
 
-These rules are always enforced. They cannot be overridden.
+These rules guide verification within your authorized scope — expected practice after every change, not a tool-enforced gate. They sit within the instruction hierarchy, so explicit owner and project policy prevail where they genuinely conflict.
 
 ## After Every Implementation
 

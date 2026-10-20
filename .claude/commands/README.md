@@ -11,20 +11,30 @@ project configuration and authorization. [Codex behavior and limits](../../codex
 ## Available Commands
 
 ### `/new-feature` - Create Feature Branch
-Creates a new feature branch from the latest master branch.
+Creates a feature branch from the repository's own discovered base branch — a
+project-configured default, otherwise the remote's recorded default via `origin/HEAD`
+(`main`, `master`, or a custom default are all handled; it never assumes `master`).
+Uncommitted work is never stashed, reset, or moved implicitly. A ticket identifier is
+optional and is used only when the repository's branch convention calls for one.
 
 **Usage:**
 ```
-/new-feature PROJ-XXX description
+/new-feature [ticket] <description>
 ```
 
-**Example:**
+**Examples** (the leading ticket is optional — follow your repo's own convention):
 ```
+/new-feature add-export-functionality
 /new-feature PROJ-755 add-export-functionality
 ```
 
-### `/commit-pr` - Commit and Create PR
-Stages changes, commits, pushes, creates GitHub PR, and auto-updates JIRA ticket.
+### `/commit-pr` - Commit and Publish
+Commits the intended scope and publishes only the effects that are authorized. Commit,
+push and PR creation are authorized by invoking the command once the gates pass; issue
+updates, merge, release and branch deletion stay separate effects that need existing
+explicit authorization or project policy. Base branch, required checks, review, release
+and issue-tracker integration come from the project's own configuration — never a
+hardcoded default branch, version file or ticket prefix.
 
 **Usage:**
 ```
@@ -32,33 +42,39 @@ Stages changes, commits, pushes, creates GitHub PR, and auto-updates JIRA ticket
 ```
 
 **Features:**
-- Auto-extracts JIRA ticket from branch name
-- Creates GitHub PR with detailed summary
-- Auto-updates JIRA ticket with PR link
-- Transitions ticket to "Ready For Release"
+- Stages only the intended paths, writes a convention-following message, and records the candidate SHA (never skips hooks, amends or force-pushes unless asked)
+- Runs the project's required local checks and holds push/PR on a failed or missing check
+- Requires an independent verdict covering the exact candidate SHA; any new commit invalidates it
+- Confirms the pushed head equals the reviewed candidate and uses the environment's already-selected credentials; the PR body records the summary, validation run, reviewed SHA and material gaps
+- Updates an issue tracker, merges, releases or deletes branches only when the project configures it and the effect is authorized — reporting each effect as done, held (with gate), skipped (with reason) or failed
 
-### `/create-jira` - Create JIRA Issue
-Creates a new JIRA issue (Epic or Story/Task) and assigns it to you.
+### `/create-jira` - Create a Tracker Issue
+Creates an issue (epic, story, or task) in whatever issue tracker this environment
+actually exposes — an MCP tracker tool, a project-documented CLI/API, or a tracker named
+in the project instructions. The target project, issue types, parent conventions, and
+assignee come from that authorized configuration, never a hardcoded project key. If no
+connector is available, it hands back a ready-to-file draft and states plainly that no
+issue was created.
 
 **Usage:**
 ```
 /create-jira epic <Title Here>
-/create-jira story <EPIC-KEY> <Title Here>
-/create-jira task <EPIC-KEY> <Title Here>
+/create-jira story <parent> <Title Here>
+/create-jira task <parent> <Title Here>
 ```
 
-**Examples:**
+**Examples** (parent keys are illustrative — use your own tracker's keys):
 ```
 /create-jira epic Improve Dashboard Performance
 /create-jira story PROJ-753 Add filter functionality to alerts
 /create-jira task PROJ-905 Fix mobile responsiveness
 ```
 
-**Features:**
-- Auto-assigns to current git user
-- Creates Epic or Story/Task under Epic
-- Adds "claude-created" label
-- Returns clickable JIRA URL
+**Behavior:**
+- Discovers the tracker capability and uses read-only calls to confirm the project and supported types
+- Creates at most the single requested issue, and only when an authorized connector exists
+- Resolves assignee/labels from the tracker's configuration or project instructions (for example `git config user.email` only when the config calls for it)
+- With no connector, returns the drafted issue rather than presenting a fake one
 
 ### `/review-pr` - Review Pull Request
 Reviews a pull request for code quality, security (OWASP), testing, and documentation.
@@ -154,7 +170,10 @@ Runs formatter, linter, type checker, and tests as a comprehensive quality check
 - Reports PASS/FAIL for each check
 
 ### `/checkpoint` - Named Save Points
-Creates named checkpoints during complex work for easy comparison and rollback.
+Creates named checkpoints during complex work for comparison and explicit recovery. A
+checkpoint is a snapshot of the current working tree captured into a `refs/checkpoint/<name>`
+ref by a helper (shipped in the installed `verified-handoff` skill) using Git plumbing — it
+never runs `git stash`, switches branches, or touches your index or working tree.
 
 **Usage:**
 ```
@@ -165,10 +184,12 @@ Creates named checkpoints during complex work for easy comparison and rollback.
 ```
 
 **Features:**
-- Creates lightweight git branches as save points
-- Verify mode compares current state against a checkpoint
-- Shows file changes, test results, and overall verdict (BETTER/WORSE/SAME)
-- Checkpoints survive across sessions (git branches)
+- Snapshots staged, unstaged, deleted and non-ignored untracked files into a ref (not a branch); ignored files are excluded
+- Records the current working-tree content, so staging intent is not retained separately (a file staged as A but present as B in the tree is captured as B)
+- Verify/diff compares the current tree against a checkpoint and reports a verdict (BETTER/SAME/WORSE/MIXED)
+- Recovery is always explicit — the helper prints the exact `git switch`/`git restore` commands and never restores for you
+- Checkpoints survive across sessions as refs, so they are never checked out by accident
+- Refuses before any change (reporting the reason) on states it cannot snapshot honestly — e.g. an existing checkpoint, unborn HEAD or merge in progress, submodules or a nested untracked repo, skip-worktree/assume-unchanged flags, a configured content filter, or an active ref/index hook
 
 ### `/save-session` - Save Session State
 Saves structured session state to a global file with mandatory "What Did NOT Work" section.
@@ -234,15 +255,16 @@ Test commands by typing them in Claude Code's chat:
 ```
 
 ### Supporting Scripts
-Commands may use Node.js scripts in `/scripts/` directory:
-- `create-jira-issue.mjs` - JIRA issue creation
-- `update-jira-on-pr.ts` - JIRA ticket updates
+Command templates are self-contained Markdown instructions; the framework bundles no
+tracker or publication credential scripts. A command that touches an issue tracker or CI
+discovers the tool and its configuration at runtime (an MCP tool, a project-documented
+CLI/API, or the project instructions) and acts only when an authorized connector exists.
 
 ### Best Practices
 1. **Validate arguments** - Always check for required arguments
 2. **Fail fast** - Show clear error messages immediately
 3. **Be explicit** - Provide examples and usage patterns
-4. **Return JSON** - Scripts should return structured JSON
+4. **Discover, never hardcode** - Resolve base branch, tracker project and credentials from project configuration
 5. **Handle errors** - Graceful error handling with helpful messages
 
 ## Troubleshooting
@@ -252,15 +274,10 @@ Commands may use Node.js scripts in `/scripts/` directory:
 - Check YAML frontmatter is valid
 - File must have `.md` extension
 
-**Script errors:**
-- Check Node.js version compatibility (ESM modules required)
-- Verify database credentials in script
-- Check script has execute permissions: `chmod +x script.mjs`
-
-**JIRA errors:**
-- Verify git user.email matches your JIRA user
-- Check JIRA instance configuration
-- Ensure user has JIRA permissions
+**Issue-tracker / publication errors:**
+- Confirm the project actually exposes a tracker or CI connector (MCP tool, CLI/API, or project instructions) — with none available, `/create-jira` and `/commit-pr` hand back a draft/report rather than inventing a result
+- Check that the authenticated account and credentials the environment already selects have the needed permissions
+- Verify the project's configured base branch, project key and required checks resolve before relying on an automated update
 
 ## Contributing
 

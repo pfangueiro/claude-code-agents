@@ -1,5 +1,6 @@
 ---
 name: ui-guidelines
+disable-model-invocation: true
 description: Ant Design house style for one specific React/Next.js application — its design tokens, color palette, typography scale, 8px/12px/16px/24px spacing, animations, and copy-ready patterns for antd tables, forms in modals, selectable card grids, loading states, avatars, and status tags. Use when building or restyling a form, table, modal, card, list, or page layout in a codebase that already standardizes on Ant Design and the new component must match the existing design system. It is not a general UI or accessibility reference, does not apply to Tailwind, Material UI, Chakra, or plain-CSS projects, and carries no chart or data-visualization guidance — charts, graphs, dashboards, and palette choice for data viz are out of scope.
 ---
 
@@ -11,12 +12,12 @@ This skill provides UI/UX guidelines for building components in a React/Next.js 
 
 ## When to Use This Skill
 
-Trigger this skill when:
-- **Creating UI components**: forms, tables, modals, cards, lists
-- **Adding new features** that require UI elements
-- **Implementing loading states** or animations
-- **Styling components** to match the design system
-- **User asks to build/create/add** any visual component
+This skill is **explicitly invoked only** — the model does not reach for it on its own, because it encodes one specific application's Ant Design house style rather than general UI guidance. Use it only when you are deliberately building or restyling UI **in that Ant Design codebase** and have been asked to match its existing design system:
+- **Ant Design components**: forms, tables, modals, cards, lists in the app that standardizes on antd
+- **Matching the existing design system**: theme tokens, the spacing scale, typography, status tags
+- **Loading states and animations** consistent with the app's established patterns
+
+If the project does not already standardize on Ant Design, or the request is general UI/UX or accessibility work, do not use this skill — see Out of Scope below.
 
 ## Out of Scope — Stop and Do Something Else
 

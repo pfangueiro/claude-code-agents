@@ -23,20 +23,122 @@ NC='\033[0m'
 QUIET=""
 QUICK_MODE=false
 JSON_MODE=false
-HEAL_MODE=false
 for arg in "$@"; do
     case "$arg" in
         --quiet) QUIET="--quiet" ;;
         --quick) QUICK_MODE=true ;;
         --json)  JSON_MODE=true; QUIET="--quiet" ;;
-        --heal)  HEAL_MODE=true ;;
+        --heal)
+            # --heal is RETIRED. It used to run `install.sh --update` on drift and
+            # then exit 0 — laundering a failing validation into a success, and
+            # firing a broad background write from a command the owner ran to
+            # *observe* state. Repair is now an explicit, foreground owner action.
+            # Reject the flag BEFORE running any check or writing anything: never
+            # repair, never launder the exit code. (prefer-reject over compat-spell.)
+            echo "validate.sh: --heal is retired and performs no repair." >&2
+            echo "It no longer runs the installer or launders a failing validation into exit 0." >&2
+            echo "Run './install.sh --update' explicitly to reconcile, then re-run './validate.sh'." >&2
+            exit 2
+            ;;
+        *)
+            echo "validate.sh: unknown argument: $arg" >&2
+            echo "usage: ./validate.sh [--quick] [--json] [--quiet]" >&2
+            exit 2
+            ;;
     esac
 done
 
 ERRORS=0
 WARNINGS=0
 CHECKS=0
+# COMPLETE is additive observational metadata emitted in --json: true only when
+# the run finished its predeclared scope; false when an ambiguous selection marker
+# or a skipped prerequisite left a check undecidable. A complete:false summary is
+# reported by the watchdog as UNKNOWN (never healthy/drift), so a partial run can
+# never be laundered into a green verdict.
+COMPLETE=true
 JSON_EVENTS=()
+
+_note_incomplete() { COMPLETE=false; }
+
+# ---- Optional-component selection (read-only, from the install marker) ----
+# install.sh records analytics/watchdog/notifications = enabled|disabled in
+# ~/.claude/.framework-version. The marker is DATA — parsed line by line, never
+# eval'd or sourced. A field resolves to exactly one of enabled | disabled |
+# unknown (duplicate key / unrecognized value) | absent (no field, or no marker).
+# This mirrors the SessionStart hook's parser so the validator and the hook agree
+# on what "installed" means for an optional component (no separate registry).
+FW_VERSION_MARKER="$HOME/.claude/.framework-version"
+_marker_field() {
+    local name="$1" line
+    [ -f "$FW_VERSION_MARKER" ] || { echo absent; return 0; }
+    local -a vals=()
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            "${name}="*) vals+=("${line#"${name}="}") ;;
+        esac
+    done < "$FW_VERSION_MARKER"
+    case "${#vals[@]}" in
+        0) echo absent ;;
+        1) case "${vals[0]}" in enabled) echo enabled ;; disabled) echo disabled ;; *) echo unknown ;; esac ;;
+        *) echo unknown ;;   # duplicate keys are ambiguous, never coerced to a value
+    esac
+}
+
+# Installed expectation for an optional component, from its marker field:
+#   expect     -> must be deployed; a missing payload is a real FAIL
+#   skip       -> deliberately off (disabled) or unmanaged legacy (absent); its
+#                 absence is NOT drift. A payload that IS present is still
+#                 drift-checked by the caller, so legacy drift detection survives.
+#   incomplete -> ambiguous marker (unknown/duplicate): cannot certify, so the
+#                 caller marks the run incomplete (watchdog -> UNKNOWN), never
+#                 coercing the component to disabled to force a green.
+_component_expectation() {
+    case "$(_marker_field "$1")" in
+        enabled)  echo expect ;;
+        disabled) echo skip ;;
+        unknown)  echo incomplete ;;
+        *)        echo skip ;;   # absent
+    esac
+}
+
+# Optional hooks map to a component; every other (core) hook is always expected.
+_hook_expectation() {
+    case "$1" in
+        notify.sh)                       _component_expectation notifications ;;
+        agent-tracker.sh|session-end.sh) _component_expectation analytics ;;
+        *)                               echo expect ;;
+    esac
+}
+
+# ---- Selection completeness gate (central, run once) ----
+# An EXISTING installed scope — the SAME discriminator the structural settings check uses
+# (a version marker present, OR a deployed ~/.claude/agents) — must record an explicit
+# enabled|disabled for EVERY optional component. A field that is absent, duplicated,
+# invalid or unreadable (and an entirely absent marker while the core agents are still
+# installed) leaves the selection UNDECIDABLE: the run cannot certify what "installed"
+# means for that component, so the summary is marked incomplete (watchdog -> UNKNOWN) and
+# an honest diagnostic is emitted. This is checked here ONCE, centrally — NOT only when a
+# missing optional payload happens to call _component_expectation — so a missing selection
+# cannot slip through as a green just because every optional payload is absent-by-default
+# or because the payloads happen to be present. The marker is only READ: a missing/unknown
+# value is never invented into enabled/disabled and the owner's marker is never rewritten.
+# A truly empty CI/clone HOME (no marker AND no deployed agents) is a source-only validation
+# with no selection to resolve, and stays complete.
+_selection_completeness_gate() {
+    [ -f "$HOME/.claude/.framework-version" ] || [ -d "$HOME/.claude/agents" ] || return 0
+    local comp state
+    for comp in analytics notifications watchdog; do
+        state=$(_marker_field "$comp")
+        case "$state" in
+            enabled|disabled) : ;;
+            *)
+                _note_incomplete
+                warn "Selection undecidable: optional component '$comp' is not recorded as enabled|disabled in ~/.claude/.framework-version ($state) — cannot certify installed scope; run ./install.sh --update to record it"
+                ;;
+        esac
+    done
+}
 
 _json_push() {
     # $1 level (pass/fail/warn), $2 message
@@ -80,7 +182,8 @@ run_structural_checks() {
     # Existence guard: a full DELETE of settings.json (vs an emptied {} wipe) must
     # be an ERROR, not a silent skip — every hook/statusLine/env check below is
     # gated on the file existing, so without this a deleted file yields 0 errors
-    # and the watchdog never heals it. Fail -> errors>0 -> watchdog runs install --update.
+    # and nothing surfaces it. Fail -> errors>0 so the owner runs an explicit,
+    # foreground ./install.sh --update (there is no background self-heal).
     #
     # ...but ONLY on a machine where the framework is actually installed. This check asserts a
     # property of the INSTALLED ENVIRONMENT, not of the repository, and on a CI runner or a fresh
@@ -92,15 +195,18 @@ run_structural_checks() {
     # and the degrade-to-warn behaviour now matches the sibling ~/.claude/hooks and analytics checks.
     if [ -f "$HOME/.claude/.framework-version" ] || [ -d "$HOME/.claude/agents" ]; then
         if [ ! -f "$HOME/.claude/settings.json" ]; then
-            fail "Structural: ~/.claude/settings.json is MISSING (deleted) — self-heal must recreate it"
+            fail "Structural: ~/.claude/settings.json is MISSING (deleted) — run ./install.sh --update to recreate it"
         elif command -v jq >/dev/null 2>&1 && ! jq -e 'type == "object"' "$HOME/.claude/settings.json" >/dev/null 2>&1; then
             # Present but NOT a usable JSON object — unparseable (a truncated external write) OR
             # valid JSON of the wrong shape (array / scalar). Every jq-based reconcile no-ops on it,
-            # so the damage blocks the whole settings reconcile and cannot self-heal unless detected
-            # here. Without this the file passes the existence check, validate could exit 0, and the
-            # watchdog would never heal it. Fail -> errors>0 -> watchdog runs install --update, which
-            # backs up the bad file and reseeds from template.
-            fail "Structural: ~/.claude/settings.json is not a valid JSON object (corrupt) — run ./install.sh --update to reseed"
+            # so the damage blocks the whole settings reconcile and is invisible unless detected
+            # here. Without this the file passes the existence check and validate could exit 0.
+            # Fail -> errors>0 so the owner runs an explicit, foreground ./install.sh --update.
+            # The installer does NOT reseed a corrupt settings.json from the template: it leaves
+            # the live malformed file untouched, writes a forensic copy (settings.json.corrupt-<ts>)
+            # for recovery, and reports it as a manual-repair item, so an owner edit or snapshot is
+            # never clobbered by a reseed (install.sh sync_hooks, "not a valid JSON object" path).
+            fail "Structural: ~/.claude/settings.json is not a valid JSON object (corrupt) — run ./install.sh --update (it preserves the file + writes a forensic copy; fix it by hand or restore from a snapshot)"
         else
             pass "Structural: ~/.claude/settings.json exists and is a valid JSON object"
         fi
@@ -138,6 +244,65 @@ run_structural_checks() {
             else
                 fail "Structural: deployed ~/.claude/statusline.sh differs from source (re-run install.sh)"
             fi
+        fi
+    fi
+
+    # Regression guard (HEAL RETIRED): validate.sh OBSERVES — it must never invoke the
+    # installer and exit 0 over unresolved errors. The old --heal ran the installer
+    # (with its output redirected away) from emit_and_exit and the terminal summary and
+    # then exit 0, laundering a failing validation into a pass. A real invocation carries
+    # an output redirection or a background `&`; guidance strings do not, and the grep
+    # pattern writes install\.sh so it can never match itself.
+    # Gap-tested by mutation (tests/gap/): reintroduce the install.sh --update call -> FAIL; absent -> PASS.
+    if [ -f "validate.sh" ]; then
+        if grep -qE 'install\.sh --update[[:space:]]*(>|2>|&)' validate.sh; then
+            fail "Heal-retired: validate.sh invokes install.sh --update (the --heal exit-0 laundering path must stay removed)"
+        else
+            pass "Heal-retired: validate.sh invokes no installer (--heal is rejected, not honored)"
+        fi
+    fi
+
+    # Regression guard (NO BACKGROUND WRITERS): the observe-only background scripts must
+    # never invoke the installer, legacy migration, or the analytics collector. Full-line
+    # comments are stripped first, then only an actual INVOCATION fails the gate:
+    #   installer  -> install.sh with --update/--migrate-legacy
+    #   collector  -> the collector RUN (an interpreter or path-qualified collector.py,
+    #                 or the claude-obs wrapper that runs it). A bare `collector.py` in a
+    #                 drift-check filename list (`for asset in collector.py server.py ...`)
+    #                 is a comparison, NOT a run, and must NOT trip this guard.
+    # Gap-tested by mutation (tests/gap/): reintroduce an install.sh --update call OR a
+    # collector run in the watchdog -> FAIL; the drift-check filename list alone -> PASS.
+    _bgw=""
+    for _bgs in global-config/daemon/claude-framework-watchdog.sh global-config/hooks/session-start-healthcheck.sh; do
+        [ -f "$_bgs" ] || continue
+        _bgcode=$(grep -vE '^[[:space:]]*#' "$_bgs" 2>/dev/null)
+        _bgb=$(basename "$_bgs" .sh)
+        printf '%s\n' "$_bgcode" | grep -qE 'install\.sh[[:space:]]+--(update|migrate-legacy)' && _bgw="$_bgw ${_bgb}:installer"
+        printf '%s\n' "$_bgcode" | grep -qE 'python[0-9.]*[[:space:]][^#]*collector\.py|/collector\.py|claude-obs' && _bgw="$_bgw ${_bgb}:collector"
+    done
+    if [ -n "$_bgw" ]; then
+        fail "No-background-writers: observe-only background script invokes installer/migration/collector —$_bgw"
+    else
+        pass "No-background-writers: watchdog + SessionStart invoke no installer/migration/collector"
+    fi
+
+    # Regression guard (HONEST STATUSLINE HEALTH): the status bar must derive the health
+    # glyph from an ADMITTED validation_result (gated on complete=true) and must not revive
+    # the retired self-healing display (heal_* events, the in-progress glyph, or
+    # "self-healing in progress"). A marker-only green and a fabricated self-heal are
+    # exactly the false signals this retirement removed. (Guard reads statusline.sh, not
+    # this file, so its own pattern literals never self-trigger.)
+    # Gap-tested by mutation (tests/gap/): reintroduce the legacy heal display in statusline.sh -> FAIL.
+    if [ -f "global-config/statusline.sh" ]; then
+        _sl_bad=""
+        grep -qE 'heal_triggered|heal_succeeded|self-healing in progress|⟳' global-config/statusline.sh \
+            && _sl_bad="$_sl_bad legacy-heal-display"
+        grep -q 'validation_result' global-config/statusline.sh || _sl_bad="$_sl_bad no-validation_result-evidence"
+        grep -q 'complete' global-config/statusline.sh || _sl_bad="$_sl_bad no-complete-gate"
+        if [ -n "$_sl_bad" ]; then
+            fail "Statusline honest-health:$_sl_bad (marker-only green or legacy self-healing not retired)"
+        else
+            pass "Statusline honest-health: glyph requires an admitted validation_result(complete), no legacy self-healing display"
         fi
     fi
 
@@ -265,13 +430,65 @@ run_structural_checks() {
        && command -v jq &>/dev/null; then
         local drift_count=0
         local tmpl_events
+        local _ev_comp
         tmpl_events=$(jq -r '.hooks | keys[]' global-config/settings.json.template 2>/dev/null)
         for event in $tmpl_events; do
-            local tmpl_cfg usr_cfg
-            tmpl_cfg=$(jq -Sc ".hooks[\"$event\"]" global-config/settings.json.template 2>/dev/null)
-            usr_cfg=$(jq -Sc ".hooks[\"$event\"] // null" "$HOME/.claude/settings.json" 2>/dev/null)
-            if [ "$tmpl_cfg" != "$usr_cfg" ]; then
-                fail "Structural: hook event '$event' in ~/.claude/settings.json drifted from template"
+            # Optional-component events (analytics / notifications) are wired only
+            # when selected; on a fresh default-off install their absence from user
+            # settings is NOT drift. Only effective framework bindings are compared.
+            case "$event" in
+                SubagentStart|SubagentStop|SessionEnd) _ev_comp=analytics ;;
+                Notification)                          _ev_comp=notifications ;;
+                *)                                     _ev_comp=core ;;
+            esac
+            if [ "$_ev_comp" != core ]; then
+                case "$(_component_expectation "$_ev_comp")" in
+                    skip)       continue ;;
+                    incomplete) _note_incomplete; continue ;;
+                esac
+            fi
+            # Compare only the FRAMEWORK-OWNED hook entries for this event, after
+            # projecting out any FOREIGN entries the owner added — either a foreign
+            # sub-entry inside the canonical framework group, or an entirely separate
+            # foreign group. The installer reconcile (install.sh sync_hooks) deliberately
+            # PRESERVES such foreign bindings verbatim with their matcher/metadata, so
+            # comparing the WHOLE event array (as this once did) false-flags a healthy,
+            # installer-blessed customization as drift.
+            #
+            # A framework-owned entry is recognised ONLY by an exact command match against
+            # a template command for THIS event — the tilde form the template ships, or its
+            # $HOME-expanded twin that the installer's _fwpaths_json also recognises — never
+            # by a basename look-alike, so a foreign "/elsewhere/file-protection.sh" is
+            # treated as foreign and never adopted to stand in for the real binding.
+            #
+            # Each group is flattened to {matcher, entry} tuples carrying the FULL hook entry
+            # object (NOT a trimmed matcher/command/type/timeout projection) — the SAME
+            # representation the SessionStart healthcheck uses (Check 3). Comparing the sorted
+            # MULTISETS of owned tuples still detects a MISSING, MODIFIED (any metadata or
+            # matcher), or DUPLICATED framework entry even when mixed with foreign ones, and —
+            # because the entry is kept whole rather than defaulting a missing `type` back to
+            # "command" or dropping extra owned metadata — a dropped or added owned field is
+            # now caught too, so the validator and the healthcheck can never disagree on what
+            # the canonical owned shape is (a validator-healthy / healthcheck-drift split).
+            local owned_cmds tmpl_owned usr_owned
+            owned_cmds=$(jq -c --arg e "$event" --arg home "$HOME" '
+                [ .hooks[$e][]?.hooks[]?.command ]
+                | ( . + ( map(if startswith("~") then ($home + .[1:]) else empty end) ) )
+                | unique' global-config/settings.json.template 2>/dev/null)
+            [ -n "$owned_cmds" ] || owned_cmds='[]'
+            tmpl_owned=$(jq -Sc --arg e "$event" '
+                [ .hooks[$e][]? as $g | ($g.matcher // "") as $m | $g.hooks[]?
+                  | {matcher:$m, entry:.} ]
+                | sort' global-config/settings.json.template 2>/dev/null)
+            usr_owned=$(jq -Sc --arg e "$event" --arg home "$HOME" --argjson owned "$owned_cmds" '
+                [ .hooks[$e][]? as $g | ($g.matcher // "") as $m | $g.hooks[]?
+                  | select(.command as $c | any($owned[]; . == $c))
+                  | {matcher:$m, entry:(if (.command | startswith($home))
+                                        then (.command = ("~" + (.command[($home | length):])))
+                                        else . end)} ]
+                | sort' "$HOME/.claude/settings.json" 2>/dev/null)
+            if [ "$tmpl_owned" != "$usr_owned" ]; then
+                fail "Structural: framework-owned hook entries for event '$event' in ~/.claude/settings.json are missing/modified/duplicated (foreign customizations are preserved and ignored)"
                 drift_count=$((drift_count + 1))
             fi
         done
@@ -284,16 +501,33 @@ run_structural_checks() {
         # (e.g. `Stop -> session-end.sh` after session-end.sh moved to SessionEnd — it then
         # double-fires every turn, over-logging). The forward check above only asserts
         # template events match; it cannot see an EXTRA event. sync_hooks must prune these.
-        local stale_events=0 uevent ucmd ubase
+        local stale_events=0 uevent ucmd ucmd_norm ubase
         for uevent in $(jq -r '.hooks | keys[]' "$HOME/.claude/settings.json" 2>/dev/null); do
             printf '%s\n' "$tmpl_events" | grep -qx "$uevent" && continue
             while IFS= read -r ucmd; do
                 [ -n "$ucmd" ] || continue
-                ubase=$(basename "$ucmd")
-                if [ -f "global-config/hooks/$ubase" ]; then
-                    fail "Structural: stale hook event '$uevent' still runs framework hook $ubase (template dropped it; sync_hooks event-prune failed)"
-                    stale_events=$((stale_events + 1))
-                fi
+                # Framework ownership is EXACT PATH, never a basename look-alike: the installer
+                # deploys framework hooks ONLY at ~/.claude/hooks/<shipped> (the tilde form the
+                # template ships, or its $HOME-expanded twin _fwpaths_json also recognises) and
+                # PRESERVES a foreign binding at any other path verbatim. Normalise a $HOME-
+                # expanded command back to the tilde form, then recognise ownership only when the
+                # WHOLE command is exactly ~/.claude/hooks/<file> for a file that actually ships.
+                # A foreign "/owner/custom/session-end.sh" (or "~/custom/session-end.sh") shares
+                # the basename but is NOT owned, so it must not be mis-flagged as stale drift.
+                ucmd_norm="$ucmd"
+                case "$ucmd_norm" in
+                    "$HOME"/*) ucmd_norm="~${ucmd_norm#"$HOME"}" ;;
+                esac
+                case "$ucmd_norm" in
+                    "~/.claude/hooks/"*)
+                        ubase="${ucmd_norm#"~/.claude/hooks/"}"
+                        case "$ubase" in */*) continue ;; esac   # only a direct child is a shipped hook
+                        if [ -f "global-config/hooks/$ubase" ]; then
+                            fail "Structural: stale hook event '$uevent' still runs framework hook $ubase (template dropped it; sync_hooks event-prune failed)"
+                            stale_events=$((stale_events + 1))
+                        fi
+                        ;;
+                esac
             done < <(jq -r ".hooks[\"$uevent\"][]?.hooks[]?.command // empty" "$HOME/.claude/settings.json" 2>/dev/null)
         done
         [ "$stale_events" -eq 0 ] && pass "Structural: no stale framework hook event bindings (no double-bind)"
@@ -321,37 +555,56 @@ run_structural_checks() {
         fi
     fi
 
-    # Warn if watchdog daemon not loaded (macOS only).
-    # Use `launchctl print` (direct query by domain/label) instead of `launchctl list | grep`:
-    # the grep-parse variant can race a concurrent install_watchdog invocation and false-positive.
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-        if launchctl print "gui/$(id -u)/com.claude-code-agents.framework-watchdog" >/dev/null 2>&1; then
-            pass "Structural: claude-framework-watchdog daemon loaded"
-        else
-            warn "Structural: claude-framework-watchdog daemon not loaded"
-        fi
-    fi
-
-    # Warn if no snapshot newer than 48h
-    local snap_dir="$HOME/.claude/snapshots"
-    if [ -d "$snap_dir" ]; then
-        local fresh=0
-        if command -v find >/dev/null 2>&1; then
-            if find "$snap_dir" -maxdepth 1 -type f \( -name '*.bundle' -o -name '*.tgz' \) -mtime -2 2>/dev/null | grep -q .; then
-                fresh=1
+    # Watchdog RUNTIME expectations — the launchd daemon being loaded and a snapshot
+    # newer than 48h — only hold when the watchdog component was SELECTED at install.
+    # On a core default-off install the daemon is intentionally never loaded and no
+    # snapshots are written, so probing launchctl or warning about a missing snapshot
+    # would mis-report a healthy minimal install as degraded. Disabled/absent -> skip
+    # silently (no probe, no warning); an ambiguous marker stays incomplete (never
+    # coerced into a backup requirement); only a selected watchdog retains these advisory
+    # checks and their positive controls. This gates RUNTIME state only — the watchdog
+    # SOURCE assets are still validated unconditionally by the repository checks.
+    case "$(_component_expectation watchdog)" in
+        skip)       : ;;
+        incomplete) _note_incomplete ;;
+        *)
+            # Warn if watchdog daemon not loaded (macOS only).
+            # Use `launchctl print` (direct query by domain/label) instead of `launchctl list | grep`:
+            # the grep-parse variant can race a concurrent install_watchdog invocation and false-positive.
+            if [[ "$(uname -s)" == "Darwin" ]]; then
+                if launchctl print "gui/$(id -u)/com.claude-code-agents.framework-watchdog" >/dev/null 2>&1; then
+                    pass "Structural: claude-framework-watchdog daemon loaded"
+                else
+                    warn "Structural: claude-framework-watchdog daemon not loaded"
+                fi
             fi
-        fi
-        if [ "$fresh" -eq 1 ]; then
-            pass "Structural: snapshot newer than 48h exists"
-        else
-            warn "Structural: no snapshot newer than 48h in $snap_dir"
-        fi
-    else
-        warn "Structural: no $snap_dir directory"
-    fi
+
+            # Warn if no snapshot newer than 48h
+            local snap_dir="$HOME/.claude/snapshots"
+            if [ -d "$snap_dir" ]; then
+                local fresh=0
+                if command -v find >/dev/null 2>&1; then
+                    if find "$snap_dir" -maxdepth 1 -type f \( -name '*.bundle' -o -name '*.tgz' \) -mtime -2 2>/dev/null | grep -q .; then
+                        fresh=1
+                    fi
+                fi
+                if [ "$fresh" -eq 1 ]; then
+                    pass "Structural: snapshot newer than 48h exists"
+                else
+                    warn "Structural: no snapshot newer than 48h in $snap_dir"
+                fi
+            else
+                warn "Structural: no $snap_dir directory"
+            fi
+            ;;
+    esac
 }
 
 run_structural_checks
+
+# Selection completeness is scope-level, not payload-level: resolve it ONCE here so both
+# --quick (the watchdog path) and full runs agree, before either branch emits its summary.
+_selection_completeness_gate
 
 # ============================================================================
 # Quick Mode: integrity of ~/.claude/ only (hooks + analytics + env keys)
@@ -365,8 +618,8 @@ emit_and_exit() {
             joined+="${sep}${ev}"
             sep=","
         done
-        printf '{"checks":%d,"errors":%d,"warnings":%d,"events":[%s]}\n' \
-            "$CHECKS" "$ERRORS" "$WARNINGS" "$joined"
+        printf '{"checks":%d,"errors":%d,"warnings":%d,"complete":%s,"events":[%s]}\n' \
+            "$CHECKS" "$ERRORS" "$WARNINGS" "$COMPLETE" "$joined"
     else
         echo ""
         echo -e "${BOLD}=== Validation Summary ===${NC}"
@@ -376,16 +629,9 @@ emit_and_exit() {
         echo -e "  Errors: ${RED}$ERRORS${NC}"
     fi
 
-    # Heal mode: on drift, invoke install.sh --update (never exit non-zero)
-    if $HEAL_MODE && [ "$ERRORS" -gt 0 ]; then
-        if [ -x "./install.sh" ]; then
-            ./install.sh --update >/dev/null 2>&1 || \
-                $JSON_MODE || echo -e "${YELLOW}heal: install.sh --update failed (logged)${NC}"
-        fi
-        # Heal mode never exits non-zero
-        exit 0
-    fi
-
+    # No heal/repair path: validate.sh only OBSERVES. A failing validation exits
+    # non-zero so the caller (or the owner) decides what to do; it never runs the
+    # installer or launders the result into exit 0.
     if [ "$ERRORS" -eq 0 ]; then
         exit 0
     else
@@ -400,6 +646,14 @@ emit_and_exit() {
 # fail — the daily job has simply not run yet.
 check_memory_freshness() {
     local prefix="$1"   # "" for full, "Quick: " for quick
+    # Daily snapshots are the watchdog's job. With the watchdog not selected, no
+    # snapshot is expected — a missing/stale snapshot is NOT a warning, so a fresh
+    # minimal install is never reported as permanently degraded. An ambiguous
+    # marker leaves it undecidable -> incomplete (never a green from skipped work).
+    case "$(_component_expectation watchdog)" in
+        skip)       return 0 ;;
+        incomplete) _note_incomplete; return 0 ;;
+    esac
     local mem_dir_count=0 d
     if [ -d "$HOME/.claude/projects" ]; then
         for d in "$HOME"/.claude/projects/*/memory; do
@@ -433,30 +687,50 @@ if $QUICK_MODE; then
             [ -f "$src" ] || continue
             name=$(basename "$src")
             dst="$HOOKS_DST/$name"
-            if [ ! -f "$dst" ]; then
-                fail "Quick: hook not deployed: $name"
-            elif diff -q "$src" "$dst" >/dev/null 2>&1; then
-                pass "Quick: hook synced: $name"
+            if [ -f "$dst" ]; then
+                # A deployed hook is always drift-checked, so legacy extras stay covered.
+                if diff -q "$src" "$dst" >/dev/null 2>&1; then
+                    pass "Quick: hook synced: $name"
+                else
+                    fail "Quick: hook drift: $name"
+                fi
             else
-                fail "Quick: hook drift: $name"
+                # Not deployed: a core hook must be present; an optional hook is a
+                # real failure only when its component is selected. Disabled/absent
+                # selection is a deliberate default-off (not drift); ambiguous is incomplete.
+                case "$(_hook_expectation "$name")" in
+                    expect)     fail "Quick: hook not deployed: $name" ;;
+                    incomplete) warn "Quick: optional hook $name selection ambiguous (marker unknown) — cannot verify"; _note_incomplete ;;
+                    *)          : ;;
+                esac
             fi
         done
     else
         warn "Quick: hooks directories missing"
     fi
 
-    # Analytics check
+    # Analytics check — gated on the analytics selection. A fresh default-off
+    # install legitimately ships NO collector payload (the ~/.claude/analytics
+    # directory may still exist for the health-diagnostic logs), so a missing
+    # payload is drift ONLY when analytics is selected. A payload that IS present
+    # is always drift-checked, preserving legacy drift detection.
+    _an_exp=$(_component_expectation analytics)
     for f in collector.py server.py dashboard.html schema.sql; do
         src="observability/$f"
         dst="$HOME/.claude/analytics/$f"
-        if [ -f "$src" ] && [ -f "$dst" ]; then
+        [ -f "$src" ] || continue
+        if [ -f "$dst" ]; then
             if diff -q "$src" "$dst" >/dev/null 2>&1; then
                 pass "Quick: analytics synced: $f"
             else
                 fail "Quick: analytics drift: $f"
             fi
-        elif [ -f "$src" ]; then
-            fail "Quick: analytics not deployed: $f"
+        else
+            case "$_an_exp" in
+                expect)     fail "Quick: analytics not deployed: $f (analytics selected)" ;;
+                incomplete) _note_incomplete ;;
+                *)          : ;;
+            esac
         fi
     done
 
@@ -466,6 +740,20 @@ if $QUICK_MODE; then
     if [ -f "$SETTINGS_DST" ] && [ -f "$TEMPLATE_SRC" ] && command -v jq &>/dev/null; then
         while IFS= read -r k; do
             [ -z "$k" ] && continue
+            if [ "$k" = "CLAUDE_CODE_EFFORT_LEVEL" ]; then
+                # NOT required to be present. install.sh's add-only env reconcile
+                # deliberately preserves a DELETED effort key as an owner/native-default
+                # preference — it is never re-seeded onto an existing settings object
+                # (install.sh, "NOT add-only-seeded onto an existing settings" path) — and
+                # the SessionStart healthcheck accepts the absence. Requiring it here would
+                # flag that installer-blessed state as drift. Report it when present (its
+                # value is still validated below); never fail on its absence. Every other
+                # template env key remains required.
+                if jq -e --arg k "$k" '.env[$k]' "$SETTINGS_DST" >/dev/null 2>&1; then
+                    pass "Quick: env key present: $k"
+                fi
+                continue
+            fi
             if jq -e --arg k "$k" '.env[$k]' "$SETTINGS_DST" >/dev/null 2>&1; then
                 pass "Quick: env key present: $k"
             else
@@ -473,14 +761,15 @@ if $QUICK_MODE; then
             fi
         done < <(jq -r '.env | keys[]' "$TEMPLATE_SRC" 2>/dev/null)
 
-        # Value check: CLAUDE_CODE_EFFORT_LEVEL must be a valid PERSISTENT tier.
-        # max/ultracode are session-only (/effort ...) and invalid as env values —
-        # silently ineffective if set here, so catch them rather than just presence.
+        # Value check: CLAUDE_CODE_EFFORT_LEVEL must be an env value the current
+        # host accepts. Per the model-config docs that is low|medium|high|xhigh
+        # plus max|auto. The validator reports an unrecognized value; it never
+        # forces a particular tier or rewrites the owner's setting.
         eff=$(jq -r '.env.CLAUDE_CODE_EFFORT_LEVEL // empty' "$SETTINGS_DST" 2>/dev/null)
         if [ -n "$eff" ]; then
             case "$eff" in
-                low|medium|high|xhigh) pass "Quick: CLAUDE_CODE_EFFORT_LEVEL valid ($eff)" ;;
-                *) fail "Quick: CLAUDE_CODE_EFFORT_LEVEL invalid ('$eff') — persistent tiers are low|medium|high|xhigh (max/ultracode are session-only)" ;;
+                low|medium|high|xhigh|max|auto) pass "Quick: CLAUDE_CODE_EFFORT_LEVEL valid ($eff)" ;;
+                *) fail "Quick: CLAUDE_CODE_EFFORT_LEVEL invalid ('$eff') — accepted env values are low|medium|high|xhigh|max|auto" ;;
             esac
         fi
     fi
@@ -1925,7 +2214,13 @@ if [ -d "$HOME/.claude/hooks" ]; then
                 fail "Hook drift: $hook (deployed differs from source)"
             fi
         elif [ -f "$src" ] && [ ! -f "$dst" ]; then
-            fail "Hook not deployed: $hook"
+            # A core hook must be deployed; an optional hook missing is fine unless
+            # its component is selected. Ambiguous selection -> incomplete.
+            case "$(_hook_expectation "$hook")" in
+                expect)     fail "Hook not deployed: $hook" ;;
+                incomplete) warn "Optional hook $hook selection ambiguous (marker unknown) — cannot verify"; _note_incomplete ;;
+                *)          : ;;
+            esac
         fi
     done
 else
@@ -1939,6 +2234,10 @@ fi
 section "Checking Analytics Sync"
 
 if [ -d "$HOME/.claude/analytics" ]; then
+    # The analytics directory can exist purely for health-diagnostic logs, so a
+    # missing collector payload is drift ONLY when analytics is selected. A present
+    # payload is always drift-checked, so legacy drift detection is preserved.
+    _an_exp_full=$(_component_expectation analytics)
     for f in collector.py server.py dashboard.html schema.sql; do
         src="observability/$f"
         dst="$HOME/.claude/analytics/$f"
@@ -1949,7 +2248,11 @@ if [ -d "$HOME/.claude/analytics" ]; then
                 fail "Analytics drift: $f (deployed differs from source)"
             fi
         elif [ -f "$src" ] && [ ! -f "$dst" ]; then
-            fail "Analytics not deployed: $f"
+            case "$_an_exp_full" in
+                expect)     fail "Analytics not deployed: $f (analytics selected)" ;;
+                incomplete) _note_incomplete ;;
+                *)          : ;;
+            esac
         fi
     done
 else
@@ -2028,16 +2331,6 @@ echo "  Checks: $CHECKS"
 echo -e "  Passed: ${GREEN}$((CHECKS - ERRORS - WARNINGS))${NC}"
 echo -e "  Warnings: ${YELLOW}$WARNINGS${NC}"
 echo -e "  Errors: ${RED}$ERRORS${NC}"
-
-if $HEAL_MODE && [ "$ERRORS" -gt 0 ]; then
-    echo -e "\n${YELLOW}${BOLD}Heal mode: running install.sh --update...${NC}"
-    if [ -x "./install.sh" ]; then
-        ./install.sh --update >/dev/null 2>&1 || \
-            echo -e "${YELLOW}heal: install.sh --update failed (logged)${NC}"
-    fi
-    # Heal mode never exits non-zero
-    exit 0
-fi
 
 if [ $ERRORS -eq 0 ]; then
     echo -e "\n${GREEN}${BOLD}All validations passed!${NC}"

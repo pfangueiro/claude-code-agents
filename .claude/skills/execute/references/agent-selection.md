@@ -83,7 +83,7 @@ Is the task a simple, directed action?
 ### test-automation (subagent_type: test-automation)
 **Use for:** Unit tests, integration tests, E2E tests, test coverage analysis
 **Model:** Sonnet
-**When:** After implementation tasks complete — tests depend on code being written
+**When:** For a bug fix, FIRST — author the failing regression test that reproduces the defect (RED) before the fix lands, then add coverage once it is green. For new-feature coverage, after the implementation it exercises. Either way, the independent Phase-5 acceptance check stays separate from this authoring.
 
 ### code-quality (subagent_type: code-quality)
 **Use for:** Code review, refactoring suggestions, code smell detection, best practices
@@ -181,7 +181,7 @@ the agent — the agent is the reviewer.
 
 ### Must Be Sequential
 - Read → Edit on the same file (read first, then edit)
-- Code implementation → Test writing (tests depend on code)
+- Code implementation → additional coverage tests (new-feature coverage depends on the code it exercises; a bug-fix regression test is the exception — author it RED before the fix)
 - Schema migration → Code that uses new schema
 - Build → Deploy
 - Any task with explicit `blockedBy` dependencies
