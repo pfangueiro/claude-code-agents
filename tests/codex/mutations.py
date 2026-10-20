@@ -38,7 +38,7 @@ def main():
         ('symlink root ancestors', acceptance, 'f', acceptance.FrameworkAcceptance, 'test_symlink_root_parent_and_file_rejected',
          'if any(parent.is_symlink() for parent in (root, *root.parents)):', 'if False:'),
         ('rollback', acceptance, 'f', acceptance.FrameworkAcceptance, 'test_io_failure_rolls_back_files_and_manifest',
-         "for path, data in reversed(list(locals().get('originals', {}).items())):", 'for path, data in []:'),
+         'for path in reversed(applied):', 'for path in []:'),
         ('direct credential patch', acceptance, 'hook', acceptance.HookAcceptance, 'test_patch_sensitive_add_update_delete_move_and_multiple_files',
          'if sensitive(path) or sensitive(resolved):', 'if False:'),
         ('metadata privacy', acceptance, 'hook', acceptance.HookAcceptance, 'test_logging_excludes_tool_arguments_and_unsupported_costs',
