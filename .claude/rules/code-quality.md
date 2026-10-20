@@ -1,6 +1,7 @@
 # Code Quality Rules
 
-These rules are always enforced to maintain code quality standards.
+These rules guide code quality within your authorized scope — expected practice to apply
+to every change, not a guaranteed enforcement mechanism or a tool sandbox.
 
 ## Read Before Modify
 
@@ -8,6 +9,25 @@ These rules are always enforced to maintain code quality standards.
 - Use Grep to search for patterns instead of assuming where code lives
 - Use LSP findReferences before renaming or refactoring to understand the blast radius
 - Maintain a high read:edit ratio — more reading means fewer mistakes
+
+## Right-Sized Change & Reuse
+
+- Make the smallest COMPLETE change the requirement needs — including the callers, tests,
+  fixtures, exports, config and docs it touches. Minimal is never permission to drop
+  required behavior.
+- Before writing new code, look for an existing project helper, component or pattern that
+  fits; failing that, prefer platform/standard-library facilities, then an already-installed
+  dependency, then the new code the requirement actually needs. Existing house conventions win.
+- A reuse recommendation must name the existing implementation and explain why it fits. This
+  is not a mandate to replace a working dependency, force a one-liner, or pull in a large
+  library to save a few lines.
+- Do not add speculative wrappers, configuration, dependencies or design patterns without a
+  current demonstrated need. Interfaces, abstractions and security boundaries the design
+  actually requires are valid.
+- Never trade correctness, validation, security, data-loss or error handling, accessibility,
+  required tests, exact-SHA receipts or independent review for a smaller diff. Between
+  alternatives that all meet the requirement, prefer the simpler one; do not weaken project
+  or owner policies.
 
 ## Dead Code
 
@@ -18,7 +38,7 @@ These rules are always enforced to maintain code quality standards.
 ## Function Design
 
 - Single responsibility: each function does one thing
-- Keep functions short and focused (aim for < 40 lines)
+- Split a function when it carries unrelated jobs, or when demonstrated coupling makes it hard to read or test — never merely to hit a line quota; length alone is a smell to investigate, not a trigger
 - Use early returns over deeply nested conditionals
 - Prefer `const` by default; use `let` only when mutation is needed
 

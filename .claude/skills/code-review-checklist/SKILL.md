@@ -48,6 +48,8 @@ This skill provides a systematic approach to code reviews, ensuring consistent q
 - [ ] No tight coupling between components
 - [ ] Abstractions are at the right level
 - [ ] Code is modular and reusable
+- [ ] Reuses an existing helper, component or pattern before new code; platform/standard library or an installed dependency before a new one
+- [ ] Change is right-sized — the smallest complete change for the requirement, with its callers, tests and docs, and no required behavior dropped to shrink the diff
 - [ ] No circular dependencies
 
 **Red Flags:**
@@ -56,6 +58,7 @@ This skill provides a systematic approach to code reviews, ensuring consistent q
 - Deep nesting (>3 levels)
 - Duplicate code (DRY violation)
 - Overly clever code (premature optimization)
+- Speculative generality (wrappers, config, patterns or dependencies with no current need)
 
 ### 3. Readability & Maintainability
 
@@ -263,6 +266,7 @@ console.log('Error');
    - Prioritize functionality and security
    - Don't bike-shed over style (use linters)
    - Consider technical debt trade-offs
+   - Ground each finding in a concrete consequence and the caller or line it affects; don't raise speculative complexity or cite metrics you didn't measure
 
 ### Giving Feedback
 
