@@ -29,6 +29,13 @@ AGENTS.md and relevant source before relying on these notes.
   states only from receipts; no watcher, daemon, auto-merge or hook trust exists.
 - Native custom routing is host-dependent. Guide discovery is verified; guide prose
   does not enforce a native sandbox. Models and approval policy are inherited.
+- Code-quality guidance is right-sized and reuse-first: the `code-quality` rule, the
+  `code-quality` agent and the `code-review-checklist` skill ask for the smallest complete
+  change, reuse before new code (project helper → platform/stdlib → installed dependency),
+  and responsibility/coupling-based splitting instead of line-count triggers (the former
+  `>20`/`< 40` line rules are gone). Findings cite concrete consequences, not invented
+  metrics; the rule opening reads as instruction guidance, not guaranteed enforcement. The
+  Codex edition inherits it through the generated `rules.md`.
 
 ## Safety and verification
 

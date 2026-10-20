@@ -513,6 +513,8 @@ Seven rule files in `~/.claude/rules/` are automatically loaded by Claude Code i
 - **anti-anchoring.md** — Name the obvious pick + a non-obvious alternative + a trap on open-ended judgment calls; escalate consequential open decisions to `/diverge`
 - **delivery.md** — Route implementation outcomes through `/delivery` with a default role pair that owner or project instructions override; report states only from receipts
 
+These quality rules — and the matching `code-quality` agent and `code-review-checklist` skill — ask for right-sized, reuse-first changes: make the smallest complete change a requirement needs (its callers, tests and docs included), reach for an existing project helper, then the platform or an already-installed dependency, before writing new code, and split or extract on evidence of divergent responsibility rather than a line count. The same guidance is built into the Codex edition's generated `rules.md`, so both editions review by one standard. The reuse-first framing is adapted in our own words from the [Ponytail](https://github.com/DietrichGebert/ponytail/tree/09c434ab73ca43761c5d8b0c5d341926c2fba710) project.
+
 ---
 
 ## Hooks

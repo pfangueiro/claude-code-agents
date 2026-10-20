@@ -115,6 +115,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has since retired, and leaves a non-colliding personal file of a different name in place — it
   does not track provenance. The hooks directory is the broader exception, pruned to exactly the
   current source set as above (README, INSTALL).
+- Code-quality guidance now asks for right-sized, reuse-first changes, consistently across
+  the shared `code-quality` rule, the `code-quality` agent and the `code-review-checklist`
+  skill (and the Codex edition's generated `rules.md`): make the smallest *complete* change
+  — callers, tests and docs included — without dropping required behavior; prefer an existing
+  project helper, then the platform or an already-installed dependency, before new code,
+  naming what is reused; and split or extract on evidence of divergent responsibility or
+  coupling, not a line count (the agent's `>20 lines` flag and the rule's `< 40 lines` aim are
+  retired). Review findings must cite a concrete consequence and caller, not speculative
+  complexity or unmeasured metrics; correctness, security, required tests and independent
+  review are never traded for a smaller diff. The rule's opening now reads as instruction
+  guidance within scope, not guaranteed enforcement or a sandbox. README credits the Ponytail
+  project as inspiration. Documentation only; no inventory or version change.
 
 ### Fixed
 
