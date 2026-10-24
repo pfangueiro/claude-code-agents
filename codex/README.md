@@ -1,7 +1,7 @@
 # Codex edition
 
-The Claude runtime scripts are preserved; documentation and its instruction template
-now describe both integrations. This adapter builds **42 Codex workflow skills**
+This adapter is separate from the Claude installer and runtime scripts, and it never
+invokes or modifies them. It builds **42 Codex workflow skills**
 (30 skills and 12 executable command templates) and **13 native custom agents** from
 the repository, with handwritten replacements for platform-dependent behavior.
 Each native specialist also has a role-guide skill fallback, giving **55 total skill
@@ -229,12 +229,13 @@ and managed instructions in an isolated home; otherwise that check is explicitly
 CI runs the suite in a fresh virtual environment populated only from requirements.txt,
 so undeclared resource dependencies cannot be hidden by the runner's installed packages.
 
-Official references checked for this adaptation:
-
 The 2026-10-12 laptop deployment and read-only cross-project/CLI tests are recorded in the
 archived [GLOBAL-VALIDATION.md](../docs/archive/codex-2026-10-12/GLOBAL-VALIDATION.md) (a historical
 snapshot, not a current check). Maintenance rules are in `../AGENTS.md` and architecture notes in
-`../MEMORY.md`.
+`../MEMORY.md`. When upgrading alongside the Claude installers, follow
+[Upgrading an existing installation](../INSTALL.md#upgrading-an-existing-installation).
+
+Official references checked for this adaptation:
 
 - [Skill discovery and invocation](https://learn.chatgpt.com/docs/build-skills)
 - [Native custom agents](https://learn.chatgpt.com/docs/agent-configuration/subagents)

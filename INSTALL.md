@@ -91,7 +91,7 @@ The **core** install includes: agents, skills, commands, rules, core hooks, stat
 | `./install.sh` | Install core components user-global to `~/.claude` |
 | `./install.sh [--with-analytics] [--with-watchdog] [--with-notifications]` | Add opt-in components (dashboard + `claude-obs` alias; macOS watchdog; notify hook). Default-off; may accompany any mode or stand alone; omitting a flag on an existing install preserves that component. |
 | `./install.sh --dry-run` | Print every path **this selection** would touch. Makes no changes. |
-| `./install.sh --update` | Non-interactive foreground reconcile of an existing install (the explicit repair path). Replaces framework-owned files so drift heals; preserves your own content. |
+| `./install.sh --update` | Non-interactive foreground reconcile of an existing install (the explicit repair path). Replaces every framework-named file (including a personal file at a shipped name) and drifted framework settings keys. Preserves non-colliding personal files. Follow [Upgrading an existing installation](#upgrading-an-existing-installation). |
 | `./install.sh --upgrade` | One-command migration from the old per-project layout: reconcile `~/.claude`, then confirm + tear down old per-project copies (snapshot-first) and self-verify. Run from inside your checkout. See [Upgrading from the old per-project framework](#upgrading-from-the-old-per-project-framework) below. |
 | `./install.sh --migrate-legacy` | Marker-gated teardown-only mode, run explicitly (the observe-only watchdog does **not** run it). |
 | `./install.sh --uninstall` | Remove the framework's own components. See [Uninstallation](#uninstallation). |
@@ -128,7 +128,7 @@ Most of it lands under `~/.claude/` and is loaded by Claude Code in every projec
 | `agents/`, `commands/`, `rules/`, `lib/` | The framework's `.md` / `.json` files | Each framework-owned file is **replaced** so drift heals. Framework files deleted from source are pruned. |
 | `skills/` | 30 skill directories | Each framework skill directory is `rm -rf`'d and re-copied, so files deleted *inside* a skill heal too. |
 | `hooks/` | 6 core `.sh` hooks (made executable) always, plus analytics/notify hooks when their flag is set; 2 reference `.json` configs | Framework hooks replaced. **Foreign hook files are preserved** (no broad prune); a retired framework hook is removed explicitly by name. `settings.json` bindings are reconciled by exact framework command path, so foreign bindings are kept. |
-| `output-styles/concise.md` | Code-first output style | Written on a **bare install only** — `--update` does not reconcile it. |
+| `output-styles/concise.md` | Code-first output style | Replaced on drift by a bare install, `--update` and `--upgrade` (`sync_output_styles`). Removed by `--uninstall`. |
 | `statusline.sh` | Status bar script | Replaced **only when it differs from source** (byte-compare); skipped when identical. |
 | `analytics/` | `collector.py`, `server.py`, `dashboard.html`, `schema.sql` | **Only with `--with-analytics`.** A customized copy is preserved, not overwritten. |
 | `daemon/` | `claude-framework-watchdog.sh` | **Only with `--with-watchdog`.** Skipped entirely on non-macOS. |
@@ -211,7 +211,7 @@ are listed in the [README](./README.md#mcp-integration).
 ### Prerequisites
 
 `git` and `curl` are required. `jq` and `npx` are optional — `jq` is what reconciles
-`settings.json`, so without it the hook/permission/statusline healing is skipped; `npx` is only used
+`settings.json`, so without it the hook/permission/statusline reconcile is skipped; `npx` is only used
 by the MCP setup commands you run yourself.
 
 ## The background daemon (opt-in — `--with-watchdog`, macOS)
@@ -274,18 +274,123 @@ installer on your schedule — it is not background self-heal):
 17 * * * * cd /path/to/claude-code-agents && ./install.sh --update >/dev/null 2>&1
 ```
 
-## Update & migrate other machines
+## Upgrading an existing installation
 
-Updating is **explicit**: pull the source, then run the installer. The SessionStart check and the opt-in watchdog only **report** drift to `framework-health.jsonl` — neither forks the installer or reconciles on its own, and there is deliberately **no auto-pull**.
+Updating is **explicit**. Nothing pulls, installs or repairs in the background: the SessionStart check and the opt-in watchdog only **report** drift to `framework-health.jsonl`. For the observers, settings-sync-wipe recovery and snapshot restore commands, see **[SELF-HEALING.md](./SELF-HEALING.md)**.
 
-Full operational runbook — watchdog cadence, settings-sync-wipe recovery, and snapshot restore commands: **[SELF-HEALING.md](./SELF-HEALING.md)**.
+The three installers own files differently, and that is why the order below matters:
+
+| Installer | Owns | A same-name file it did not write |
+|---|---|---|
+| `scripts/install-delivery.py` (only if you use it) | `skills/{delivery,repo-context,verified-handoff}`, `rules/delivery.md` and `commands/commit-pr.md`, by SHA-256 in `.sdlc-delivery/manifest.json` | Refused before any write |
+| `./install.sh --update` | Every basename the framework ships or has retired, plus the framework keys of `settings.json` | **Replaced**, with no backup |
+| `./install-codex.sh --user` | Its outputs under `~/.agents/skills` and `~/.codex`, by hash in `~/.codex/framework/manifest.json` | Refused before any write |
+
+The delivery installer and the broad update both copy the five delivery paths. If the delivery installer runs first, it records the new bytes, the broad update then writes the same bytes, and the manifest stays clean. If the broad update runs first and writes bytes that differ from the ones the manifest records, the delivery installer refuses (see [Recovering from an ownership conflict](#recovering-from-an-ownership-conflict)). If the bytes are the same, the manifest stays clean.
+
+### 1. Preview from a clean checkout
 
 ```bash
-cd claude-code-agents && git pull --ff-only    # 1. get the new source
-./install.sh --update                          # 2. reconcile ~/.claude explicitly
+cd claude-code-agents
+git status --short                                   # expect no output: the installers read this checkout
+grep '^sha=' ~/.claude/.framework-version; git rev-parse --short HEAD
+./validate.sh --quick                                # before pulling, while HEAD equals the installed sha
+git pull --ff-only
+./install.sh --dry-run                               # add the same --with-* flags you will pass to --update
+diff <(jq -S .permissions ~/.claude/settings.json) <(jq -S .permissions global-config/settings.json.template)
 ```
 
-`--update` re-copies the framework's shared set to `~/.claude` (replacing framework files so drift heals) while preserving your own `~/.claude/CLAUDE.md`, your non-colliding personal files, and settings (a personal file sharing a shipped or retired framework basename is the exception — see [framework-scoped](#it-is-framework-scoped--your-own-content-is-preserved) above).
+Run `./validate.sh --quick` before pulling, while the checkout still matches the installed `sha=`. Each `shared-set drift` line names an installed file that differs from the shipped one. That is a local customization, and the broad update will overwrite it. Move that work to a non-colliding name or to project instructions first. If HEAD does not match the installed `sha=`, those lines can be version differences rather than customizations.
+
+Before applying anything, confirm that the revision you pulled was reviewed and that its CI passed.
+
+If the permissions diff is not empty, `--update` will replace your `.permissions` block with the template's. Decide which to keep: either move the entries you want into `~/.claude/settings.local.json` (higher precedence, never reconciled) or accept the template. `.attribution`, `.statusLine` and framework hook bindings are also replaced on drift. Foreign hook bindings and other keys are kept, and `.env` is add-only.
+
+### 2. Take a verified private backup
+
+The broad installer takes no backup. Keep this one outside the repository and never commit or share it: `~/.claude` holds your session transcripts and `~/.codex` holds your credentials.
+
+```bash
+umask 077; BK="$(mktemp -d)"
+tar -C "$HOME" -czf "$BK/claude.tgz" .claude \
+  && tar -tzf "$BK/claude.tgz" > "$BK/claude.list" \
+  && grep -qx '\.claude/settings\.json' "$BK/claude.list" \
+  && echo "claude backup verified: $BK"
+# If Codex is installed too:
+tar -C "$HOME" -czf "$BK/codex.tgz" .codex .agents/skills \
+  && tar -tzf "$BK/codex.tgz" > "$BK/codex.list" \
+  && grep -qx '\.codex/framework/manifest\.json' "$BK/codex.list" \
+  && echo "codex backup verified"
+```
+
+A `verified` line prints only if the archive was created, its complete listing succeeded, and that listing contains the required member. This proves the archive is readable and holds that member. It does not prove that every archived file matches its source. If no line prints, rerun the backup before you continue.
+
+To roll back, run `tar -xzf "$BK/claude.tgz" -C "$HOME"`. This restores the archived files but does not delete files added since the backup.
+
+### 3. Select the profile explicitly
+
+`./install.sh` always writes `$HOME/.claude` and has no profile option. `scripts/install-delivery.py` defaults to `CLAUDE_CONFIG_DIR` when that is set. Pass `--claude-home` so that both installers target the same profile:
+
+```bash
+CLAUDE_HOME="$HOME/.claude"
+echo "CLAUDE_CONFIG_DIR=${CLAUDE_CONFIG_DIR:-unset}"     # any other value is a different profile: decide deliberately
+test -f "$CLAUDE_HOME/.sdlc-delivery/manifest.json" && echo "delivery manifest present"
+```
+
+### 4. Update the delivery manifest first (only if it exists)
+
+```bash
+python3 scripts/install-delivery.py --claude-home "$CLAUDE_HOME" --dry-run
+python3 scripts/install-delivery.py --claude-home "$CLAUDE_HOME"
+```
+
+If there is no manifest, skip this step: the broad update installs the same files by basename. You can adopt them later with `--baseline <full SHA>`, but only if their bytes match that commit exactly.
+
+### 5. Run the broad update second
+
+```bash
+./install.sh --update     # add --with-analytics / --with-watchdog / --with-notifications only to select that component now
+```
+
+Omitting an optional flag keeps an existing optional component as it is. Passing a flag installs or refreshes that component.
+
+### 6. Update Codex separately
+
+```bash
+source .venv/bin/activate     # the Python environment used for the Codex install
+./install-codex.sh --user --dry-run
+./install-codex.sh --user
+```
+
+### 7. Check, then start fresh sessions
+
+```bash
+python3 scripts/install-delivery.py --claude-home "$CLAUDE_HOME" --check   # only if the delivery manifest exists
+./validate.sh --quick
+./install-codex.sh --user --check
+python3 scripts/framework-status.py --claude-home "$CLAUDE_HOME"
+```
+
+These checks are read-only. Investigate any nonzero exit before trusting the install. Then start new Claude Code and Codex sessions so the updated instructions, skills and hooks load. If the Codex hook definitions changed, review and trust them again in native `/hooks`.
+
+### Recovering from an ownership conflict
+
+A refusal writes nothing. Never delete or edit `.sdlc-delivery/manifest.json` or the Codex ownership metadata, and never bypass the refusal. First, prove what the conflicting bytes are. `<rel>` is the path in the message, relative to the Claude home:
+
+```bash
+rel='commands/commit-pr.md'     # example
+: "${BK:?set BK to the backup directory from step 2}"
+P="$(mktemp "$BK/shipped.XXXXXX")" \
+  && git show "HEAD:.claude/$rel" > "$P" \
+  && cmp -s "$P" "$CLAUDE_HOME/$rel" \
+  && echo "identical to this commit's shipped bytes" \
+  || echo "not proven identical: $rel"
+```
+
+- **`locally modified managed file`, and the bytes match HEAD** (usually because the broad update ran first): move the file into the backup with `mkdir -p "$BK/conflicts/$(dirname "$rel")" && mv "$CLAUDE_HOME/$rel" "$BK/conflicts/$rel"`, then rerun step 4. The delivery installer recreates a missing managed file. It reports one path per run, so repeat for each path.
+- **`foreign file not owned by the delivery manifest`, and the bytes match HEAD**: adopt it with the proven baseline, `--baseline "$(git rev-parse HEAD)"`. Adoption accepts only bytes identical to that commit's shipped bytes, and `--uninstall` later restores them.
+- **The bytes match neither**: this is your customization. Keep the copy in `$BK`, move the change to a non-colliding name or to project instructions, then handle the path as described above.
+- **Codex `foreign or locally modified file`**: compare the file with your backup and keep any customization in `$BK`. Moving the file aside lets `./install-codex.sh --user` recreate the missing owned file. For an `AGENTS.md` block conflict, move your personal text outside the managed markers and restore the block to the text that was installed. Do not remove the markers.
 
 **Optional — migrate old per-project `.claude/` copies.** If you previously deployed the framework into individual projects, create an opt-in marker that points the explicit migration commands at those projects:
 
@@ -333,7 +438,7 @@ What the installer actually guarantees — and, just as importantly, what it doe
 - **Verified after install.** The bare install checks that `agents/`, `skills/`, `commands/`,
   `rules/`, `hooks/` and `settings.json` are present, and reports warnings if not.
 
-**It does not take a backup of your existing install.** Framework-owned files are replaced in
+**It does not take a backup of your existing install.** Take the [verified private backup](#2-take-a-verified-private-backup) before upgrading. Framework-owned files are replaced in
 place — that is how drift heals. Your own content is preserved because it is never touched, not
 because it is copied somewhere first. The recovery path for the framework's own state is the
 watchdog's daily snapshots under `~/.claude/snapshots/` (macOS, only when installed with
@@ -369,7 +474,7 @@ Open any project with Claude Code and use natural language:
 "Deploy this to production"
 ```
 
-Agents auto-activate based on your words — no commands needed.
+The model selects agents and skills by judgment from their descriptions, and activation is not guaranteed. Name a specialist or workflow explicitly when you need a specific one.
 
 ## What the observability dashboard reads
 
@@ -466,7 +571,7 @@ or agents you wrote yourself.
 | `~/.claude/snapshots/` | Your recovery path — delete it yourself once you're sure |
 | `~/.claude/analytics/*.jsonl`, `claude-obs.db` | Your usage data; delete if you want it gone |
 | The `claude-obs` alias in `~/.zshrc` / `~/.bashrc` | Editing your shell rc during removal is riskier than leaving three inert lines |
-| `~/.claude/output-styles/concise.md` | Not currently in the removal enumeration — delete it by hand if you want it gone |
+| An empty `~/.claude/output-styles/` directory | `--uninstall` removes the style file, but this directory is not in the empty-directory cleanup list |
 
 To also clear the telemetry, snapshots and the shell alias:
 
@@ -511,7 +616,7 @@ blocks, and unload the daemon as shown above.
 
 - **Repository**: github.com/pfangueiro/claude-code-agents
 - **Issues**: Report problems in GitHub Issues
-- **Updates**: Run `./install.sh --update` to get the latest version
+- **Updates**: pull the source, then follow [Upgrading an existing installation](#upgrading-an-existing-installation)
 
 ---
 

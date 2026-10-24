@@ -23,9 +23,9 @@ Skills are different from the agents in `.claude/agents/`:
 | **Agents** | **Skills** |
 |------------|------------|
 | Specialized executors for SDLC/SSDLC tasks | Modular knowledge packages |
-| Auto-activate based on keywords | Loaded when relevant to task |
+| Selected or delegated by model judgment from their descriptions, or named explicitly | Loaded when the model judges them relevant, or invoked explicitly |
 | Perform specific workflows (testing, deployment, security) | Provide specialized knowledge, tools, and resources |
-| Examples: test-automation, security-auditor | Examples: pdf-editor, frontend-builder, brand-guidelines |
+| Examples: test-automation, security-auditor | Examples: git-workflow, deployment-runbook, delivery |
 
 **Think of it this way:**
 - **Agents** = Specialized workers who execute tasks
@@ -115,16 +115,16 @@ Skills and agents work together:
 Agents can leverage skills for specialized knowledge:
 
 ```
-Example: The frontend-specialist agent can use a brand-guidelines
-skill to ensure UI components match company branding.
+Example: the code-quality agent applies the code-review-checklist
+skill when reviewing a change.
 ```
 
 ### Skills Enhance Agents
 Skills provide domain-specific tools that agents can utilize:
 
 ```
-Example: The documentation-maintainer agent can use a pdf-editor
-skill to manipulate PDF documentation.
+Example: the devops-automation agent follows the deployment-runbook
+skill and its health-check scripts.
 ```
 
 ### Progressive Disclosure
@@ -134,9 +134,9 @@ Skills use a three-level loading system to manage context:
 2. **SKILL.md body** (when skill triggers): <5k words
 3. **Bundled resources** (as needed): Scripts, references, assets
 
-## Examples from the Wild
+## Example Layouts (Not Shipped)
 
-Here are real-world skill examples from the Anthropic skills repository:
+Generic layouts for skills you might write yourself. None of these ships with this framework:
 
 ### PDF Editor Skill
 ```

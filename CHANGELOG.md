@@ -57,7 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Delivery workflow integration: the portable `delivery`, `repo-context` and
   `verified-handoff` skills and the `delivery` rule ship in both editions. Source inventory
   is 30 skills, 12 command templates and 13 specialists; Codex builds 42 workflows plus
-  13 specialist guides (55 bundles, 52 implicit, 3 explicit-only). Workflows are
+  13 specialist guides (55 bundles; at introduction 52 implicit, 3 explicit-only; current
+  51 implicit, 4 explicit-only after `ui-guidelines` became explicit-only, see Changed). Workflows are
   procedures plus receipts, not enforced gates; no watcher, daemon, auto-merge or hook
   trust is added.
 - `verified-handoff/references/agent-evaluation.md`: opt-in documentation for comparing
@@ -90,6 +91,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Documentation and obsolete-comment cleanup on input `3d501c8`. No executable logic, test,
+  inventory, model, permission, hook-trust or version change.
+  - Root `AGENTS.md`, `CLAUDE.md`, `MEMORY.md`, `CONTRIBUTING.md` and `README.md` now state
+    the shared evidence-based quality contract: concrete evidence-classed findings, reviews
+    naming the exact base and head SHA, PASS/FAIL/INCOMPLETE for the declared scope, unknown
+    is not zero, and task-specific acceptance. They state that implement/review/merge/deploy/
+    release are separately authorized, and they link the canonical procedures instead of
+    repeating them. `AGENTS.md` and `CLAUDE.md` add that a check receipt records the exact
+    checked input SHA rather than a base (none for a source-only receipt). They also state
+    the default maintenance roles: Codex coordinates and independently verifies, and an
+    actual Claude execution implements. Existing explicit owner or project overrides still
+    apply, with no extra confirmation step.
+  - `CLAUDE.md` describes host tools as discovered at runtime and presents its Quick Start
+    as a model-selected example rather than a fixed pipeline.
+  - `INSTALL.md` gains *Upgrading an existing installation*: clean-checkout preview, a
+    verified private backup, explicit profile selection, the delivery manifest updated first,
+    the broad `./install.sh --update` second (optional flags only when deliberately
+    selected), Codex separately, read-only checks and fresh sessions. It also covers recovery
+    from ownership conflicts by proving bytes against `HEAD`, never by deleting manifests or
+    bypassing refusals. The backup and byte-proof commands require each producer (`tar`
+    creation, the complete `tar` listing, `git show`) to succeed before checking, keep
+    intermediate output in private files under the backup directory, and report readable
+    required-member validation, not source equivalence. The ownership table places Codex
+    outputs under `~/.agents/skills` and `~/.codex` with the manifest at
+    `~/.codex/framework/manifest.json`. Step 1 asks to confirm the pulled revision was
+    reviewed and its CI passed.
+  - README, `MEMORY.md` and `INSTALL.md` no longer say a broad update necessarily invalidates the delivery
+    manifest: identical committed bytes keep it clean, and different bytes make the delivery
+    installer refuse. README gains a *Quality, review and evaluation* entry point.
+  - Keyword-auto-activation claims are removed from `EXTENSIBILITY.md`,
+    `SKILLS-QUICKSTART.md`, `.claude/skills/README.md` and `INSTALL.md`. Nonexistent example
+    skills in comparison tables are replaced by shipped ones, and generic external layouts
+    are labeled as not shipped.
+  - `docs/FAILURE-MODES.md` §8 keeps its incident and lesson but marks the self-heal loop and
+    its corollary as retired architecture.
+  - `global-config/CLAUDE.md.template` gains concise provider-neutral delivery/quality
+    preferences. It stays seed-only: an existing `~/.claude/CLAUDE.md` is never replaced.
+  - Added the historical quality-outcomes acceptance record
+    (`docs/archive/quality-outcomes-2026-10-24/VALIDATION.md`) and linked it from the archive
+    index. It records fixed observations at reviewed head `f02861d` and squash `3d501c8`, and
+    does not certify this or any later commit.
 - Quality and review guidance reports scoped evidence instead of grades or unmeasured
   metrics. `/quality-gate` reports PASS/FAIL/UNAVAILABLE/NOT_APPLICABLE per declared check
   and an overall FAIL, INCOMPLETE or PASS limited to the completed scope. `/review-pr` is the
@@ -208,6 +250,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Stale comments that described the retired self-heal loop as current behavior (input
+  `3d501c8`):
+  - `install.sh`: the `--upgrade` self-verify note; the watchdog plist deferral; the
+    post-load kick and `install_reconciled` stamp (the statusline certifies ✓ only from an
+    admitted watchdog `validation_result`); the update lock; uninstall daemon ordering; the
+    `--upgrade` lock; and the launchd-HOME guard.
+  - `validate.sh`: the statusline deploy, memory freshness, shared-set sync and live
+    attribution checks, and the FULL-only rationales of the doc-count, context7, fail-open and
+    abort-dominance guards. These rationales now describe the retired architecture as history.
+  - Runtime text changes (output only; no logic, argument, flag or default change): under
+    `CLAUDE_WATCHDOG_RUN=1`, the deferred plist-reload message said "next session applies",
+    but no session hook runs the installer. It now names the next explicit `--with-watchdog`
+    installer run, and the compatibility deferral itself is unchanged. The `print_summary`
+    Quick Start header said agents "auto-activate" on natural language. It now says the
+    model selects a specialist or skill, or the user names one.
+- `SELF-HEALING.md` described the `CLAUDE_WATCHDOG_RUN` plist-reload deferral as a current
+  self-update path. It is now marked as a retained compatibility and test guard, and the
+  next explicit `--with-watchdog` installer run applies a deferred reload. Restore commands
+  are unchanged. `SECURITY.md`'s report example now names a foreground installer or repair
+  path instead of a self-healing path; the support policy is unchanged.
+- `CONTRIBUTING.md`:
+  - The drift test deleted `CLAUDE_CODE_EFFORT_LEVEL` and expected `xhigh`, but on an
+    existing settings file an absent value is deliberately left absent. The test also
+    required `sponge`. It now uses a unique temp file and `mv` in a disposable `HOME`, and the
+    policy table gives the effort key its own row.
+  - The health-check step now runs in a disposable `HOME`.
+  - The self-healing and exit-0 promises are replaced by the observe-only contract.
+  - The agent row now names the `AGENTS` installer allowlist and the validated `/execute`
+    matrix instead of a nonexistent patch function.
+- Other stale documentation:
+  - `INSTALL.md`/`README.md` said `--update` does not reconcile
+    `output-styles/concise.md` and that `--uninstall` leaves it. Both `--update` and
+    `--upgrade` reconcile it via `sync_output_styles`, and the uninstall enumeration removes
+    it (an empty `output-styles/` directory remains).
+  - `SKILLS-QUICKSTART.md` still said 52 implicit bundles; it is now 51 implicit and 4
+    explicit-only.
+  - `EXTENSIBILITY.md` used `claude-code mcp list`; it is now `claude mcp list`.
+  - README's `framework-integrity.md` summary still said state "reconciles automatically".
 - `agent_eval.py` grader admission: `run_probe` now also rejects a probe whose descendants
   outlived the grader deadline or that needed forced cleanup (`descendantsOutlivedDeadline`,
   `signalsSent`), even with leader exit 0 and an empty group after cleanup. Such a probe is

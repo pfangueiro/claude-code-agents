@@ -235,15 +235,21 @@ invisible in `git status`.
 
 Result: an hourly heal loop, triggered by a user doing exactly what the README told them to do.
 
+*Retired architecture: at the time, the watchdog ran `install.sh --update` on drift. That
+self-heal path is gone. The watchdog and the SessionStart check are now observe-only, and repair
+is an explicit `./install.sh --update`. The same defect would still report permanent false drift.*
+
 > **RULE — every documented command is part of the product's behavior.**
-> Auto-reconciliation must be immune to the side effects your own documentation instructs users to
+> Automated checks must be immune to the side effects your own documentation instructs users to
 > create. Before shipping a doc that says "run this", run it, then run `./validate.sh` and check
 > `git status` — including ignored files.
 >
-> Corollary: **a check that cannot auto-heal must not run in the automated caller's path.** The
-> watchdog calls `--quick`; anything `install.sh --update` cannot rewrite (prose counts, source
-> content defects) belongs in FULL-only, or it loops forever. Conversely, a reconciliation check
-> that only runs in a manual full run is not reconciliation at all.
+> Corollary: **keep the automated caller's scope to what installed state can satisfy.** The
+> watchdog calls `--quick`, the installed-integrity scope. Defects that no install can repair
+> (prose counts, source content) belong in FULL-only. Under the retired self-heal architecture,
+> such a check in `--quick` looped the installer forever; today it would report drift that no
+> install can clear. Conversely, a runtime check that only a manual full run performs is not
+> observed at all.
 
 ---
 

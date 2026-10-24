@@ -18,8 +18,9 @@ historical snapshot at [docs/archive/codex-2026-10-12/REVIEW.md](docs/archive/co
 
 ## Supported Versions
 
-The latest minor release line is the only supported one. Older releases do
-not receive backports.
+The latest minor release line receives full support. An older release line
+receives security fixes only where the table below explicitly marks it so;
+all other older releases are unsupported and do not receive backports.
 
 | Version | Supported |
 |---------|-----------|
@@ -31,7 +32,7 @@ not receive backports.
 
 If you find a security issue in this framework — for example, a script that
 permits command injection from untrusted input, a hook that writes to a
-sensitive location without validation, or a self-healing path that could be
+sensitive location without validation, or a foreground installer or repair path that could be
 abused to clobber user data — please **do not open a public issue**.
 
 Instead:

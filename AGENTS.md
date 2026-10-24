@@ -18,6 +18,18 @@ Use independent reviewers for substantial changes; reviewers must not review
 their own implementation. Parallel writes require disjoint scopes and isolated
 worktrees. Discover tools at runtime; do not assume a named MCP is connected.
 
+Quality contract for both editions. The canonical procedures are the verification and
+code-quality rules, the `code-quality` agent, `code-review-checklist`, `/review-pr`,
+`/quality-gate`, and `delivery` with `references/acceptance-by-task.md`. Report concrete
+findings and their evidence class. A review names the exact base and head SHA it covered. A
+check receipt records the exact checked input SHA, not a base (a source-only receipt records
+no SHA). A new commit invalidates both. Report PASS, FAIL or INCOMPLETE for the declared
+scope: missing required evidence is INCOMPLETE, and unknown is not zero. Accept work by task
+type. Default maintenance roles: Codex coordinates and independently verifies, and an actual
+Claude execution implements. Existing explicit owner or project instructions that set other
+roles still apply, with no extra confirmation step. Implement, review, merge, deploy and release are separate states, and each needs
+its own authorization.
+
 Adapter checks: `python3 -m unittest discover -s tests/codex -v`.
 Claude checks: `./validate.sh` and `bash tests/gap/run.sh --prove --jobs 4`.
 Run installed-environment checks in a disposable home, not against personal
@@ -29,6 +41,9 @@ the user explicitly requests them; preserve personal config and instruction cont
 Both integrations are user-global by default. Claude uses `./install.sh`; Codex uses
 `./install-codex.sh --user`. Do not fan out copies to all project directories. Project
 Codex installation is an explicit alternative, not needed for ordinary global use.
+To upgrade an existing install, follow INSTALL.md (*Upgrading an existing installation*):
+delivery manifest first, broad `./install.sh --update` second, Codex separately. The broad
+installer replaces same-name customizations; the hash-owned installers refuse them.
 Never claim complete runtime parity; consult the feature matrix and global test record.
 
 Before publishing, fetch and reconcile remote changes without rebasing published SHAs.

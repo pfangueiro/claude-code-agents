@@ -237,7 +237,8 @@ run_structural_checks() {
         fi
         # Deploy check: the LIVE status bar runs ~/.claude/statusline.sh, so a skipped or
         # failed deploy would drop the segment from the actual bar even though source has it.
-        # Assert deployed == source (auto-heals via install --update; mirrors analytics-drift).
+        # Assert deployed == source (observe only; repair is an explicit install --update;
+        # mirrors analytics-drift).
         if [ -f "$HOME/.claude/statusline.sh" ]; then
             if diff -q global-config/statusline.sh "$HOME/.claude/statusline.sh" >/dev/null 2>&1; then
                 pass "Structural: deployed ~/.claude/statusline.sh matches source"
@@ -640,8 +641,8 @@ emit_and_exit() {
 }
 
 # Runtime memory-snapshot freshness. Shared by quick AND full mode so the
-# watchdog's automated `--quick --json` run actually reconciles this critical
-# state (framework-integrity.md: not by manual validate.sh runs). Only meaningful
+# watchdog's automated `--quick --json` run observes and reports this critical
+# state, not only manual validate.sh runs (repair stays explicit). Only meaningful
 # where memory dirs exist; absent snapshot on a fresh install is a warn, not a
 # fail — the daily job has simply not run yet.
 check_memory_freshness() {
@@ -775,8 +776,9 @@ if $QUICK_MODE; then
     fi
 
     # Shared-set sync: the framework's agents/skills/commands/rules/lib must be
-    # present + identical at ~/.claude (install --update reconciles them). Lives in
-    # --quick so the watchdog heals shared-set drift, alongside the SessionStart Check 7.
+    # present + identical at ~/.claude (an explicit install --update reconciles them).
+    # Lives in --quick so the watchdog observes and reports shared-set drift, alongside
+    # the SessionStart Check 7.
     ss_ok=true
     _ss_cmp() {
         local src="$1" dst="$HOME/.claude/${1#.claude/}"
@@ -787,9 +789,10 @@ if $QUICK_MODE; then
         # __pycache__ is PRUNED, not merely diffed. The skills ship runnable Python and the docs
         # tell you to run it, so a `.pyc` appears in the source tree the first time anyone follows
         # deployment-runbook or skill-creator. It is gitignored, so the working tree stays clean —
-        # but this enumeration used to pick it up, report "shared-set missing", and hand the
-        # watchdog a drift it can never heal (install.sh does not deploy bytecode). Following the
-        # documentation must not put the framework into a permanent heal loop.
+        # but this enumeration used to pick it up and report "shared-set missing": drift that no
+        # install can clear (install.sh does not deploy bytecode), which became a permanent heal
+        # loop under the since-retired self-heal watchdog. Following the documentation must not
+        # make the framework report permanent drift.
         while IFS= read -r f; do _ss_cmp "$f"; done < <(
             { [ -d .claude/agents ]   && find .claude/agents -type f -name '*.md' ! -name '._*'
               [ -d .claude/rules ]    && find .claude/rules -type f -name '*.md' ! -name '._*'
@@ -803,12 +806,12 @@ if $QUICK_MODE; then
     fi
 
     # Memory backup freshness — the watchdog's automated path runs ONLY --quick,
-    # so this runtime detector must live here to reconcile automatically.
+    # so this runtime detector must live here to be observed automatically.
     check_memory_freshness "Quick: "
 
     # Live-settings attribution: the template check (structural, above) only guards the
     # SOURCE. The .attribution reconcile writes the user's LIVE ~/.claude/settings.json, so
-    # assert the deployed commit trailer is empty here too — otherwise a failed/absent heal
+    # assert the deployed commit trailer is empty here too — otherwise a failed/absent reconcile
     # (or a settings-sync payload re-introducing a Co-Authored-By trailer) is invisible to the
     # watchdog's --quick path and to --upgrade's self-verify.
     if [ -f "$HOME/.claude/settings.json" ] && command -v jq &>/dev/null; then
@@ -831,9 +834,11 @@ fi
 # own self-admitted "CHANGELOG lag is THE recurring audit finding". validate previously checked
 # only file IDENTITY (deployed==source), never whether the DOCS match reality; this closes that
 # blind spot at OUR layer (surfaced by the mex-memory/mex eval — see the memory tool-eval log).
-# FULL-ONLY BY DESIGN: a count mismatch cannot be auto-healed (install.sh can't rewrite prose),
-# so running it in --quick would loop the watchdog. It fails on `./validate.sh` at commit time —
-# exactly when the drift is introduced and a human can fix the number.
+# FULL-ONLY BY DESIGN: a count mismatch is a source-prose defect that no install can repair, and
+# --quick is the installed-integrity scope the watchdog observes. (Under the since-retired
+# self-heal watchdog it would also have looped the installer forever.) It fails on
+# `./validate.sh` at commit time — exactly when the drift is introduced and a human can fix the
+# number.
 _doc_count_check() {  # $1=label  $2=actual  $3=stated(from CLAUDE.md, may be empty)
     if [ -z "$3" ]; then
         fail "Doc-accuracy: could not read the '$1' count in CLAUDE.md (phrasing changed — update this check)"
@@ -869,7 +874,8 @@ fi
 # the defect class it exists to catch. Signatures below are the unambiguous PARAMETER forms;
 # plain English "topic"/"tokens" prose (e.g. sequential-thinking's "31,999 thinking tokens",
 # EXTENSIBILITY's generic "Use token limits wisely") deliberately does NOT match.
-# FULL-ONLY (repo-doc grep, can't auto-heal → would loop the watchdog in --quick).
+# FULL-ONLY (repo-doc grep: a source defect that no install repairs stays out of the
+# installed-integrity --quick scope; it would have looped the retired self-heal watchdog).
 _ctx7_docs=(".claude/skills/library-docs/SKILL.md" ".claude/lib/mcp-guide.md" "EXTENSIBILITY.md")
 _ctx7_missing=""
 for _f in "${_ctx7_docs[@]}"; do
@@ -910,8 +916,9 @@ fi
 # a magic word is a proxy that drifts (exactly how the context7 guard above once certified four
 # surviving dead params). So each guard below asserts the INVARIANT by RUNNING the artifact and
 # requiring the failure path, and each was gap-tested by reintroducing the bug.
-# FULL-ONLY by design: these detect source-content defects install.sh cannot rewrite, so running
-# them in --quick would make the watchdog heal-loop forever.
+# FULL-ONLY by design: these detect source-content defects install.sh cannot rewrite, so they
+# stay out of the installed-integrity --quick scope (under the retired self-heal watchdog they
+# would have heal-looped forever).
 section "Checking fail-open regression guards"
 
 # (1) deployment-runbook health_check.py — unimplemented probes MUST fail closed.
@@ -1434,7 +1441,8 @@ done
 # fork-spawn guard below documents why a two-name list printed PASS over a live instance. The
 # coverage cross-check then asserts the derived set still contains every GATED_SKILLS entry, so
 # renaming a heading cannot shrink the guard's scope silently.
-# FULL-ONLY: a prose defect install.sh cannot rewrite, so --quick would heal-loop the watchdog.
+# FULL-ONLY: a prose defect install.sh cannot rewrite, so it stays out of the installed-integrity
+# --quick scope (it would have heal-looped the retired self-heal watchdog).
 #
 # GAP-TESTED BY EXECUTION against copies of the four gate files. Only results actually observed are
 # recorded here:

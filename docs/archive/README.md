@@ -33,6 +33,16 @@ does not restate live counts.
 The original v2.1 skills-system integration summary, from when the framework had 11
 agents and the first 4 example skills. Retained for history only.
 
+### `quality-outcomes-2026-10-24/` — Quality-outcomes acceptance (2026-10-24)
+
+The evidence-based quality, review and evaluation change: reviewed head `f02861d`, squashed
+as `3d501c8` on `main` with an identical tree, its repository checks and CI, a small native
+paired pilot that demonstrated no efficacy gain, and user-global rollout observations at
+`3d501c8`. Counts and verdicts are as observed at those revisions.
+
+- [`VALIDATION.md`](quality-outcomes-2026-10-24/VALIDATION.md) — sanitized acceptance
+  record. Raw receipts stay private.
+
 ## Retired alongside this archive
 
 - `clean-old-agents.sh` — an unused v1 helper that deleted project-local agent

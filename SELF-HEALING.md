@@ -51,11 +51,13 @@ health and keeps backups; it does **not** repair, migrate or reseed. Earlier rev
 - **Retention:** prunes snapshots older than 7 days (memory snapshots keep a floor of the
   newest 3 regardless of age, so a >7-day backup outage never deletes the last copy).
 - **Output:** `~/.claude/analytics/watchdog.log`.
-- **Plist self-reload:** `install_watchdog` sha-tracks the loaded plist in
-  `~/.claude/.watchdog-plist.sha` and reloads the daemon only on a real plist change
-  (deferred under `CLAUDE_WATCHDOG_RUN` to avoid a self-kill mid-run). The watchdog *script*
-  self-updates via launchd re-exec of the deployed copy, which `install.sh` copies when the
-  watchdog is selected.
+- **Plist reload (explicit installer runs only):** `install_watchdog` sha-tracks the loaded
+  plist in `~/.claude/.watchdog-plist.sha` and reloads the daemon only on a real plist change.
+  The `CLAUDE_WATCHDOG_RUN=1` deferral is kept only for compatibility and as a test guard. The
+  observe-only watchdog never runs the installer, so this is not a self-update path. The next
+  explicit installer run with `--with-watchdog` applies a deferred reload. A watchdog
+  *script* that `install.sh` re-copies (only when the watchdog is selected) takes effect at
+  the next launchd run.
 
 ## Snapshot restore (`~/.claude/snapshots/`)
 

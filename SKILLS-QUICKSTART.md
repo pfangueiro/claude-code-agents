@@ -7,19 +7,19 @@ No project-by-project copying is needed with the default user profile.
 
 Codex workflow names are prefixed, for example `$sdlc-code-review-checklist` and
 `$sdlc-execute`. The adapter supplies 42 workflows plus 13 specialist guides (55
-skill directories, 52 implicitly invocable) and 13 native agent definitions. Use a guide
+skill directories: 51 implicitly invocable, 4 explicit-only) and 13 native agent definitions. Use a guide
 if native custom roles are unavailable. Selection uses model judgment; a skill is not an
 access policy.
 
 ## What Are Skills?
 
-Skills are modular knowledge packages that extend Claude's capabilities with domain-specific expertise, while agents are auto-activating task executors.
+Skills are modular knowledge packages that extend Claude's capabilities with domain-specific expertise. Agents are task executors that the model selects or delegates to by judgment, or that you name explicitly.
 
 | **Agents** | **Skills** |
 |------------|------------|
 | Execute SDLC workflows | Provide domain expertise |
-| Auto-activate on keywords | Loaded when relevant |
-| Examples: test-automation, security-auditor | Examples: git-workflow, brand-guidelines |
+| Model-selected from descriptions, or named explicitly | Loaded when judged relevant, or invoked explicitly |
+| Examples: test-automation, security-auditor | Examples: git-workflow, deployment-runbook |
 
 ## Included Skills
 
@@ -109,8 +109,8 @@ Combine agents with skills for maximum effectiveness:
 |-----------|-------|-----------|-------|------------|
 | code-quality | + | code-review-checklist | = | Systematic code reviews with your standards |
 | devops-automation | + | deployment-runbook | = | Safe deployments with your procedures |
-| documentation-maintainer | + | brand-guidelines | = | Docs matching your brand style |
-| api-backend | + | company-api-spec | = | APIs following your conventions |
+| security-auditor | + | security-scan | = | Findings backed by secrets, dependency and OWASP checks |
+| test-automation | + | browser-testing | = | E2E coverage through the Playwright MCP |
 
 ## Best Practices
 

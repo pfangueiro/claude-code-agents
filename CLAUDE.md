@@ -11,8 +11,9 @@ guide model judgment; Claude files specify Haiku/Sonnet/Opus roles.
 
 Read [AGENTS.md](AGENTS.md) for cross-engine maintenance rules and [MEMORY.md](MEMORY.md)
 for architecture and verified state. Codex builds from shared domain sources plus
-`codex/overrides/`: 42 workflows, 13 specialist guides and 13 native TOML definitions.
-It inherits the active Codex model and permission policy. User-global installation is
+`codex/overrides/`: 42 workflows, 13 specialist guides and 13 native TOML definitions
+(55 skill bundles: 51 implicit, 4 explicit-only). It inherits the active Codex model and
+permission policy. User-global installation is
 `./install-codex.sh --user`; check with `--user --check`. See [codex/FEATURES.md](codex/FEATURES.md).
 
 ## Git & Commit Conventions
@@ -24,15 +25,34 @@ These apply to everyone committing to this repo. They live here in the repo (not
 - **Never force-push `main`; never amend or skip hooks** unless explicitly asked.
 - **CHANGELOG in the same change**: add the SHA-cited bullet when you commit the change (the recurring audit gap).
 
-## IMPORTANT: Auto-Activation
+## Selection (Model Judgment)
 
 Describe the task naturally or select the specialist explicitly. Descriptions guide
 model judgment; selection/delegation are not a deterministic keyword router. Codex
 may use `sdlc-agent-<name>` guides when native custom types are unavailable.
 
+## Quality and Delivery Contract
+
+Both editions share this contract. The canonical procedures are the verification and
+code-quality rules, the `code-quality` agent, `code-review-checklist`, `/review-pr`,
+`/quality-gate` and `delivery` (with `references/acceptance-by-task.md`).
+
+- Findings are concrete and evidence-classed: runtime-reproduced, source-proven, unverified
+  hypothesis or nonblocking suggestion. Do not use grades or unmeasured metrics.
+- A review names the exact base and head SHA it covered. A check receipt records the exact
+  checked input SHA, not a base (a source-only receipt records no SHA). A new commit
+  invalidates both.
+- Outcomes are PASS, FAIL or INCOMPLETE for the declared scope. A required check that did not
+  run is INCOMPLETE, never PASS. Unknown is not zero.
+- Acceptance follows the task type in `acceptance-by-task.md`.
+- Default maintenance roles: Codex coordinates and independently verifies, and an actual Claude
+  execution implements. Existing explicit owner or project instructions that set other roles
+  still apply, with no extra confirmation step. Implement, review, merge, deploy and
+  release are separately authorized states, and each is reported from evidence.
+
 ## Agents
 
-| Agent | Activates On | Model |
+| Agent | Typical cues (not triggers) | Model |
 |-------|-------------|-------|
 | **architecture-planner** | design, architecture, system, blueprint, API contract, planning | Sonnet |
 | **code-quality** | review, quality, refactor, clean code, lint, best practices | Sonnet |
@@ -68,9 +88,11 @@ Agent collaboration patterns: see `.claude/lib/agent-coordination.md`
 - **`/resume-session [id]`** — Resume from a saved session with full context briefing and file state verification.
 - **`/optimize <metric> [--iterations N]`** — Autonomous metric-driven improvement loop: measure → improve → verify → keep/revert.
 
-## Built-in Tools (Always Available)
+## Host Tools (Discover at Runtime)
 
-Beyond agents and skills, Claude Code provides these tools you can use directly:
+Depending on the Claude Code version, settings and permissions, the host may expose tools
+such as these. Check what the current session actually offers before relying on one. This
+framework neither installs nor guarantees them:
 
 | Tool | Use When |
 |------|----------|
@@ -176,4 +198,7 @@ Describe what you need naturally:
 "I need to build a user registration system with email verification"
 ```
 
-This triggers: architecture-planner → api-backend + database-architect → security-auditor → test-automation → documentation-maintainer
+The model may route this through specialists such as architecture-planner → api-backend +
+database-architect → security-auditor → test-automation → documentation-maintainer. That
+path is model judgment, not a fixed pipeline. Name a specialist or workflow explicitly when
+you need a specific one.
