@@ -917,7 +917,8 @@ def run_probe(root: Path, trial_dir: Path, module: str, calls: list[dict]) -> di
     except evidence.Refusal:
         raise ProbeError('probe-launch-failed') from None
     if (child['timedOut'] or child['signal'] is not None or child['exitCode'] != 0
-            or not child['groupEmptyAtReceipt']):
+            or not child['groupEmptyAtReceipt']
+            or child['descendantsOutlivedDeadline'] or child['signalsSent']):
         raise ProbeError('probe-did-not-complete')
     stdout = probe_dir / 'stdout.log'
     if stdout.stat().st_size > MAX_JSON_BYTES:

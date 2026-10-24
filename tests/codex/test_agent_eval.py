@@ -757,6 +757,36 @@ class CodeGrading(EvalCase):
         self.assertEqual(run.outcomes('candidate'), ['PASS', 'FAIL', 'FAIL'])
         self.assertEqual(run.rows('candidate')[2]['reasons'], ['module-import-failed'])
 
+    def test_incomplete_grader_supervision_is_unavailable(self):
+        # Inert supervise mock: nothing is launched; it writes a valid probe payload and returns
+        # the supervision record, so only run_probe's admission guard decides the verdict.
+        clean = {'launched': True, 'pid': 123, 'timedOut': False,
+                 'descendantsObservedAfterExit': False, 'descendantsOutlivedDeadline': False,
+                 'signalsSent': [], 'groupEmptyAtReceipt': True, 'exitCode': 0, 'signal': None}
+        incomplete = {
+            'deadline overrun cleaned up': {'descendantsObservedAfterExit': True,
+                                            'descendantsOutlivedDeadline': True,
+                                            'signalsSent': ['SIGTERM']},
+            'deadline overrun without signals': {'descendantsObservedAfterExit': True,
+                                                 'descendantsOutlivedDeadline': True},
+            'forced cleanup signals': {'signalsSent': ['SIGTERM']},
+        }
+        payload = agent_eval.PROBE_MARKER + json.dumps({'results': [{'value': {}}]}) + '\n'
+
+        def probe(record):
+            def supervise(argv, executable, cwd, out_dir, timeout):
+                (Path(out_dir) / 'stdout.log').write_text(payload, encoding='utf-8')
+                return dict(record)
+            with tempfile.TemporaryDirectory() as tmp, \
+                    mock.patch.object(agent_eval.evidence, 'supervise', supervise):
+                return agent_eval.run_probe(Path(tmp), Path(tmp), 'module', [{}])
+        self.assertEqual(probe(clean), {'results': [{'value': {}}]})
+        for label, overrides in incomplete.items():
+            with self.subTest(case=label):
+                with self.assertRaises(agent_eval.ProbeError) as raised:
+                    probe({**clean, **overrides})
+                self.assertEqual(raised.exception.code, 'probe-did-not-complete')
+
 
 class ReviewGrading(EvalCase):
     def test_defect_witness_is_true_positive_and_silence_is_false_negative(self):

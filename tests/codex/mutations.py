@@ -122,6 +122,10 @@ def main():
          'test_input_directory_alias_retargeted_after_baseline_blocks_the_candidate_launch',
          "    if resolved_location(lexical) != item['path']:",
          '    if False:'),
+        ('agent-eval incomplete grader supervision', test_agent_eval, 'agent_eval', test_agent_eval.CodeGrading,
+         'test_incomplete_grader_supervision_is_unavailable',
+         "            or child['descendantsOutlivedDeadline'] or child['signalsSent']):",
+         '            or False):'),
     ]
     for label, module, attr, case_class, test, before, after in cases:
         original = getattr(module, attr)

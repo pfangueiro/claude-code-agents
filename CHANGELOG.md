@@ -208,6 +208,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `agent_eval.py` grader admission: `run_probe` now also rejects a probe whose descendants
+  outlived the grader deadline or that needed forced cleanup (`descendantsOutlivedDeadline`,
+  `signalsSent`), even with leader exit 0 and an empty group after cleanup. Such a probe is
+  `probe-did-not-complete` and grades `UNAVAILABLE`, never `PASS`; scope `FAIL` still
+  dominates. It matches `evidence.child_reasons`; receipt v1 and the grader deadline are
+  unchanged (input `923af46`).
 - README MCP badge linked to `#-mcp-integration`, a fragment with no matching heading (the
   slug for `## MCP Integration` is `#mcp-integration`); corrected the anchor. Added
   `tests/codex/test_documentation.py` guarding README local file and heading-anchor links.
