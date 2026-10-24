@@ -81,6 +81,14 @@ invalidates the earlier verdict.
 - **Nothing runs in the background.** No watcher, daemon, scheduler, auto-merge, hook or
   hook trust is added. Gates are instructions plus receipts the session collects, not an
   enforced sandbox.
+- **Optional references.** `delivery` ships task-specific acceptance guidance and
+  optional repository-measurement limits; `verified-handoff` ships an opt-in
+  agent-guidance evaluation that compares baseline and candidate instruction files on a
+  synthetic corpus through a local adapter you supply. Provider runs are opt-in and never
+  automatic in ordinary delivery, quality gates or CI (offline fake-adapter behaviour
+  tests do run in CI); its process separation is not an OS sandbox,
+  and a small pilot is not proof of effectiveness. Both integrations export the same
+  references.
 
 Codex receives them through `./install-codex.sh --user` as `$sdlc-delivery`,
 `$sdlc-repo-context` and `$sdlc-verified-handoff` (implicit) and `$sdlc-commit-pr`
@@ -132,7 +140,7 @@ Or invoke a workflow or specialist explicitly. The same request maps across edit
 ```
 # Claude Code
 /review-pr                       # review the current change
-/quality-gate --fix              # formatter + linter + type check + tests
+/quality-gate --fix              # required checks -> PASS / FAIL / INCOMPLETE
 "Use code-quality to review src/auth.ts"
 
 # Codex (sdlc- prefixed; explicit-only commands stay explicit)
@@ -433,7 +441,7 @@ Threat model, reporting, and the repo's security posture: **[SECURITY.md](./SECU
 | Command | Usage | What It Does |
 |---------|-------|-------------|
 | `/commit-pr` | `/commit-pr [message]` | Commit, run required checks and an independent review on that exact commit, then push and open the PR; merge, release and ticket updates only when authorized |
-| `/review-pr` | `/review-pr 123` | Code quality + security + testing review |
+| `/review-pr` | `/review-pr 123` | Independent review at the exact base/head: validated correctness, security, test and doc findings; missing required evidence is INCOMPLETE; publishes only when authorized |
 | `/security-scan` | `/security-scan [path]` | OWASP scanning, secrets detection, dependency audit |
 | `/compact` | `/compact [note]` | Write HANDOFF.md with session context, then compact conversation |
 | `/new-feature` | `/new-feature PROJ-123 desc` | Create feature branch from latest main |
@@ -445,7 +453,7 @@ Threat model, reporting, and the repo's security posture: **[SECURITY.md](./SECU
 |---------|-------|-------------|
 | `/build-fix` | `/build-fix [path]` | Auto-detect build system, fix errors one at a time with regression guard |
 | `/tdd` | `/tdd <feature>` | Enforce RED-GREEN-REFACTOR: failing test → implement → refactor |
-| `/quality-gate` | `/quality-gate [path] [--fix]` | Pre-commit validation: formatter + linter + type checker + tests |
+| `/quality-gate` | `/quality-gate [path] [--fix]` | Runs the project's declared format, lint, type/build and behavioral checks with receipts; per-check PASS/FAIL/UNAVAILABLE/NOT_APPLICABLE, overall FAIL/INCOMPLETE/PASS for the completed scope |
 | `/checkpoint` | `/checkpoint <name>` | Named save points captured as `refs/checkpoint/<name>` snapshots (Git plumbing, not branches); branch, index, worktree and stashes stay untouched, recovery is explicit |
 | `/save-session` | `/save-session [id]` | Save structured session state with mandatory "What Did NOT Work" section |
 | `/resume-session` | `/resume-session [id]` | Resume from a saved session with context briefing and file state verification |

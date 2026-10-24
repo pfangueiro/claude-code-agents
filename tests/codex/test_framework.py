@@ -18,6 +18,9 @@ sys.path.insert(0, str(ROOT / 'codex'))
 import framework as f
 import hook
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import test_agent_eval as offline_eval
+
 
 def snapshot(root):
     return {str(p.relative_to(root)): p.read_bytes() for p in root.rglob('*') if p.is_file()}
@@ -365,6 +368,18 @@ class FrameworkAcceptance(unittest.TestCase):
             text = (bundle / 'SKILL.md').read_text()
             for resource in re.findall(r'\b((?:scripts|references)/[\w./-]+\.(?:py|md))\b', text):
                 self.assertTrue((bundle / resource).is_file(), f'{name}: missing {resource}')
+
+    def test_exported_agent_eval_grades_offline_from_installed_bundle(self):
+        f.install(self.root)
+        bundle = self.root / '.agents/skills/sdlc-verified-handoff'
+        for rel in ('scripts/agent_eval.py', 'scripts/evidence.py', 'references/eval-corpus.json'):
+            self.assertEqual((bundle / rel).read_bytes(), (ROOT / '.claude/skills/verified-handoff' / rel).read_bytes())
+        home = self.root / 'home'
+        home.mkdir()
+        offline_eval.check_installed_evaluator(self, bundle / 'scripts/agent_eval.py', self.root / 'agent-eval',
+                                               env=dict(os.environ, HOME=str(home)))
+        self.assertEqual(f.install(self.root, check=True), [])
+        self.assertEqual(list(home.iterdir()), [])
 
     def test_publication_contract_has_one_provider_neutral_source(self):
         # A Codex-only override diverged from the canonical command once; both editions

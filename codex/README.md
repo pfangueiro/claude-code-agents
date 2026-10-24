@@ -79,6 +79,14 @@ that explicit owner or project instructions override. `$sdlc-commit-pr` is now b
 from the provider-neutral `.claude/commands/commit-pr.md`; no Codex-only override
 remains, so both editions export one publication contract (commit, exact-candidate
 checks and independent verdict, current-head confirmation, then authorized publication).
+`$sdlc-review-pr` and `$sdlc-quality-gate` are likewise built from their canonical
+commands (the former review-pr override is removed): exact base/head review with
+validated, evidence-classified findings, and required-check outcomes where missing
+evidence is INCOMPLETE rather than PASS. `$sdlc-delivery` also ships
+`references/acceptance-by-task.md` and the optional `references/repository-measurements.md`;
+`$sdlc-verified-handoff` ships the opt-in `references/agent-evaluation.md` (baseline vs
+candidate instruction comparison through a local adapter you supply; provider runs are
+opt-in and never automatic in ordinary delivery or CI, and it is not an OS sandbox).
 These are workflow procedures: loading one runs nothing, and no watcher, daemon,
 auto-merge, scheduler or hook trust is added. Project instructions supply the base
 branch, required checks and release policy.
@@ -211,7 +219,10 @@ grandchild, incomplete work from an early-exiting leader reported as not-passed,
 installed stdio operation) and the read-only `scripts/framework-status.py`
 (not-installed/clean/drift/error states, requested-vs-installed scope mismatch,
 before/after trees proving it writes nothing — including no source bytecode, and
-JSON/exit-code shape). This is not an
+JSON/exit-code shape). `test_quality_outcomes.py` checks that the review, quality-gate and
+code-quality contracts export from their canonical sources, that delivery reference links
+resolve, that a missing or failed required receipt never verifies (with a complete-manifest
+control), and a score-field guard against a baseline and a safe counterexample. This is not an
 authenticated end-to-end test across Codex desktop, IDE, CLI and cloud accounts.
 When the Codex CLI is installed, a native prompt-input smoke test checks skill discovery
 and managed instructions in an isolated home; otherwise that check is explicitly skipped.

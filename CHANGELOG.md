@@ -60,6 +60,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   13 specialist guides (55 bundles, 52 implicit, 3 explicit-only). Workflows are
   procedures plus receipts, not enforced gates; no watcher, daemon, auto-merge or hook
   trust is added.
+- `verified-handoff/references/agent-evaluation.md`: opt-in documentation for comparing
+  baseline and candidate instruction files on a six-case synthetic corpus through a
+  caller-supplied local adapter, with outcome verdicts (known candidate failure or
+  regression FAIL; else unavailable or source drift INCOMPLETE; else PASS for the declared
+  selected scope; unknown never zero), separate requested/observed model and
+  reported-or-unknown cost. Provider runs are opt-in and never automatic in ordinary
+  delivery, quality gates or CI; process separation is not an OS sandbox; a pilot is not efficacy
+  proof. The v1 receipt schema and the 30/12/13 inventory are unchanged.
+- `delivery/references/repository-measurements.md` now requires source-only readers to
+  finish before install/build probes mutate the measured tree (or a separate disposable
+  probe copy), with as-found and repaired inputs attributed separately.
 - `scripts/install-delivery.py`: incremental stdlib update of only the delivery skills,
   rule and `commit-pr` command in an existing Claude home (`CLAUDE_CONFIG_DIR`,
   `~/.claude` or `--claude-home`) without the broad installer. Hash-owned manifest with
@@ -79,6 +90,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Quality and review guidance reports scoped evidence instead of grades or unmeasured
+  metrics. `/quality-gate` reports PASS/FAIL/UNAVAILABLE/NOT_APPLICABLE per declared check
+  and an overall FAIL, INCOMPLETE or PASS limited to the completed scope. `/review-pr` is the
+  single provider-neutral contract: exact base/head, policy read from the trusted base,
+  validated and deduplicated findings, and INCOMPLETE (not approval) when required evidence
+  is missing. The redundant `codex/overrides/review-pr.md` is removed. Delivery gains
+  `acceptance-by-task.md` and `repository-measurements.md` references. Offline coverage is in
+  `tests/codex/test_quality_outcomes.py`.
 - Root documentation reconciled to the current **observe-only installer contract**
   (supersedes the earlier "`~/.claude/hooks/` pruned to exactly the current source set"
   wording in the bullets below). The Claude installer now ships **core** components by
@@ -189,6 +208,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `agent_eval.py` grader admission: `run_probe` now also rejects a probe whose descendants
+  outlived the grader deadline or that needed forced cleanup (`descendantsOutlivedDeadline`,
+  `signalsSent`), even with leader exit 0 and an empty group after cleanup. Such a probe is
+  `probe-did-not-complete` and grades `UNAVAILABLE`, never `PASS`; scope `FAIL` still
+  dominates. It matches `evidence.child_reasons`; receipt v1 and the grader deadline are
+  unchanged (input `923af46`).
 - README MCP badge linked to `#-mcp-integration`, a fragment with no matching heading (the
   slug for `## MCP Integration` is `#mcp-integration`); corrected the anchor. Added
   `tests/codex/test_documentation.py` guarding README local file and heading-anchor links.

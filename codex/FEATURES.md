@@ -14,7 +14,7 @@ Do not describe this as complete runtime parity.
 | Specialist fallback | 13 additional role-guide skills | Apply inline or give procedure to generic worker when native roles are unavailable; no native sandbox enforcement claim |
 | Agent auto-selection | Descriptions guide Codex | Model judgment; not deterministic keyword routing |
 | Seven rules | Managed AGENTS guidance + rules resource | Instruction hierarchy respected; not enforced sandbox policy |
-| Delivery workflow | Exported delivery, repo-context and verified-handoff skills; AGENTS routing | Exported scripts executed in tests; procedures and receipts, not an enforced gate; no watcher, daemon or auto-merge |
+| Delivery workflow | Exported delivery, repo-context and verified-handoff skills; AGENTS routing | Exported scripts executed in tests; procedures and receipts, not an enforced gate; no watcher, daemon or auto-merge; opt-in agent-guidance evaluation resource shared with Claude, run only explicitly with a caller-supplied adapter (no provider call in CI, not an OS sandbox, no parity or effectiveness claim) |
 | Task DAG / teams | Plan/ledger and actual collaboration APIs | Claude Task/implicit-team persistence not assumed |
 | Background/fork behavior | Host schema discovery | No automatic context fork or Claude background defaults |
 | Parallel coding | Separate Git worktrees | Coupled steps sequential; no fake launcher isolation parameter |
@@ -48,8 +48,8 @@ Each skill is accounted for:
 
 All command templates: build-fix, checkpoint, commit-pr, compact, create-jira,
 new-feature, optimize, quality-gate, resume-session, review-pr, save-session, tdd.
-Review-PR, compact and the session commands receive explicit portability rewrites via
-`codex/overrides`. Commit/PR, the Jira-issue and the new-feature-branch commands are
+Compact and the session commands receive explicit portability rewrites via
+`codex/overrides`. Review-PR, commit/PR, the Jira-issue and the new-feature-branch commands are
 exported from provider-neutral canonical commands (their obsolete Codex overrides
 removed), so both editions share one source — and, for commit/PR, one publication
 contract. The remaining five commands retain domain steps with invocation/path adaptation.

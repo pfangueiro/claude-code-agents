@@ -43,7 +43,9 @@ until a real tool call or process does it and its receipt is collected.
    scope and capability routing. Disjoint write scopes may run in parallel in
    separate worktrees; coupled work runs sequentially.
 4. **Predeclare.** Name the checks and the expected changed-path manifest before
-   execution starts.
+   execution starts. Map requirements to discriminating evidence using
+   [acceptance by task](references/acceptance-by-task.md); unavailable required
+   evidence means incomplete acceptance, not a successful zero.
 5. **Execute and collect.** Gather actual terminal receipts (command, exit status,
    log location) with /verified-handoff. A pending, killed or timed-out run is not
    a pass. See *Provider lifecycle* for when a provider run counts as complete.
@@ -105,3 +107,6 @@ the receipts, not assumed.
 
 - `references/task-contract.md` — outcome contract, task card, receipt, review
   and final report fields.
+
+- `references/acceptance-by-task.md` — proportional behavioral acceptance profiles.
+- `references/repository-measurements.md` — optional measurement and task-grounding limits.
