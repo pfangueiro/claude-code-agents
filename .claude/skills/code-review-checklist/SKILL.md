@@ -18,6 +18,16 @@ This skill provides a systematic approach to code reviews, ensuring consistent q
 - Mentoring junior developers on code quality
 - Complementing the **code-quality agent** for comprehensive reviews
 
+## Evidence and scope
+
+Follow the canonical `/review-pr` procedure. Pin base/head or archive identity and
+validate findings against triggers, affected callers and safe counterexamples.
+Separate source inspection from runtime reproduction, confirmed defects from
+hypotheses, and blocking failures from nonblocking suggestions. Required checks
+that could not run make acceptance incomplete; neither an inventory count nor an
+uncalibrated grade certifies correctness. Select acceptance evidence using the
+`delivery` skill's `references/acceptance-by-task.md`.
+
 ## Core Review Categories
 
 ### 1. Functionality & Correctness
@@ -54,8 +64,8 @@ This skill provides a systematic approach to code reviews, ensuring consistent q
 
 **Red Flags:**
 - God classes (doing too much)
-- Excessive method parameters (>3-4)
-- Deep nesting (>3 levels)
+- Parameter groups that obscure responsibility or contracts
+- Nesting that demonstrably obscures control flow
 - Duplicate code (DRY violation)
 - Overly clever code (premature optimization)
 - Speculative generality (wrappers, config, patterns or dependencies with no current need)
@@ -96,7 +106,7 @@ const MAX_RETRY_ATTEMPTS = 3;
 - [ ] Test names describe what they test
 - [ ] No flaky tests
 - [ ] Integration tests for complex interactions
-- [ ] Test coverage meets standards (typically >80%)
+- [ ] Coverage meets project policy where specified; behavior, failure paths and critical contracts are exercised (no universal percentage target)
 
 **Test Quality Checks:**
 - Tests follow AAA pattern (Arrange, Act, Assert)
@@ -307,7 +317,7 @@ early returns to reduce complexity:
 - May need to be split across sessions
 
 **Large PR (> 500 lines):**
-- Request split into smaller PRs
+- Consider a responsibility-based split when it preserves complete, independently reviewable behavior
 - Difficult to review thoroughly
 - Higher chance of bugs slipping through
 
@@ -341,12 +351,13 @@ Customize this checklist for your team:
 - Provide examples: Show better alternatives
 - Link to docs: Reference style guides
 
-**Approval Criteria:**
-- All tests pass
-- No security vulnerabilities
-- Meets acceptance criteria
-- Documentation updated
-- Code quality standards met
+**Approval Criteria (code verdict for the exact reviewed head):**
+- Required review scope completed: affected source, callers, tests and contracts, plus the applicable domains (correctness, security, error handling, tests, documentation); any domain not covered is named as a gap
+- No unresolved blocking finding; each confirmed finding was validated against its trigger and safe counterexamples
+- Acceptance evidence for the task type is present (`delivery` skill `references/acceptance-by-task.md`); missing required evidence makes the verdict INCOMPLETE, not approved
+- Documentation and CHANGELOG updated where the project requires them
+- The report states the inspected scope, commands run and remaining gaps; approval attests that reviewed scope only, never the absence of all defects or vulnerabilities
+- Required machine checks at the same head are a separate merge gate, not part of the code verdict
 
 **Request Changes When:**
 - Bugs or logic errors present

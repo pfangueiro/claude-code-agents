@@ -14,6 +14,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import test_agent_eval as offline_eval
+
 ROOT = Path(__file__).resolve().parents[2]
 INSTALLER = Path(os.environ.get('DELIVERY_INSTALLER') or ROOT / 'scripts/install-delivery.py')
 _spec = importlib.util.spec_from_file_location('install_delivery', INSTALLER)
@@ -460,6 +463,11 @@ class InstalledDeliveryResources(unittest.TestCase):
             evidence = subprocess.run([sys.executable, str(home / 'skills/verified-handoff/scripts/evidence.py'),
                                        '--help'], env=env, capture_output=True, text=True, timeout=60)
             self.assertEqual(evidence.returncode, 0, evidence.stderr)
+            # The installed evaluator grades the offline fake-adapter protocol from an unrelated
+            # cwd and disposable HOME, leaves installed bytes intact and passes the drift check.
+            offline_eval.check_installed_evaluator(
+                self, home / 'skills/verified-handoff/scripts/agent_eval.py', root / 'agent-eval', env=env)
+            self.assertEqual(installer.run(home, source, check=True)[0], [])
             for name in installer.SKILLS:
                 self.assertEqual((home / f'skills/{name}/SKILL.md').read_bytes(),
                                  (ROOT / f'.claude/skills/{name}/SKILL.md').read_bytes())

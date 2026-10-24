@@ -102,3 +102,10 @@ the `GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM`/`GIT_CONFIG_NOSYSTEM` file selectors
 kept), and a checkout whose top level does not contain `--cwd` is refused, so ambient
 Git context cannot bind a receipt to another repository. Keep receipts and logs outside
 public source when they may contain private output.
+
+## Optional: evaluating agent guidance
+
+Comparing two instruction files on a synthetic corpus is a separate, opt-in activity
+with its own outcome verdicts; see
+[references/agent-evaluation.md](references/agent-evaluation.md). Ordinary delivery
+and handoff never run it, and it does not change the v1 receipt schema.

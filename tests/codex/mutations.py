@@ -7,6 +7,7 @@ import types
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import test_agent_eval
 import test_framework as acceptance
 import test_lint
 
@@ -18,7 +19,18 @@ def mutant(original, before, after):
         raise RuntimeError(f'mutation anchor is not unique in {path.name}')
     module = types.ModuleType(original.__name__)
     module.__file__ = str(path)
-    exec(compile(source.replace(before, after, 1), str(path), 'exec'), module.__dict__)
+    # dataclasses resolve string annotations through sys.modules[cls.__module__], so the
+    # mutant is registered while it executes and the original registration is restored.
+    missing = object()
+    previous = sys.modules.get(original.__name__, missing)
+    sys.modules[original.__name__] = module
+    try:
+        exec(compile(source.replace(before, after, 1), str(path), 'exec'), module.__dict__)
+    finally:
+        if previous is missing:
+            sys.modules.pop(original.__name__, None)
+        else:
+            sys.modules[original.__name__] = previous
     return module
 
 
@@ -67,6 +79,49 @@ def main():
          "REGISTRY = Path(__file__).resolve().parent / 'lint-projects.json'"),
         ('lint positive-success gate', test_lint, 'hook', test_lint.HookIntegration, 'test_unrecognized_edit_result_does_not_run_lint',
          'if not edit_succeeded(event):', 'if False:'),
+        # Agent evaluator guards: the selected tests call the module-level agent_eval alias.
+        # Replacements keep the line count, because the harness builds its probe script with
+        # inspect.getsource, which reads the on-disk file by line number.
+        ('agent-eval failed adapter exit', test_agent_eval, 'agent_eval', test_agent_eval.AdapterLifecycle,
+         'test_nonzero_exit_with_success_json_is_unavailable',
+         "        reasons.append('adapter-nonzero-exit')", '        pass'),
+        ('agent-eval protected workspace file', test_agent_eval, 'agent_eval', test_agent_eval.WorkspaceScope,
+         'test_direct_protected_file_mutation_fails',
+         "    ('protected_changed_by_provider', 'scope-protected-file-changed'),",
+         "    ('workspace_extra_entries', 'scope-protected-file-changed'),"),
+        ('agent-eval added workspace entry', test_agent_eval, 'agent_eval', test_agent_eval.WorkspaceScope,
+         'test_extra_workspace_entries_fail',
+         '    extra = [rel for rel in added if rel not in allowed]', '    extra = []'),
+        ('agent-eval malformed findings not clean', test_agent_eval, 'agent_eval', test_agent_eval.ReviewGrading,
+         'test_malformed_findings_on_clean_review_are_not_clean',
+         "        raise Invalid('response-findings-invalid')", '        return []'),
+        ('agent-eval fabricated review witness', test_agent_eval, 'agent_eval', test_agent_eval.ReviewGrading,
+         'test_fabricated_witness_is_not_a_true_positive',
+         "        'actual_matches_execution': actual is not None and finding['actual'] == actual,",
+         "        'actual_matches_execution': True,"),
+        ('agent-eval corpus traversal', test_agent_eval, 'agent_eval', test_agent_eval.EvaluationInputs,
+         'test_unsafe_corpus_paths_rejected_before_use',
+         "    if any(part in ('', '.', '..') or part.lower() == '.git' for part in pure.parts):", '    if False:'),
+        ('agent-eval scope violation beside unavailability', test_agent_eval, 'agent_eval',
+         test_agent_eval.WorkspaceScope, 'test_scope_violation_stays_fail_when_provider_is_unavailable',
+         "        finish(record, 'FAIL' if failures else 'UNAVAILABLE', failures or list(unavailable))",
+         "        finish(record, 'UNAVAILABLE', list(unavailable))"),
+        ('agent-eval known failure precedence', test_agent_eval, 'agent_eval', test_agent_eval.Aggregation,
+         'test_known_candidate_failure_stays_visible_beside_unavailable_trials',
+         '    if candidate_failed or regressions:', '    if (candidate_failed or regressions) and not unavailable:'),
+        ('agent-eval grader launch refusal', test_agent_eval, 'agent_eval', test_agent_eval.CodeGrading,
+         'test_grader_launch_refusal_is_unavailable_and_executed_defects_still_fail',
+         '        return make_verdict(False, [], unavailable=err.code)', '        return make_verdict(False, [err.code])'),
+        # Pre-launch drift guard bypassed: the end-of-run drift check still reports the
+        # change, so only the launch-state assertions catch it.
+        ('agent-eval declared adapter input', test_agent_eval, 'agent_eval', test_agent_eval.AdapterInputs,
+         'test_payload_changed_after_baseline_blocks_the_candidate_launch',
+         '    drifted = sorted({drift_reason(subject, kind) for subject, kind in drift if kind})',
+         '    drifted = []'),
+        ('agent-eval adapter input alias', test_agent_eval, 'agent_eval', test_agent_eval.AdapterInputs,
+         'test_input_directory_alias_retargeted_after_baseline_blocks_the_candidate_launch',
+         "    if resolved_location(lexical) != item['path']:",
+         '    if False:'),
     ]
     for label, module, attr, case_class, test, before, after in cases:
         original = getattr(module, attr)

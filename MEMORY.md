@@ -19,8 +19,9 @@ AGENTS.md and relevant source before relying on these notes.
   native TOML definitions. Namespaced guides avoid collisions with built-ins.
   51 are implicit; commit-pr, create-jira, new-feature and ui-guidelines stay explicit-only.
 - An override in `codex/overrides/` shadows its canonical source. The commit-pr override
-  once diverged from the corrected neutral command (review before commit); it was
-  removed so one publication contract exports to both editions.
+  once diverged from the corrected neutral command (review before commit); it and the
+  review-pr override were removed so one publication contract and one review contract
+  export to both editions.
 - Delivery skills (delivery, repo-context, verified-handoff), the delivery rule and
   commit-pr can be updated in an existing Claude home with `scripts/install-delivery.py`
   (hash manifest, explicit `--baseline` adoption, no settings/hooks). The broad
@@ -36,6 +37,24 @@ AGENTS.md and relevant source before relying on these notes.
   `>20`/`< 40` line rules are gone). Findings cite concrete consequences, not invented
   metrics; the rule opening reads as instruction guidance, not guaranteed enforcement. The
   Codex edition inherits it through the generated `rules.md`.
+- Quality outcomes share one vocabulary across the `code-quality` agent, `/quality-gate`,
+  `/review-pr`, `code-review-checklist` and the verification rule: findings are
+  runtime-reproduced, source-proven, unverified hypotheses or nonblocking suggestions;
+  missing required evidence is INCOMPLETE, an actual failure FAIL, a predeclared
+  inapplicable check NOT_APPLICABLE, and PASS covers only the declared completed scope.
+  No grades, synthetic indices or unmeasured metrics. Task-specific acceptance lives in
+  `delivery/references/acceptance-by-task.md`; optional repository measurements and their
+  disclosure/sandbox limits in `delivery/references/repository-measurements.md`. The
+  `verified-handoff` v1 receipt schema is unchanged.
+- Opt-in agent-guidance evaluation is documented in
+  `verified-handoff/references/agent-evaluation.md`: baseline vs candidate instruction
+  files, a six-case synthetic corpus, a caller-supplied trusted adapter, behavioural
+  graders outside solver inputs; a known candidate failure or regression is FAIL, else
+  unavailability or source drift is INCOMPLETE, else PASS for the declared selected scope;
+  unknown never zero, requested and observed model kept separate, source identity as
+  digests (no Git SHA field). Provider runs are opt-in, never automatic in CI or the
+  ordinary gate (offline fake-adapter tests run in CI); process separation is not an OS sandbox; raw results
+  stay private; a pilot is not efficacy proof. Inventory counts are unchanged.
 - `deep-read` and `investigate` (and their shadowing `codex/overrides/` bodies, so both
   editions) carry a shared evidence-reporting convention: label findings observed (source
   inspection vs an actual runtime capture — a source read is not proof the runtime path

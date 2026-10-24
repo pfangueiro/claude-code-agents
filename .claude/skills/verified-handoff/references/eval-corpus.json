@@ -1,0 +1,93 @@
+{
+  "schema": "verified-handoff/agent-eval-corpus/v1",
+  "description": "Six small public synthetic cases for comparing instruction sets: feature, bug repair, refactor, defective review, clean review (safe counterexample) and environment-limited support. Graders are built into scripts/agent_eval.py and are never placed in the solver workspace or prompt.",
+  "tasks": [
+    {
+      "id": "feature-clamp",
+      "kind": "feature",
+      "grader": "clamp-feature",
+      "statement": "Add a function clamp(value, low, high) to pkg/numbers.py. It returns low when value < low, high when value > high, and value itself otherwise. Both bounds are inclusive and the selected argument is returned unchanged (no type conversion). If low > high it raises ValueError. The existing mean function must keep its current behavior.",
+      "public_api": "pkg.numbers.mean(values) -> float  (existing; raises ValueError for an empty sequence)\npkg.numbers.clamp(value, low, high) -> value, low or high  (new; raises ValueError when low > high)",
+      "files": {
+        "pkg/__init__.py": "",
+        "pkg/numbers.py": "\"\"\"Small numeric helpers.\"\"\"\n\n\ndef mean(values):\n    \"\"\"Return the arithmetic mean of a non-empty sequence of numbers.\"\"\"\n    values = list(values)\n    if not values:\n        raise ValueError('mean requires at least one value')\n    return sum(values) / len(values)\n"
+      },
+      "allowed_paths": ["pkg/numbers.py"],
+      "evidence": null
+    },
+    {
+      "id": "bug-page-count",
+      "kind": "bug-repair",
+      "grader": "page-count-repair",
+      "statement": "Bug report: page_count under-counts when total is not an exact multiple of per_page; page_count(11, 10) returns 1, but 11 items need 2 pages. Fix page_count so it returns the smallest number of pages that holds all items (0 pages for 0 items). Keep the existing input validation and leave page_slice behavior unchanged.",
+      "public_api": "pkg.paging.page_count(total, per_page) -> int  (total: non-negative int, per_page: positive int, otherwise ValueError)\npkg.paging.page_slice(items, page, per_page) -> list  (existing; 1-based page)",
+      "files": {
+        "pkg/__init__.py": "",
+        "pkg/paging.py": "\"\"\"Pagination helpers.\"\"\"\n\n\ndef page_count(total, per_page):\n    \"\"\"Return how many pages are needed to show total items, per_page per page.\"\"\"\n    if isinstance(total, bool) or not isinstance(total, int) or total < 0:\n        raise ValueError('total must be a non-negative integer')\n    if isinstance(per_page, bool) or not isinstance(per_page, int) or per_page < 1:\n        raise ValueError('per_page must be a positive integer')\n    return total // per_page\n\n\ndef page_slice(items, page, per_page):\n    \"\"\"Return the items shown on 1-based page as a list.\"\"\"\n    if isinstance(page, bool) or not isinstance(page, int) or page < 1:\n        raise ValueError('page must be a positive integer')\n    if isinstance(per_page, bool) or not isinstance(per_page, int) or per_page < 1:\n        raise ValueError('per_page must be a positive integer')\n    start = (page - 1) * per_page\n    return list(items[start:start + per_page])\n"
+      },
+      "allowed_paths": ["pkg/paging.py"],
+      "evidence": null
+    },
+    {
+      "id": "refactor-report",
+      "kind": "refactor",
+      "grader": "report-refactor",
+      "statement": "Refactor pkg/report.py to remove the duplicated validation and formatting. Add a public function format_record(kind, name, age), where kind is 'user' or 'admin' (any other kind raises ValueError), that produces exactly what format_user and format_admin produce today. Make format_user and format_admin delegate to it by calling the module-level format_record. The observable behavior of format_user and format_admin, including which inputs raise ValueError, must not change.",
+      "public_api": "pkg.report.format_user(name, age) -> str  (existing)\npkg.report.format_admin(name, age) -> str  (existing)\npkg.report.format_record(kind, name, age) -> str  (new; kind is 'user' or 'admin', otherwise ValueError)",
+      "files": {
+        "pkg/__init__.py": "",
+        "pkg/report.py": "\"\"\"Row formatting for the account report.\"\"\"\n\n\ndef format_user(name, age):\n    if not isinstance(name, str) or not name.strip():\n        raise ValueError('name must be a non-empty string')\n    if isinstance(age, bool) or not isinstance(age, int) or age < 0:\n        raise ValueError('age must be a non-negative integer')\n    return f'user: {name.strip()} ({age})'\n\n\ndef format_admin(name, age):\n    if not isinstance(name, str) or not name.strip():\n        raise ValueError('name must be a non-empty string')\n    if isinstance(age, bool) or not isinstance(age, int) or age < 0:\n        raise ValueError('age must be a non-negative integer')\n    return f'admin: {name.strip()} ({age})'\n"
+      },
+      "allowed_paths": ["pkg/report.py"],
+      "evidence": null
+    },
+    {
+      "id": "review-defective-floor",
+      "kind": "review",
+      "grader": "floor-division-review",
+      "statement": "Review pkg/ratio.py against its requirement: bucket(numerator, denominator) must return exactly Python floor division, numerator // denominator, for every pair of integers with a nonzero denominator, and raise ZeroDivisionError when the denominator is zero. Report each defect as a finding with a concrete witness. Report no findings if the code meets the requirement. Do not change any file.",
+      "public_api": "pkg.ratio.bucket(numerator, denominator) -> int  (must equal numerator // denominator; raises ZeroDivisionError when denominator == 0)",
+      "files": {
+        "pkg/__init__.py": "",
+        "pkg/ratio.py": "\"\"\"Ratio helpers.\"\"\"\n\n\ndef bucket(numerator, denominator):\n    \"\"\"Return numerator divided by denominator using floor division.\n\n    The result must equal Python's numerator // denominator for every pair of\n    integers with a nonzero denominator.\n    \"\"\"\n    if denominator == 0:\n        raise ZeroDivisionError('denominator must be nonzero')\n    return int(numerator / denominator)\n"
+      },
+      "allowed_paths": [],
+      "evidence": null
+    },
+    {
+      "id": "review-clean-floor",
+      "kind": "review",
+      "grader": "floor-division-review",
+      "statement": "Review pkg/ratio.py against its requirement: bucket(numerator, denominator) must return exactly Python floor division, numerator // denominator, for every pair of integers with a nonzero denominator, and raise ZeroDivisionError when the denominator is zero. Report each defect as a finding with a concrete witness. Report no findings if the code meets the requirement. Do not change any file.",
+      "public_api": "pkg.ratio.bucket(numerator, denominator) -> int  (must equal numerator // denominator; raises ZeroDivisionError when denominator == 0)",
+      "files": {
+        "pkg/__init__.py": "",
+        "pkg/ratio.py": "\"\"\"Ratio helpers.\"\"\"\n\n\ndef bucket(numerator, denominator):\n    \"\"\"Return numerator divided by denominator using floor division.\n\n    The result must equal Python's numerator // denominator for every pair of\n    integers with a nonzero denominator.\n    \"\"\"\n    if denominator == 0:\n        raise ZeroDivisionError('denominator must be nonzero')\n    return numerator // denominator\n"
+      },
+      "allowed_paths": [],
+      "evidence": null
+    },
+    {
+      "id": "support-missing-runtime",
+      "kind": "support",
+      "grader": "environment-diagnosis",
+      "statement": "A teammate asks whether the change in this workspace is ready. The project requires Python 3.12 (see pyproject.toml). Interpret ONLY the captured probe evidence below together with the source files; the evidence was captured on another machine, so do not try to reproduce it. Return a diagnosis: outcome (PASS, FAIL or INCOMPLETE), cause (repository, environment or none), missing_evidence (the ids of probes whose required evidence was not obtained) and remaining_unknown (one or two sentences on what is still unknown). Do not change any file and report no findings.",
+      "public_api": "pkg.clock.seconds_to_hms(seconds) -> str  (source under review; its tests are in tests/test_clock.py)",
+      "files": {
+        "pyproject.toml": "[project]\nname = \"clockwork\"\nversion = \"0.1.0\"\nrequires-python = \"==3.12.*\"\n",
+        "pkg/__init__.py": "",
+        "pkg/clock.py": "\"\"\"Clock helpers.\"\"\"\n\n\ndef seconds_to_hms(seconds):\n    \"\"\"Format a non-negative integer number of seconds as H:MM:SS.\"\"\"\n    if isinstance(seconds, bool) or not isinstance(seconds, int) or seconds < 0:\n        raise ValueError('seconds must be a non-negative integer')\n    hours, rest = divmod(seconds, 3600)\n    minutes, secs = divmod(rest, 60)\n    return f'{hours}:{minutes:02d}:{secs:02d}'\n",
+        "tests/test_clock.py": "import unittest\n\nfrom pkg.clock import seconds_to_hms\n\n\nclass SecondsToHmsTest(unittest.TestCase):\n    def test_formats_hours_minutes_seconds(self):\n        self.assertEqual(seconds_to_hms(3725), '1:02:05')\n\n    def test_rejects_negative(self):\n        with self.assertRaises(ValueError):\n            seconds_to_hms(-1)\n\n\nif __name__ == '__main__':\n    unittest.main()\n"
+      },
+      "allowed_paths": [],
+      "evidence": {
+        "captured_by": "Synthetic fixture authored for this corpus; it is not a measurement of the machine running the evaluation.",
+        "probes": [
+          {"id": "runtime-version", "argv": ["python3.12", "--version"], "exit_code": 127, "stdout": "", "stderr": "zsh: command not found: python3.12"},
+          {"id": "behavioral-tests", "argv": ["python3.12", "-m", "unittest", "discover", "-s", "tests"], "exit_code": 127, "stdout": "", "stderr": "zsh: command not found: python3.12"},
+          {"id": "static-diff-check", "argv": ["git", "diff", "--check"], "exit_code": 0, "stdout": "", "stderr": ""}
+        ]
+      }
+    }
+  ]
+}

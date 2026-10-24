@@ -77,7 +77,8 @@ issue was created.
 - With no connector, returns the drafted issue rather than presenting a fake one
 
 ### `/review-pr` - Review Pull Request
-Reviews a pull request for code quality, security (OWASP), testing, and documentation.
+Independently reviews a pull request at its exact base/head for correctness, security
+(OWASP), language/framework hazards, tests and documentation.
 
 **Usage:**
 ```
@@ -85,10 +86,10 @@ Reviews a pull request for code quality, security (OWASP), testing, and document
 ```
 
 **Features:**
-- Fetches PR details and diff via `gh`
-- Analyzes code quality, security, testing, docs
-- Generates structured report (Critical/Suggestions/Nits)
-- Optionally posts review as GitHub comment
+- Discovers the available GitHub tools or `gh`, records the reviewed base/head SHAs and reads review policy from the trusted base
+- Validates candidate findings against triggers, affected callers and safe counterexamples; separates runtime-reproduced, source-proven and unverified findings from nonblocking suggestions
+- Reports missing required evidence as INCOMPLETE; no letter grades or unmeasured metrics
+- Posts comments or changes approval state only when already authorized, after rechecking the PR head
 
 ### `/security-scan` - Security Scan
 Scans the project or a specified path for security vulnerabilities.
@@ -153,7 +154,8 @@ Enforces strict RED-GREEN-REFACTOR cycle for implementing a function or feature.
 - Reports coverage if available
 
 ### `/quality-gate` - Pre-Commit Quality Gate
-Runs formatter, linter, type checker, and tests as a comprehensive quality check.
+Runs the project's required format, lint, type/build and behavioral checks with
+receipts and explicit incomplete outcomes.
 
 **Usage:**
 ```
@@ -163,11 +165,11 @@ Runs formatter, linter, type checker, and tests as a comprehensive quality check
 ```
 
 **Features:**
-- Auto-detects language and tooling (TS/JS, Python, Go, Rust)
-- Runs format check, lint, type check, and tests in order
-- `--fix` flag auto-fixes formatting and lint issues
-- `--strict` flag treats warnings as errors
-- Reports PASS/FAIL for each check
+- Discovers the project's own commands, scripts and CI policy (no tool downloads or fetching `npx`)
+- Selects tests by affected behavior, dependencies and consumer contracts
+- Runs behavioral checks even when formatting fails; `--fix` explicitly permits configured fixes, followed by rechecks
+- `--strict` flag treats warnings as failures within this gate
+- Reports PASS/FAIL/UNAVAILABLE/NOT_APPLICABLE per check and an overall FAIL, INCOMPLETE or PASS limited to the declared completed scope
 
 ### `/checkpoint` - Named Save Points
 Creates named checkpoints during complex work for comparison and explicit recovery. A

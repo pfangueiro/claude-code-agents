@@ -30,3 +30,15 @@ These rules guide verification within your authorized scope — expected practic
 - Never report a number you did not measure. If a figure is inferred or projected rather than observed, label it as an estimate — do not present it as measured.
 - State the basis of every quantitative claim: what was run, how many times, against what baseline. "Faster" without a before/after is an opinion.
 - Don't claim more precision than the method supports — round to what the measurement can actually resolve.
+
+## Required scope and evidence gaps
+
+- Predeclare required checks against the actual task and project policy. Use the
+  delivery acceptance-by-task resource for feature, fix, refactor, performance,
+  investigation and deployment evidence; honor dependency and consumer contracts.
+- An unavailable required check makes verification INCOMPLETE. A repository-attributed
+  failure is FAIL; an inapplicable check needs a declared scope/policy reason.
+  Neither missing evidence nor positive inventory/coverage counts establish PASS.
+- Keep confirmed source findings, runtime reproductions and unverified hypotheses
+  distinct. Validate review findings against safe counterexamples; no issue quota,
+  invented grade or confidence score substitutes for evidence.
