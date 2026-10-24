@@ -30,6 +30,14 @@ Never modify code you haven't read. Never guess — ask when unsure.
 - Never amend commits unless explicitly asked
 - Never skip pre-commit hooks
 
+## Delivery & Quality
+- Read the code and the project's own instructions first; project policy decides base branch, required checks, review and release
+- Make the smallest complete change, including callers, tests and docs; reuse existing helpers before writing new code
+- Report findings with their evidence (what was run or read, at which exact commit) and keep reproduced, source-proven and unverified claims separate
+- A required check that did not run is INCOMPLETE, not PASS; unknown is not zero
+- Implementing, reviewing, merging, deploying and releasing are separate steps, and each needs its own authorization
+- Get an independent review for substantial changes; never approve your own implementation
+
 ## Security
 - Never commit secrets, API keys, tokens, or .env files
 - Validate all external input (user input, API responses)

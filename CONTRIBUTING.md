@@ -38,8 +38,10 @@ that native test when no CLI exists. Do not call that skip an end-to-end pass.
   - `docs/<scope>` — documentation only
   - `chore/<scope>` — internal cleanup
   - `refactor/<scope>` — restructure without behavior change
-- Open a PR against `main`. CI (`.github/workflows/validate.yml`) runs `./validate.sh` on every PR.
-- One reviewer minimum before merge. Squash-merge is the default.
+- Open a PR against `main`. On every PR, CI (`.github/workflows/validate.yml`) runs `./validate.sh`, the gap
+  mutation suite, the Codex adapter tests and mutation controls, and the shell-syntax and YAML checks.
+- One reviewer minimum before merge, following [Review and acceptance](#review-and-acceptance).
+  Squash-merge is the default.
 
 ## Commit messages
 
@@ -100,42 +102,49 @@ If a defect genuinely cannot be guarded, say so explicitly in the PR and add it 
    ```bash
    bash -n install.sh validate.sh quick-install.sh global-config/hooks/*.sh global-config/daemon/*.sh
    ```
-3. **Healthcheck round-trip** — if you changed `session-start-healthcheck.sh`:
+3. **Healthcheck round-trip** — if you changed `session-start-healthcheck.sh`, run the deployed copy
+   from a throwaway install, never against your real `HOME`:
    ```bash
-   ~/.claude/hooks/session-start-healthcheck.sh && echo OK
+   FAKE=$(mktemp -d); HOME="$FAKE" ./install.sh --update >/dev/null
+   HOME="$FAKE" "$FAKE/.claude/hooks/session-start-healthcheck.sh" && echo OK
    ```
-4. **Drift-and-heal test** — if you touched `sync_hooks` or any reconciler. This is a gap test:
-   inject the drift, confirm the heal, restore. Do it in a **throwaway `HOME`**, not your real one:
+4. **Drift-and-reconcile test** — if you touched `sync_hooks` or any reconciler. This is a gap test:
+   inject the drift, confirm that an explicit `--update` reconciles it, then restore. Do it in a
+   **throwaway `HOME`**, not your real one:
    ```bash
    FAKE=$(mktemp -d)
    HOME="$FAKE" ./install.sh --update >/dev/null      # seed an isolated install
-   jq 'del(.env.CLAUDE_CODE_EFFORT_LEVEL)' "$FAKE/.claude/settings.json" | sponge "$FAKE/.claude/settings.json"
+   S="$FAKE/.claude/settings.json"; T=$(mktemp "$FAKE/settings.XXXXXX")
+   jq 'del(.statusLine) | del(.env.BASH_DEFAULT_TIMEOUT_MS) | del(.env.CLAUDE_CODE_EFFORT_LEVEL)' "$S" > "$T" && mv "$T" "$S"
    HOME="$FAKE" ./install.sh --update >/dev/null
-   jq -r '.env.CLAUDE_CODE_EFFORT_LEVEL' "$FAKE/.claude/settings.json"   # -> "xhigh"
+   jq -c '[.statusLine.command, .env.BASH_DEFAULT_TIMEOUT_MS, (.env | has("CLAUDE_CODE_EFFORT_LEVEL"))]' "$S"
+   # -> ["~/.claude/statusline.sh","60000",false]
    ```
-   **Know which drift shapes your reconciler actually heals, and do not assume.** The policies
+   **Know which drift shapes your reconciler actually reconciles. Do not assume.** The policies
    differ per key, and they are not interchangeable:
 
    | Key | Missing | Drifted value |
    |---|---|---|
-   | `.hooks`, `.permissions`, `.attribution`, `.statusLine` | restored | **restored** (replace-on-drift) |
-   | `.env.*` | restored | **not restored** — the env merge is *add-only*, so your values survive |
+   | `.hooks` (framework bindings, by exact command path), `.permissions`, `.attribution`, `.statusLine` | restored | **restored** (replace-on-drift; foreign hook bindings are kept) |
+   | `.env.*` except `CLAUDE_CODE_EFFORT_LEVEL` | restored | **not restored** — the env merge is *add-only*, so your values survive |
+   | `.env.CLAUDE_CODE_EFFORT_LEVEL` | **left absent** on an existing settings file (only a fresh seed carries `xhigh`) | **not restored**; an unsupported value is reported, never rewritten |
 
-   So the missing-key test above passes, while `CLAUDE_CODE_EFFORT_LEVEL="low"` survives an
-   `--update` unchanged. That is intentional for `.env`. If you change any of it, gap-test **both
-   columns** — a reconciler that adds a missing key but ignores a wrong one heals nothing in
-   practice, and you cannot tell the two apart without running them.
+   So the test above restores the status line and the timeout, and the deleted effort level
+   stays absent. `CLAUDE_CODE_EFFORT_LEVEL="low"` also survives an `--update` unchanged. Both are
+   intentional. If you change any of this, gap-test **every row and both columns**: a reconciler
+   that adds a missing key but ignores a wrong one repairs nothing in practice, and you cannot
+   tell the two apart without running them.
 5. **Run what your docs tell users to run.** If your change documents a command, execute it, then
    re-run `./validate.sh` and check `git status` **including ignored files**. Running a shipped
    Python script once dropped a `__pycache__/` into the source tree, turned `validate.sh --quick`
-   red on a clean checkout, and handed the watchdog drift it could not heal — an hourly loop caused
-   by following the README. See [FAILURE-MODES.md §8](./docs/FAILURE-MODES.md#8-following-the-documentation-must-not-break-the-framework).
+   red on a clean checkout and, under the since-retired self-heal watchdog, caused an hourly loop
+   just because someone followed the README. See [FAILURE-MODES.md §8](./docs/FAILURE-MODES.md#8-following-the-documentation-must-not-break-the-framework).
 
 ## Adding components
 
 | Component | Where it lives | Required parts |
 |---|---|---|
-| **Agent** | `.claude/agents/<name>.md` | YAML frontmatter with `name`, `description`, `tools`; add row to CLAUDE.md agents table; add patch function in `install.sh` if it might appear in older CLAUDE.md installs |
+| **Agent** | `.claude/agents/<name>.md` | YAML frontmatter with `name`, `description`, `tools`; add row to CLAUDE.md agents table; add the name to the `AGENTS` array in `install.sh` (the installer copies and prunes only listed agents) and a `### <name>` entry in `.claude/skills/execute/references/agent-selection.md` (validated) |
 | **Skill** | `.claude/skills/<name>/SKILL.md` | YAML frontmatter with `name`, `description`; add category line in CLAUDE.md Skills section |
 | **Command** | `.claude/commands/<name>.md` | YAML frontmatter with `description`, `argument-hint`; add bullet in CLAUDE.md Developer Workflow Commands |
 | **Rule** | `.claude/rules/<name>.md` | Plain markdown; no frontmatter required — rules are always-on |
@@ -148,24 +157,39 @@ allowlists or model aliases into invented Codex settings.
 
 ## Updating an installation
 
-The framework installs once, user-global, to `~/.claude`, so it applies to every
-project on the machine. After pulling a new version, run `./install.sh --update` to
-reconcile `~/.claude` — or let the self-healing watchdog / SessionStart healthcheck
-reconcile it automatically.
+The framework installs once, user-global, so it applies to every project on the machine.
+Updates are explicit and run in the foreground. Pull, then follow
+[Upgrading an existing installation](INSTALL.md#upgrading-an-existing-installation):
+the delivery manifest first (if it exists), the broad `./install.sh --update` second, Codex
+`./install-codex.sh --user` separately, then the read-only checks. Nothing reconciles
+automatically. The broad installer replaces same-name files; the delivery and Codex
+installers refuse customized or foreign files instead of overwriting them.
 
-For Codex, repeat `./install-codex.sh --user` in the installation's Python environment,
-then run `--user --check`. It reports customized/foreign files instead of overwriting
-them, preserves runtime configuration and does not install a self-healing daemon.
+## Observe-only health checks
 
-## Self-healing safety net
+The SessionStart healthcheck (`global-config/hooks/session-start-healthcheck.sh`) and the
+opt-in launchd watchdog (`global-config/daemon/claude-framework-watchdog.sh`) only observe.
+They log findings to `~/.claude/analytics/framework-health.jsonl` (drift as
+`manual_repair_required`, the watchdog verdict as `validation_result`), and they never run an
+installer or repair anything. If your change touches them or the statusline, verify in a
+disposable `HOME` that clean state is still reported as clean and drift as drift. Also run the
+guards that protect the observe-only contract: `bash tests/gap/run.sh --prove --jobs 4`, and
+`python3 -m unittest discover -s tests/codex -v` (which includes the background-health and
+health-status tests). Full runbook: **[SELF-HEALING.md](./SELF-HEALING.md)**.
 
-The framework reconciles its own deployed state via:
-- **SessionStart healthcheck** (`global-config/hooks/session-start-healthcheck.sh`)
-- **launchd watchdog** (`global-config/daemon/claude-framework-watchdog.sh`)
+## Review and acceptance
 
-If your change touches reconciliation logic, also verify that both still exit `0`
-on clean state and log to `~/.claude/analytics/framework-health.jsonl` correctly.
-Full runbook: **[SELF-HEALING.md](./SELF-HEALING.md)**.
+The canonical procedures are `.claude/rules/verification.md`, `.claude/rules/code-quality.md`,
+`/review-pr`, `/quality-gate`, `code-review-checklist` and
+`.claude/skills/delivery/references/acceptance-by-task.md`. In short:
+
+- Report concrete findings with their evidence class: runtime-reproduced, source-proven,
+  unverified hypothesis or nonblocking suggestion. Do not use grades or invented metrics.
+- Name the exact base and head SHA you reviewed. A new commit needs a new verdict.
+- Report PASS, FAIL or INCOMPLETE for the declared scope. A required check that did not run
+  is INCOMPLETE, and unknown is not zero.
+- Reviewers do not review their own implementation. Implement, review, merge, deploy and
+  release are separate states, and each needs its own authorization.
 
 ## Code style
 

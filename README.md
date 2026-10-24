@@ -122,9 +122,28 @@ every mode; source inspection runs no fsmonitor, filter or hook. Foreign or cust
 files and symlinked destinations are refused before writing. A `commit-pr.md` copied by
 an earlier full install is adopted only with `--baseline <full commit SHA>` whose
 shipped bytes match it exactly; uninstall then restores those original bytes. Caught
-write errors roll back; a process kill or power loss mid-write is not guaranteed to. A
-later `./install.sh --update` may rewrite the same files; `--check` then reports drift
-and the delivery installer refuses to overwrite or remove the changed bytes.
+write errors roll back; a process kill or power loss mid-write is not guaranteed to. The
+broad `./install.sh --update` also copies these files by basename. When it writes the bytes
+the manifest records (the same clean source commit), the manifest stays clean. When it
+writes different bytes (for example, if you run it first after a pull), `--check` fails
+and the delivery installer refuses to overwrite or remove them. When upgrading, run the
+delivery installer first; see
+[Upgrading an existing installation](INSTALL.md#upgrading-an-existing-installation).
+
+### Quality, review and evaluation
+
+Both editions share one evidence-based quality contract:
+
+| Need | Use | Outcome |
+|---|---|---|
+| Review a change | `/review-pr` ([command](.claude/commands/review-pr.md)), the `code-quality` agent, [`code-review-checklist`](.claude/skills/code-review-checklist/SKILL.md) | Findings at an exact base/head, classed as runtime-reproduced, source-proven, unverified or nonblocking; INCOMPLETE when required evidence is missing |
+| Run required checks | `/quality-gate` ([command](.claude/commands/quality-gate.md)), `verified-handoff` receipts | Per-check PASS/FAIL/UNAVAILABLE/NOT_APPLICABLE; overall FAIL, INCOMPLETE or PASS for the completed scope |
+| Decide what counts as done | [Acceptance by task](.claude/skills/delivery/references/acceptance-by-task.md), [repository measurements](.claude/skills/delivery/references/repository-measurements.md) | Task-specific evidence; unknowns are reported, never counted as zero |
+| Compare instruction changes | [Agent evaluation](.claude/skills/verified-handoff/references/agent-evaluation.md) | Opt-in baseline vs candidate on a synthetic corpus; a pilot is not proof of efficacy |
+
+The contract uses no grades and no unmeasured metrics. The 2026-10-24 acceptance of this
+contract is archived as a [historical record](docs/archive/quality-outcomes-2026-10-24/VALIDATION.md).
+It records observations at those revisions and does not certify the current tree.
 
 Open a session in a project and describe the work:
 
@@ -263,7 +282,7 @@ conflict rather than being overwritten. [Full Codex instructions](codex/README.m
 | `./install.sh` | Install **core** to `~/.claude`: agents, skills, commands, rules, core hooks, statusline, settings. Analytics, watchdog and notifications are opt-in (below) |
 | `./install.sh [--with-analytics] [--with-watchdog] [--with-notifications]` | Add the opt-in components: dashboard assets + `claude-obs` alias; the launchd watchdog (macOS); the desktop notify hook. Default-off; omitting a flag on an existing install preserves that component |
 | `./install.sh --dry-run` | Print every path **this selection** would touch — changes nothing |
-| `./install.sh --update` | Reconcile an existing install to the latest version |
+| `./install.sh --update` | Reconcile `~/.claude` to the checked-out source (pull first). Replaces same-name framework files and drifted framework settings keys; follow the [upgrade procedure](./INSTALL.md#upgrading-an-existing-installation) |
 | `./install.sh --upgrade` | Migrate from an old per-project install: reconcile, confirm + tear down old copies, then self-verify ([details](./INSTALL.md#upgrading-from-the-old-per-project-framework)) |
 | `./install.sh --uninstall` | Remove the framework from `~/.claude` — snapshots first, asks first ([details](./INSTALL.md#uninstallation)) |
 | `./install.sh --help` | Show all options |
@@ -321,7 +340,7 @@ your actual `$HOME`.
 | `~/.claude/rules/` | 7 rule `.md` files | Replaced |
 | `~/.claude/lib/` | 4 reference files (templates, patterns, coordination, MCP guide) | Replaced |
 | `~/.claude/hooks/` | 6 core `.sh` hooks (+`chmod +x`) always, plus 2 analytics hooks (`--with-analytics`) and 1 notify hook (`--with-notifications`); 2 reference `.json` configs | Framework-named hooks replaced; **foreign hooks are preserved** (no broad prune); retired framework names pruned by name |
-| `~/.claude/output-styles/concise.md` | Code-first output style | Written on first install |
+| `~/.claude/output-styles/concise.md` | Code-first output style | Replaced on drift by install, `--update` and `--upgrade`; removed by `--uninstall` |
 | `~/.claude/statusline.sh` | Status bar script | Replaced only when it differs from source |
 | `~/.claude/analytics/` | `collector.py`, `server.py`, `dashboard.html`, `schema.sql` | **Only with `--with-analytics`**; a customized copy is preserved, not overwritten |
 | `~/.claude/daemon/` | Watchdog script | **Only with `--with-watchdog`** (**macOS only**) |
@@ -447,7 +466,7 @@ Threat model, reporting, and the repo's security posture: **[SECURITY.md](./SECU
 | `/new-feature` | `/new-feature PROJ-123 desc` | Create feature branch from latest main |
 | `/create-jira` | `/create-jira epic Title` | Create JIRA issue and assign to you |
 
-### Developer Workflow (new in v2.5.0)
+### Developer Workflow
 
 | Command | Usage | What It Does |
 |---------|-------|-------------|
@@ -530,15 +549,15 @@ claude mcp add github -- npx -y @modelcontextprotocol/server-github
 
 ---
 
-## Auto-Enforced Rules
+## Always-Loaded Rules
 
-Seven rule files in `~/.claude/rules/` are automatically loaded by Claude Code in every session:
+The installer places seven rule files in `~/.claude/rules/`, which Claude Code loads as user-level instructions in every session. The rules guide the model. Native permissions and sandboxing enforce access boundaries:
 
 - **security.md** — No secrets in commits, parameterized queries, input validation, security headers, least privilege
 - **code-quality.md** — No dead code, single responsibility, early returns, explicit error handling, descriptive naming
 - **fix-quality.md** — Root cause analysis before fixing, never suppress errors, minimal changes, test-driven fixing
-- **verification.md** — Verify after every implementation, run tests, build to catch errors, test-driven bug fixes
-- **framework-integrity.md** — Hooks must enforce invariants, state reconciles automatically, snapshots have documented restore paths
+- **verification.md** — Verify after every implementation, run tests, build to catch errors, test-driven bug fixes; PASS/FAIL/INCOMPLETE from evidence, with unknown never counted as zero
+- **framework-integrity.md** — Hooks must enforce invariants or produce evidence; read-only checkers detect drift, and only an explicit installer run repairs it; snapshots have documented restore paths
 - **anti-anchoring.md** — Name the obvious pick + a non-obvious alternative + a trap on open-ended judgment calls; escalate consequential open decisions to `/diverge`
 - **delivery.md** — Route implementation outcomes through `/delivery` with a default role pair that owner or project instructions override; report states only from receipts
 
@@ -599,6 +618,8 @@ See [EXTENSIBILITY.md](./EXTENSIBILITY.md) for the complete guide on Skills, MCP
 ---
 
 ## Usage Examples
+
+These examples are illustrative. The model picks specialists by judgment, so a real session may take a different path. Name a specialist or workflow explicitly when you need a specific one.
 
 **Building a feature:**
 ```
@@ -692,7 +713,7 @@ Installed only with `./install.sh --with-analytics` (default-off); the collector
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/my-feature`)
-3. Run `./validate.sh` to verify everything passes
+3. Run `./validate.sh`, `bash tests/gap/run.sh --prove --jobs 4` and the Codex suite ([what to test](./CONTRIBUTING.md#what-to-test-before-opening-a-pr))
 4. Commit your changes (`git commit -m 'feat: add my feature'`)
 5. Push and open a Pull Request
 
@@ -722,13 +743,13 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 - [GitHub Issues](https://github.com/pfangueiro/claude-code-agents/issues)
 - [GitHub Discussions](https://github.com/pfangueiro/claude-code-agents/discussions)
-- Update: `./install.sh --update`
+- Update: [upgrade an existing installation](INSTALL.md#upgrading-an-existing-installation)
 
 ---
 
 <div align="center">
 
-**No configuration. No commands. Just describe what you need.**
+**Describe the task, or name the workflow or specialist you want.**
 
 
 </div>

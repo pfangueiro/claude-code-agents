@@ -25,7 +25,14 @@ AGENTS.md and relevant source before relying on these notes.
 - Delivery skills (delivery, repo-context, verified-handoff), the delivery rule and
   commit-pr can be updated in an existing Claude home with `scripts/install-delivery.py`
   (hash manifest, explicit `--baseline` adoption, no settings/hooks). The broad
-  installer can later rewrite the same paths; the delivery installer then refuses.
+  installer copies the same paths by basename. Identical committed bytes keep the manifest
+  clean. Different bytes at a managed path make the delivery installer refuse (fail closed,
+  nothing written). Upgrade order is delivery first, broad `--update` second, Codex
+  separately (INSTALL.md). Recovery proves the bytes against HEAD and never edits or
+  deletes the manifest.
+- The broad Claude `install.sh` owns by basename. It replaces same-name personal files,
+  takes no backup, and replaces `.permissions`, `.attribution`, `.statusLine` and framework
+  hook bindings on drift. `.env` is add-only and `CLAUDE.md` is seed-only.
 - Availability of a workflow is not an execution or an enforced gate. Report delivery
   states only from receipts; no watcher, daemon, auto-merge or hook trust exists.
 - Native custom routing is host-dependent. Guide discovery is verified; guide prose
@@ -141,7 +148,13 @@ AGENTS.md and relevant source before relying on these notes.
   `docs/archive/legacy-skills-integration.md` (see `docs/archive/README.md`). Keep their
   dates, SHAs and counts verbatim; current inventory and limits stay in README, INSTALL
   and `codex/FEATURES.md`.
-- Global discovery passed in two unrelated repositories and a nested directory.
+- The 2026-10-24 quality-outcomes acceptance (reviewed head `f02861d`, squash `3d501c8`,
+  identical tree) is archived at `docs/archive/quality-outcomes-2026-10-24/VALIDATION.md`.
+  It records fixed observations at those revisions and does not certify later commits. Its
+  paired pilot showed no efficacy gain. The root cause of one earlier PR CI gap-control
+  failure is unknown.
+- On 2026-10-12 (archived), global discovery passed in two unrelated repositories and a
+  nested directory.
   Actual Codex/Claude reviewers reproduced one synthetic boundary defect without
   changing fixture source. This is representative validation, not every workflow.
 - Fetch before publishing: another machine can advance main. Preserve published SHAs;

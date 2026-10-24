@@ -86,7 +86,7 @@ Claude Code provides four powerful mechanisms for extending its capabilities. Ea
 - Provide knowledge, Claude executes actions
 
 **Key Characteristics**:
-- 🔵 Automatic activation
+- 🔵 Model-selected by relevance, or invoked explicitly
 - 🔵 Shared context with main conversation
 - 🔵 Knowledge-focused, not execution-focused
 - 🔵 Can reference other skills and agents
@@ -138,12 +138,12 @@ Claude Code provides four powerful mechanisms for extending its capabilities. Ea
 **What**: Specialized agents that handle complex tasks in isolated contexts.
 
 **How They Work**:
-- Triggered automatically based on keywords or by other agents
+- Selected or delegated by model judgment from their descriptions, or named explicitly
 - Run in complete isolation
 - Return results to parent context
 
 **Key Characteristics**:
-- 🟠 Automatic or agent-triggered activation
+- 🟠 Model-selected, delegated or explicitly named
 - 🟠 Complete context isolation
 - 🟠 Task-focused execution
 - 🟠 Can use skills and MCP
@@ -306,7 +306,7 @@ MongoDB, Supabase, and hundreds of other libraries.
 ## How It Works
 
 1. User asks: "Show me React hooks documentation"
-2. Skill activates based on keyword matching
+2. The model judges the skill relevant from its description (or the user names it)
 3. Skill uses MCP tool to resolve "react" → "/facebook/react"
 4. Skill fetches documentation focused on "hooks"
 5. Claude presents documentation to user
@@ -416,13 +416,14 @@ Subagents are specialized agents (defined in `.claude/agents/`) that execute com
 └── performance-optimizer.md
 ```
 
-### Auto-Activation
+### Selection
 
-Agents activate automatically based on natural language:
+The model chooses or delegates to agents by judgment from their descriptions. Activation is
+not guaranteed, so name an agent explicitly when you need it:
 
 ```
 User: "Design a REST API for user authentication"
-→ Triggers: architecture-planner + api-backend agents
+→ Typically selected: architecture-planner, then api-backend
 ```
 
 ### Agents vs Skills
@@ -431,7 +432,7 @@ User: "Design a REST API for user authentication"
 |--------|--------|--------|
 | **Context** | Shared | Isolated |
 | **Purpose** | Provide knowledge | Execute tasks |
-| **Activation** | Automatic (relevance) | Automatic (keywords) |
+| **Activation** | Model judgment from description, or explicit | Model judgment from description, delegation, or explicit |
 | **Execution** | In main conversation | Separate subprocess |
 | **Result** | Knowledge applied | Deliverable returned |
 
@@ -476,6 +477,10 @@ Agents can use skills:
 ---
 
 ## Integration Patterns
+
+These flows are illustrative. The model selects skills and agents by judgment from their
+descriptions, so a real session can take a different path. Name a skill, command or agent
+explicitly when you need it.
 
 ### Pattern 1: Skill + MCP
 
@@ -598,7 +603,7 @@ Results aggregated and returned
 
 #### Use an MCP Server When:
 - ✅ You need external data or services
-- ✅ Tool invocation should be sandboxed
+- ✅ The capability belongs behind a separate server and host permission boundary
 - ✅ Multiple skills/agents need the same capability
 - ✅ You want to leverage existing MCP servers
 
@@ -611,7 +616,7 @@ Results aggregated and returned
 #### Use a Subagent When:
 - ✅ Task requires complete isolation
 - ✅ Complex multi-step execution
-- ✅ Should auto-activate on keywords
+- ✅ A description clear enough for the model to select it (or users name it)
 - ✅ Deliverable needs to be returned
 
 ### Combination Decision Tree
@@ -640,7 +645,7 @@ Results aggregated and returned
         │                   │
         ▼                   ▼
     Use Slash          Use Skill
-    Command            (auto-activates)
+    Command            (model-selected)
 
 Need external data? → Add MCP Server
 ```
@@ -815,7 +820,7 @@ User: "API response time went from 200ms to 2s"
 
 1. **Specialization**
    - Clear domain boundaries
-   - Focused activation keywords
+   - A focused description of when to use the agent
    - Specific deliverables
 
 2. **Model Selection**
@@ -851,7 +856,7 @@ python3 .claude/skills/skill-creator/scripts/quick_validate.py \
 
 ```bash
 # Check if MCP server is configured
-claude-code mcp list
+claude mcp list
 
 # Test MCP tool invocation
 # (done within Claude Code conversation)
@@ -869,12 +874,12 @@ claude-code mcp list
 ### Testing Agents
 
 ```bash
-# Test agent activation
-# Use activation keywords in conversation
+# Test agent selection: describe a matching task, or name the agent explicitly.
+# Selection is model judgment, so a natural-language request may pick another agent.
 
 # Example:
 # "Check security of authentication flow"
-# → Should trigger security-auditor agent
+# → Expected to select security-auditor; "Use security-auditor to ..." names it explicitly
 ```
 
 ---

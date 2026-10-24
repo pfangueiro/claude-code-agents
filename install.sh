@@ -783,8 +783,9 @@ _upgrade_resolve_dir() {
     printf '%s\n' "$dir"
 }
 
-# Self-verify tail for --upgrade ONLY. Observe-only: runs validate.sh --quick WITHOUT --heal
-# (--heal reaches install --update, a deletion path, and always exits 0). Honest tri-state.
+# Self-verify tail for --upgrade ONLY. Observe-only: runs validate.sh --quick (no --heal; that
+# flag is retired and validate.sh rejects it with exit 2 — it once reached install --update, a
+# deletion path, and always exited 0). Honest tri-state.
 _upgrade_self_verify() {
     if [ -x "$SCRIPT_DIR/validate.sh" ]; then
         local rc=0
@@ -1420,7 +1421,7 @@ install_watchdog() {
     # A launchd label is MACHINE-GLOBAL, not per-HOME. Loading a plist from a temporary HOME
     # under the same label silently REPLACES the user's live registration, and when that temp
     # directory is deleted the job points at a plist that no longer exists — the watchdog stops
-    # healing and nothing announces it. This was not theoretical: it happened on this machine
+    # running and nothing announces it. This was not theoretical: it happened on this machine
     # while sandbox-testing `--update`, and the registration had to be repaired by hand.
     local _rh _u
     _u=$(id -un 2>/dev/null || echo "")
@@ -1486,12 +1487,13 @@ install_watchdog() {
         fi
 
         # Reload the daemon if the plist CONTENT changed since it was last loaded.
-        # (The watchdog SCRIPT self-updates via launchd re-exec each interval; a plist
+        # (A re-copied watchdog SCRIPT takes effect at the next launchd run; a plist
         # change — StartInterval, paths — needs a reload.) A marker tracks the loaded
-        # plist's sha so we only reload on a real change. Under the watchdog's OWN
-        # --update (CLAUDE_WATCHDOG_RUN=1) we DEFER — a bootout there would kill the
-        # in-flight run; the next SessionStart-triggered --update (detached from the
-        # daemon) applies it safely, and the marker stays stale until it does.
+        # plist's sha so we only reload on a real change. CLAUDE_WATCHDOG_RUN=1 marks a run
+        # from inside the watchdog's own process. The observe-only watchdog no longer runs
+        # the installer; the guard stays for compatibility and isolated tests. A bootout
+        # there would kill the in-flight run, so we DEFER: the marker stays stale and the
+        # next explicit foreground --with-watchdog installer run applies the reload.
         local _loaded_sha=""
         [ -f "$_plist_marker" ] && _loaded_sha=$(cat "$_plist_marker" 2>/dev/null)
         if [ -z "$_loaded_sha" ]; then
@@ -1499,7 +1501,7 @@ install_watchdog() {
         elif [ -n "$_plist_sha" ] && [ "$_plist_sha" != "$_loaded_sha" ]; then
             if [ "${CLAUDE_WATCHDOG_RUN:-}" = "1" ]; then
                 _health_log "\"event\":\"plist_reload_deferred\",\"reason\":\"under_watchdog\""
-                print_skip "Watchdog plist changed — reload deferred (under watchdog; next session applies)"
+                print_skip "Watchdog plist changed — reload deferred (under watchdog; the next explicit --with-watchdog installer run applies it)"
             else
                 launchctl bootout "gui/$uid/com.claude-code-agents.framework-watchdog" 2>/dev/null || true
                 launchctl bootstrap "gui/$uid" "$plist_dst" 2>/dev/null || true
@@ -1509,14 +1511,14 @@ install_watchdog() {
             fi
         fi
 
-        # After a load/reload the watchdog's hourly timer resets, so its next health log is
-        # up to StartInterval (~1h) away — which makes the statusline's freshness check show a
-        # transient ⚠ (stale) right after a SUCCESSFUL install. Fix it two ways, skipping the
-        # watchdog's own --update (CLAUDE_WATCHDOG_RUN=1 — already running, a self-kick re-enters):
-        #   1. kickstart the daemon so it does a real health check now (async — logs in a few s);
-        #   2. stamp a fresh health event SYNCHRONOUSLY and drop the statusline's 60s cache, so
-        #      the bar's freshness check is satisfied immediately (the async kick lands behind
-        #      the cache). Both best-effort — never fail the install on them.
+        # After a load/reload the watchdog's hourly timer resets, so its next observe-only
+        # validation_result could be up to StartInterval (~1h) away. These steps are best-effort,
+        # never fail the install, and are skipped under CLAUDE_WATCHDOG_RUN=1 (a self-kick
+        # would re-enter an in-flight run):
+        #   1. kickstart the daemon so it records a real validation_result now (async);
+        #   2. append an install_reconciled diagnostic event and drop the statusline's 60s cache
+        #      so the bar re-reads the evidence. The stamp is diagnostic only: the statusline
+        #      certifies ✓ solely from an admitted watchdog validation_result, never from it.
         if [ "${CLAUDE_WATCHDOG_RUN:-}" != "1" ]; then
             launchctl kickstart "gui/$uid/com.claude-code-agents.framework-watchdog" 2>/dev/null \
                 && print_skip "Kicked watchdog to run a health check now"
@@ -1605,8 +1607,8 @@ update_installation() {
     # Concurrency guard: prevent two concurrent --update runs from racing on
     # ~/.claude/settings.json (jq read-modify-write isn't atomic). Portable
     # lockfile via `mkdir` (atomic on POSIX filesystems) — macOS bash lacks
-    # flock(1). Non-blocking: if another install is running, exit cleanly so
-    # the healthcheck-hook / watchdog self-heal loop doesn't log errors.
+    # flock(1). Non-blocking: if another install is running, exit cleanly, so a
+    # concurrent explicit run backs off instead of racing it.
     local lock_dir="$HOME/.claude/.install.lock.d"
     local lock_pid_file="$lock_dir/pid"
     mkdir -p "$HOME/.claude" 2>/dev/null || true
@@ -1702,7 +1704,7 @@ print_summary() {
     echo -e "\n${BOLD}Installed to:${NC} ~/.claude (user-global — active in every project)"
 
     echo -e "\n${BOLD}=== Quick Start ===${NC}"
-    echo "Just use natural language and agents will auto-activate:"
+    echo "Describe the task naturally; the model selects a specialist or skill, or name one explicitly:"
     echo ""
     echo '  📝 "Design a REST API for user management"'
     echo '  🔒 "Check this code for security issues"'
@@ -1966,7 +1968,8 @@ cmd_uninstall() {
         return 1
     fi
 
-    # Daemon first: stop it before deleting what it heals, or it may reinstall mid-uninstall.
+    # Daemon first: stop it before deleting the files it observes, so no cycle runs
+    # validation or snapshots against a half-removed install.
     if [ -f "$_WATCHDOG_PLIST" ]; then
         launchctl unload "$_WATCHDOG_PLIST" 2>/dev/null || true
         rm -f "$_WATCHDOG_PLIST"
@@ -2028,8 +2031,8 @@ main() {
             echo -e "${BOLD}Running in UPGRADE mode (reconcile + interactive legacy teardown + self-verify)${NC}"
             check_prerequisites
             preflight_checks
-            # Concurrency lock (extracted helper, same scheme as update_installation) so a human
-            # --upgrade can't race the hourly watchdog --update on settings.json. --update's own
+            # Concurrency lock (extracted helper, same scheme as update_installation) so an
+            # --upgrade can't race another explicit installer run on settings.json. --update's own
             # inline lock is left untouched.
             _acquire_install_lock || exit 0
             # Reconcile core — duplicated from update_installation (which is NOT called, so its
