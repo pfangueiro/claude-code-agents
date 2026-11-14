@@ -230,6 +230,8 @@ POLL_SECONDS = 0.05
 SCAN_SECONDS = 0.2
 GROUP_PROBE_SECONDS = 2.0
 REAP_SECONDS = 2.0
+IDENTITY_ACQUIRE_SECONDS = 2.0  # bound on re-observing a just-spawned bootstrap's full identity
+IDENTITY_RETRY_SECONDS = 0.01
 SYSTEM_QUERY_TIMEOUT = 5.0
 PUBLISH_RETRIES = 50
 MAX_ARGV = 4096
@@ -1072,11 +1074,48 @@ def _start_bootstrap(dir_fd: int, attempt_path: str, env: dict, token: str, inte
     return popen, write_fd
 
 
+def _acquire_identity(intent: dict, intent_sha: str, popen: subprocess.Popen,
+                      token: str) -> dict | None:
+    """The COMPLETE identity of the bootstrap this process just spawned, or None.
+
+    Popen returns once the child has reached exec, which can be before the OS exposes the
+    new argv (Linux /proc/<pid>/cmdline reads empty while the new image is installed), so
+    one capture can miss the token of a healthy bootstrap. The same full capture is
+    repeated, never weakened. An identity is admitted only while our own unreaped child is
+    still running and IDENTITY_ACQUIRE_SECONDS has not passed, and both are checked before
+    each capture and again after it completes: a capture that finishes late, or after the
+    child exited, is discarded even when it is complete. None in every such case.
+
+    The bound limits admission and retries, not the duration of this call. A capture is
+    several OS queries, each individually bounded by SYSTEM_QUERY_TIMEOUT, and one already
+    in flight can finish after the bound, so the call itself may return later than
+    IDENTITY_ACQUIRE_SECONDS. Nothing is signalled and no partial identity is ever returned.
+    """
+    deadline = time.monotonic() + IDENTITY_ACQUIRE_SECONDS
+    while True:
+        if not _acquisition_open(popen, deadline):
+            return None
+        identity = _capture_identity(intent, intent_sha, popen.pid, token)
+        if not _acquisition_open(popen, deadline):
+            return None  # late or orphaned: not admitted, even if the capture is complete
+        if identity is not None:
+            return identity
+        time.sleep(max(0.0, min(IDENTITY_RETRY_SECONDS, deadline - time.monotonic())))
+
+
+def _acquisition_open(popen: subprocess.Popen, deadline: float) -> bool:
+    """True while our own child is unreaped and running and the acquisition bound has not passed."""
+    return popen.poll() is None and time.monotonic() < deadline
+
+
 def spawn(attempt, environment: Mapping[str, str] | None = None) -> 'Pending':
     """Start the anchored bootstrap for a persisted intent; it launches nothing until release.
 
     If this controller dies before release, the pipe's only writer closes and the
-    bootstrap exits without launching the command.
+    bootstrap exits without launching the command. The bootstrap's full identity must be
+    observed within a short admission bound before anything is persisted; if it stays
+    unobservable, is only observed after the bound, or the bootstrap exits first, this
+    refuses with 'identity-unavailable', closes the release channel and launches nothing.
     """
     root, name = _attempt_parts(attempt)
     attempt_path = os.path.join(root, name)
@@ -1090,7 +1129,7 @@ def spawn(attempt, environment: Mapping[str, str] | None = None) -> 'Pending':
         env = _launch_environment(os.environ if environment is None else environment, intent)
         token = secrets.token_hex(16)
         popen, release_fd = _start_bootstrap(dir_fd, attempt_path, env, token, intent_sha)
-        identity = _capture_identity(intent, intent_sha, popen.pid, token)
+        identity = _acquire_identity(intent, intent_sha, popen, token)
         try:
             if identity is None:
                 raise ProcessError('identity-unavailable')

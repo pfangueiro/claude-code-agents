@@ -57,6 +57,13 @@ FORBIDDEN_FLAGS = ('--model', '-m', '--permission-mode', '--dangerously-skip-per
                    '--allowedTools', '--sandbox', '-s', '--full-auto', '--ask-for-approval',
                    '--dangerously-bypass-approvals-and-sandbox', '--resume', '-c', '--config')
 PASS_TIMEOUT = 900
+DIAG_RUNS, DIAG_ROWS, DIAG_TAIL = 4, 12, 1500  # bounds of the failure-only diagnosis
+# Allowlisted status fields only: no environment, prompt, launch identity or receipt body.
+DIAG_KEYS = {'tasks': ('id', 'state', 'result', 'failures', 'hold', 'reason'),
+             'attempts': ('id', 'task_id', 'role', 'profile_id', 'state', 'outcome', 'attribution', 'reason'),
+             'effects': ('id', 'task_id', 'kind', 'state', 'reason'),
+             'evidence': ('task_id', 'kind', 'status', 'passed', 'reasons')}
+DIAG_PLAN_KEYS = ('id', 'state', 'stale', 'hold', 'outcome', 'reason')
 ALPHA = 'def value():\n    return 1 + 1\n'
 BETA = 'def value():\n    return 3\n'
 GAMMA = 'import alpha\n\n\ndef value():\n    return alpha.value() * 10\n'
@@ -124,6 +131,17 @@ def task(task_id, scope, checks, deps=()):
             'acceptance': [f'{task_id} behaves as its declared checks require']}
 
 
+class Diagnosis:
+    """Assertion message rendered by unittest only after the assertion has already failed, so
+    it adds no work and no failure mode to a passing run and changes no acceptance."""
+
+    def __init__(self, headline, render):
+        self.headline, self.render = headline, render
+
+    def __str__(self):
+        return f'{self.headline}\n{self.render()}'
+
+
 class ControllerHarness(unittest.TestCase):
     """Disposable environment, operator CLI, evidence readers and safe cleanup shared by the
     controller acceptance modules. It declares no scenario."""
@@ -134,7 +152,7 @@ class ControllerHarness(unittest.TestCase):
 
     def setUp(self):
         self.root = Path(os.path.realpath(tempfile.mkdtemp(prefix='ctl-accept-')))
-        self.procs, self.profiles = [], []
+        self.procs, self.profiles, self.run_log = [], [], []
         self.state, self.policy_path = self.root / 'state', None
         self.addCleanup(self._cleanup)
         for name in ('home', 'tmp', 'bin', 'pathbin', 'accounts', 'logs'):
@@ -277,6 +295,8 @@ class ControllerHarness(unittest.TestCase):
 
     def run_once(self):
         done = self.cli('run', '--once', timeout=PASS_TIMEOUT)
+        self.run_log.append({'code': done.returncode, 'stderr': done.stderr[-DIAG_TAIL:],
+                             'stdout': done.stdout[-DIAG_TAIL:]})
         self._engine_present(done.stderr)
         return done
 
@@ -296,6 +316,52 @@ class ControllerHarness(unittest.TestCase):
             if still >= 2:
                 break
         return codes, self.status()
+
+    # ---- failure diagnostics (messages only; no assertion depends on them) --------------
+
+    def explain(self, headline, report=None):
+        return Diagnosis(headline, lambda: self.diagnosis(report))
+
+    @staticmethod
+    def _brief(row, keys):
+        if not isinstance(row, dict):
+            return {}
+        brief = {key: row[key] for key in keys if key in row}
+        result = row.get('result')
+        if isinstance(result, dict) and 'reason' in result:
+            brief['result_reason'] = result['reason']
+        return brief
+
+    @staticmethod
+    def _bounded(value):
+        return json.dumps(value, default=str, sort_keys=True)[:DIAG_TAIL]
+
+    def diagnosis(self, report=None):
+        """Bounded context for a failed scenario assertion: exit code and output tails of the
+        last `run --once` calls (the engine states its holds there), then allowlisted task,
+        attempt, effect, evidence and plan fields, the checks run and the review verdicts."""
+        first = max(len(self.run_log) - DIAG_RUNS, 0)
+        lines = [f"run {first + offset}: exit {run['code']}; stderr tail {run['stderr']!r}; "
+                 f"stdout tail {run['stdout']!r}" for offset, run in enumerate(self.run_log[first:])]
+        report = report if isinstance(report, dict) else {}
+        status = report.get('status') if isinstance(report.get('status'), dict) else {}
+        for section, keys in DIAG_KEYS.items():
+            rows = status.get(section) or []
+            lines.append(f'{section} ({len(rows)}): '
+                         + self._bounded([self._brief(row, keys) for row in rows[-DIAG_ROWS:]]))
+        plans = report.get('plans') or []
+        lines.append(f'plans ({len(plans)}): '
+                     + self._bounded([self._brief(row, DIAG_PLAN_KEYS) for row in plans[-DIAG_ROWS:]]))
+        owned = report.get('owned_work') if isinstance(report.get('owned_work'), dict) else {}
+        lines.append(f"control {status.get('control')!r}; owned_work "
+                     + self._bounded({key: len(rows) for key, rows in owned.items() if isinstance(rows, list)}))
+        checks = [{key: row.get(key) for key in ('check', 'ok', 'detail', 'head', 'files')}
+                  for row in self.checks_run()[-DIAG_ROWS:]]
+        lines.append(f'checks run (last {DIAG_ROWS}): ' + self._bounded(checks))
+        reviews = [{key: row.get(key) for key in ('task_id', 'verdict', 'files', 'range_ok')}
+                   for row in self.events('end') if row.get('role') == 'review'][-DIAG_ROWS:]
+        lines.append(f'reviews (last {DIAG_ROWS}): ' + self._bounded(reviews))
+        return '\n'.join(lines)
 
     def start_run(self):
         index = len(self.procs)
@@ -550,8 +616,8 @@ class ControllerEngineAcceptance(ControllerHarness):
         codes, report = self.drive()
         tasks = {t['id']: t for t in report['status']['tasks']}
         self.assertEqual({tid: t['state'] for tid, t in tasks.items()},
-                         dict.fromkeys('ABC', 'accepted'), f'run outcomes {codes}')
-        self.assertEqual(codes[-1], 0, 'final run did not report PASS')
+                         dict.fromkeys('ABC', 'accepted'), self.explain(f'run outcomes {codes}', report))
+        self.assertEqual(codes[-1], 0, self.explain('final run did not report PASS', report))
         self.assertTrue(report['requests'] and all(r['status'] == 'admitted' for r in report['requests']))
         self.assert_native_turns()
 
@@ -644,7 +710,7 @@ class ControllerEngineAcceptance(ControllerHarness):
 
         codes, report = self.drive()
         tasks = {t['id']: t for t in report['status']['tasks']}
-        self.assertEqual(tasks['T']['state'], 'accepted', f'run outcomes {codes}')
+        self.assertEqual(tasks['T']['state'], 'accepted', self.explain(f'run outcomes {codes}', report))
         self.assertEqual(codes[-1], 0)
         self.assertEqual(tasks['T']['failures'], 0)
         attempts = [a for a in report['status']['attempts'] if a['role'] == 'implement']
@@ -677,7 +743,8 @@ class ControllerEngineAcceptance(ControllerHarness):
         self.submit('combined', [task('P', ['plugins/p.py'], ['plugins']),
                                  task('Q', ['plugins/q.py'], ['plugins'])])
         codes, report = self.drive()
-        self.assertNotEqual(codes[-1], 0, 'a known-defective integrated candidate ended PASS')
+        self.assertNotEqual(codes[-1], 0,
+                            self.explain('a known-defective integrated candidate ended PASS', report))
         self.assert_native_turns()
         for tid, own, other in (('P', 'plugins/p.py', 'plugins/q.py'), ('Q', 'plugins/q.py', 'plugins/p.py')):
             passed = self.reviews(lambda r, tid=tid: r['task_id'] == tid and r['verdict'] == 'PASS'
@@ -691,7 +758,8 @@ class ControllerEngineAcceptance(ControllerHarness):
             self.assertEqual(row['verdict'], 'FAIL')
         failed_checks = [c for c in self.checks_run() if not c['ok']
                          and {'plugins/p.py', 'plugins/q.py'} <= set(c['files'])]
-        self.assertTrue(combined or failed_checks, 'no whole-result gate examined the combined result')
+        self.assertTrue(combined or failed_checks, self.explain(
+            f'no whole-result gate examined the combined result (run outcomes {codes})', report))
         peak, live = 0, 0
         for row in self.events():
             if row['event'] in ('start', 'end'):

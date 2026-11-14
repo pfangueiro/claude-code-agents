@@ -304,6 +304,47 @@ def run_to_settled(owned, expected='exited', timeout=25.0):
     return recovery
 
 
+def finalize_lost(attempt, owned, timeout=15.0):
+    """providers.finalize for a handle whose bootstrap was killed without an exit record.
+
+    Its exit status may not be collectable yet, and finalize correctly refuses with
+    'bootstrap-unreaped' until this process has reaped its own Popen. Only that refusal is
+    retried, within a monotonic bound; every retry polls the handle's own Popen through
+    OwnedProcess.finalize. Returns (outcome, refusals seen).
+    """
+    deadline = time.monotonic() + timeout
+    refusals = 0
+    while True:
+        try:
+            return providers.finalize(attempt, owned), refusals
+        except providers.ProcessError as err:
+            if err.code != 'bootstrap-unreaped' or time.monotonic() >= deadline:
+                raise
+            refusals += 1
+        time.sleep(0.05)
+
+
+class DelayedReap:
+    """Stands in for an OwnedProcess's own Popen whose exit status is not collectable yet:
+    the first `misses` polls report it unreaped, then the real Popen answers."""
+
+    def __init__(self, popen, misses):
+        self._popen, self.misses, self.pid, self.returncode = popen, misses, popen.pid, None
+
+    def poll(self):
+        if self.misses > 0:
+            self.misses -= 1
+            return None
+        self.returncode = self._popen.poll()
+        return self.returncode
+
+    def wait(self, timeout=None):
+        if self.misses > 0:
+            raise subprocess.TimeoutExpired('bootstrap', timeout)
+        self.returncode = self._popen.wait(timeout=timeout)
+        return self.returncode
+
+
 class StubHandle:
     """Scripted Recovery sequence for providers.settle(); the last state repeats."""
 
@@ -1361,10 +1402,41 @@ class LifecycleTests(unittest.TestCase):
         os.killpg(owned.identity['pgid'], signal.SIGKILL)  # positively identified group only
         self.assertTrue(wait_until(lambda: owned.poll().state == 'lost'))
         self.assertFalse(providers.recover(attempt).relaunch_safe)
-        outcome = providers.finalize(attempt, owned)
+        # SIGKILL leaves no exit record, so the killed bootstrap may not be reapable yet.
+        outcome, _refusals = finalize_lost(attempt, owned)
         self.assertEqual(outcome.category, 'interrupted')
         self.assertIn('termination-lost', outcome.reasons)
         self.assertFalse(outcome.execution_admitted)
+        self.assertFalse(providers.recover(attempt).relaunch_safe)
+
+    def test_lost_finalize_is_refused_until_own_bootstrap_is_reaped(self):
+        """Deterministic delayed-reap control: while this handle's own bootstrap is unreaped the
+        guard refuses and records nothing; once it is reaped the same lost outcome follows."""
+        env = self.ws.plan(events=claude_events()[:1], sleep=30, marker=str(self.marker))
+        attempt = self.ws.attempt('claude')
+        owned = self.launch(attempt, env)
+        self.assertTrue(wait_until(self.marker.exists))
+        self.assertEqual(cp.identify(owned.identity), 'owned')
+        os.killpg(owned.identity['pgid'], signal.SIGKILL)  # positively identified group only
+        real = owned._popen
+        real.wait(timeout=15)  # this test's own child: now provably dead and collected
+        self.assertTrue(wait_until(lambda: providers.recover(attempt).state == 'lost'))
+        delayed = DelayedReap(real, misses=5)
+        owned._popen = delayed
+        record_path = providers.process_attempt(attempt) / cp.RECORD
+        with self.assertRaises(providers.ProcessError) as ctx:
+            providers.finalize(attempt, owned)
+        self.assertEqual(ctx.exception.code, 'bootstrap-unreaped')  # the guard is retained
+        self.assertFalse(record_path.exists())  # a refusal records nothing
+        self.assertFalse(providers.recover(attempt).relaunch_safe)
+        outcome, refusals = finalize_lost(attempt, owned)
+        self.assertGreaterEqual(refusals, 1)  # refused again until the delayed reap completed
+        self.assertEqual(delayed.misses, 0)
+        self.assertTrue(record_path.exists())
+        self.assertEqual(outcome.category, 'interrupted')
+        self.assertIn('termination-lost', outcome.reasons)
+        self.assertFalse(outcome.execution_admitted)
+        self.assertFalse(providers.recover(attempt).relaunch_safe)
 
     def test_reattached_controller_sees_running_attempt_and_can_stop_it(self):
         env = self.ws.plan(events=claude_events()[:1], sleep=30, marker=str(self.marker))

@@ -107,6 +107,19 @@ while not os.path.exists(sys.argv[1]) and time.monotonic() < deadline:
 '''
 
 
+class ShiftedClock:
+    """The real time module, with a monotonic clock a test can advance."""
+
+    def __init__(self):
+        self.offset = 0.0
+
+    def monotonic(self) -> float:
+        return time.monotonic() + self.offset
+
+    def __getattr__(self, name):
+        return getattr(time, name)
+
+
 def write_private(path: Path, data: bytes) -> None:
     if os.path.lexists(path):
         os.unlink(path)
@@ -326,6 +339,133 @@ class LifecycleTest(unittest.TestCase):
         self.assertFalse(marker.exists())
         self.assert_code('release-channel-closed', pending.release)
         self.assert_code('attempt-already-spawned', cp.spawn, attempt)
+
+    def journal_events(self, attempt: Path) -> list:
+        try:
+            data = (attempt / 'journal.jsonl').read_bytes()
+        except FileNotFoundError:
+            return []
+        return [json.loads(line) for line in data.split(b'\n')[:-1]]
+
+    def wait_journal(self, attempt: Path, kind: str, timeout=20.0) -> list:
+        deadline = time.monotonic() + timeout
+        while True:
+            events = self.journal_events(attempt)
+            if kind in [event['event'] for event in events]:
+                return events
+            if time.monotonic() >= deadline:
+                self.fail(f'journal never recorded {kind}: {[event["event"] for event in events]}')
+            time.sleep(0.05)
+
+    def withheld_capture(self, misses=None):
+        """Seam for the identity observations of a spawn: the first `misses` captures report
+        the bootstrap unobservable (None = every capture), then the REAL _capture_identity
+        runs against the real held bootstrap. No identity is ever manufactured here."""
+        real, calls = cp._capture_identity, []
+
+        def capture(intent, intent_sha, pid, token):
+            calls.append(pid)
+            if misses is None or len(calls) <= misses:
+                return None
+            return real(intent, intent_sha, pid, token)
+        return mock.patch.object(cp, '_capture_identity', side_effect=capture), calls
+
+    def test_spawn_acquires_full_identity_after_transient_unobservable_capture(self):
+        marker = self.base / 'ran.txt'
+        attempt = self.prepare('acquire-1', [self.helper('marker.py', MARKER), str(marker)])
+        patched, calls = self.withheld_capture(misses=1)
+        with patched:
+            pending = self.spawn(attempt)  # a one-shot capture refuses here: identity-unavailable
+        self.assertGreaterEqual(len(calls), 2)
+        identity = pending.identity
+        self.assertEqual(set(calls), {identity['pid']})  # only this spawn's own child was observed
+        self.assertEqual(set(identity), cp.IDENTITY_KEYS)
+        intent_bytes = (attempt / 'intent.json').read_bytes()
+        recaptured = cp._capture_identity(json.loads(intent_bytes), hashlib.sha256(intent_bytes).hexdigest(),
+                                          identity['pid'], identity['token'])
+        self.assertEqual(identity, recaptured)  # the real full capture of the held bootstrap
+        self.assertEqual(json.loads((attempt / 'spawn.json').read_bytes())['identity'], identity)
+        self.assertEqual(cp.identify(identity), 'owned')
+        events = self.wait_journal(attempt, 'bootstrap-started')  # up, and blocked on the gate
+        self.assertEqual([(event['event'], event['pid']) for event in events],
+                         [('bootstrap-started', identity['pid'])])
+        self.assertEqual(cp.recover(attempt).state, 'awaiting-release')
+        self.assertFalse((attempt / 'release.json').exists())
+        self.assertFalse(marker.exists())  # nothing ran before Pending.release
+        owned = pending.release()
+        self.handles.append(owned)
+        self.wait_path(marker)
+        self.wait_state(owned, {'exited'})
+        record = owned.finalize()
+        self.assertEqual(record['identity'], identity)
+        self.assertIs(record['executionSuccess'], True, record['reasons'])
+
+    def test_spawn_refuses_permanently_unobservable_identity_and_launches_nothing(self):
+        marker = self.base / 'ran.txt'
+        attempt = self.prepare('acquire-2', [self.helper('marker.py', MARKER), str(marker)])
+        patched, calls = self.withheld_capture()
+        started = time.monotonic()
+        with patched, mock.patch.object(cp, 'IDENTITY_ACQUIRE_SECONDS', 0.3):
+            self.assert_code('identity-unavailable', cp.spawn, attempt)
+        elapsed = time.monotonic() - started
+        self.assertGreater(len(calls), 1)  # re-observed within the bound, then refused
+        self.assertLess(elapsed, 0.3 + cp.REAP_SECONDS + 5.0)  # bounded acquisition and reap
+        self.assertFalse((attempt / 'spawn.json').exists())  # no identity was persisted
+        self.assertFalse((attempt / 'release.json').exists())
+        events = self.wait_journal(attempt, 'aborted')  # the release channel was closed
+        self.assertEqual([(event['event'], event.get('reason')) for event in events],
+                         [('bootstrap-started', None), ('aborted', 'release-channel-closed')])
+        self.assertEqual(cp.recover(attempt), cp.Recovery('not-launched', True, None, 'spawn-incomplete'))
+        self.assertFalse(marker.exists())
+        self.assert_code('attempt-already-spawned', cp.spawn, attempt)
+
+    def test_spawn_refuses_complete_identity_captured_after_the_bound(self):
+        marker = self.base / 'ran.txt'
+        attempt = self.prepare('acquire-4', [self.helper('marker.py', MARKER), str(marker)])
+        real, clock, calls, late = cp._capture_identity, ShiftedClock(), [], []
+
+        def capture(intent, intent_sha, pid, token):
+            calls.append(pid)
+            identity = real(intent, intent_sha, pid, token)  # the real held bootstrap
+            if identity is not None:  # the capture is complete, but it took too long
+                late.append(identity)
+                clock.offset += cp.IDENTITY_ACQUIRE_SECONDS + 1.0
+            return identity
+
+        with mock.patch.object(cp, 'time', clock), \
+                mock.patch.object(cp, '_capture_identity', side_effect=capture):
+            with self.assertRaises(cp.ProcessError) as ctx:
+                self.spawn(attempt)  # tracked, so an admitted late identity is still aborted
+        self.assertEqual(ctx.exception.code, 'identity-unavailable')
+        self.assertEqual(len(late), 1)  # one complete capture was made, and it was refused
+        self.assertEqual(set(late[0]), cp.IDENTITY_KEYS)
+        self.assertEqual(set(calls), {late[0]['pid']})
+        self.assertFalse((attempt / 'spawn.json').exists())  # the late identity was not persisted
+        self.assertFalse((attempt / 'release.json').exists())
+        events = self.wait_journal(attempt, 'aborted')  # the release channel was closed
+        self.assertEqual([(event['event'], event.get('reason')) for event in events],
+                         [('bootstrap-started', None), ('aborted', 'release-channel-closed')])
+        self.assertEqual(events[0]['pid'], late[0]['pid'])  # the refused capture was of this bootstrap
+        self.assertEqual(cp.recover(attempt), cp.Recovery('not-launched', True, None, 'spawn-incomplete'))
+        self.assertFalse(marker.exists())
+        self.assert_code('attempt-already-spawned', cp.spawn, attempt)
+
+    def test_spawn_fails_closed_promptly_when_child_exits_while_unobservable(self):
+        marker = self.base / 'ran.txt'
+        attempt = self.prepare('acquire-3', [self.helper('marker.py', MARKER), str(marker)])
+        patched, calls = self.withheld_capture()
+        started = time.monotonic()
+        # The interpreter cannot open this bootstrap script, so the real child exits by itself.
+        with patched, mock.patch.object(cp, 'BOOTSTRAP_SCRIPT', str(self.base / 'no-bootstrap.py')), \
+                mock.patch.object(cp, 'IDENTITY_ACQUIRE_SECONDS', 120.0):
+            self.assert_code('identity-unavailable', cp.spawn, attempt)
+        self.assertLess(time.monotonic() - started, 30.0)  # ended by the child's exit, not the bound
+        self.assertTrue(calls)
+        self.assertFalse((attempt / 'spawn.json').exists())
+        self.assertFalse((attempt / 'release.json').exists())
+        self.assertEqual(self.journal_events(attempt), [])  # the bootstrap never ran
+        self.assertEqual(cp.recover(attempt), cp.Recovery('not-launched', True, None, 'spawn-incomplete'))
+        self.assertFalse(marker.exists())
 
     def test_parent_death_before_release_launches_nothing(self):
         marker = self.base / 'ran.txt'

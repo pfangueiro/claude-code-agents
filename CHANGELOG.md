@@ -313,6 +313,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- CI (`codex-adapter` job): the clean environment is now created with
+  `python3 -m venv --copies`, so its interpreter is a job-owned regular file rather than a
+  symlink into the shared tool cache. Before that step, a new read-only
+  `tests/controller/runtime_preflight.py --observe` records the tool-cache interpreter's
+  uid/mode and `_executable_binding` result. After it, the same preflight runs in enforce
+  mode and fails the job before dependency install and tests unless the interpreter binds
+  and a boot identity is available. The controller's executable ownership/mode gate is
+  unchanged.
+- Controller `spawn` bootstrap identity: Popen can return before Linux exposes the new
+  argv (`/proc/<pid>/cmdline` can read empty during exec), so one capture could miss the
+  token of a healthy bootstrap. `_acquire_identity` now repeats the same full capture (boot,
+  process start, group, token in argv) within `IDENTITY_ACQUIRE_SECONDS`. Before and after
+  each capture it checks that the deadline has not passed and that this process's own
+  unreaped child is still running. A capture that completes late or after the child exits
+  is discarded. Nothing is persisted or released unless a full identity is admitted within
+  the window; otherwise `spawn` refuses with `identity-unavailable`, closes the release
+  channel and launches nothing. The bound governs admission and retries only. Each OS query
+  keeps its existing `SYSTEM_QUERY_TIMEOUT`, so the call has no hard wall-clock guarantee.
+  Owner, mode, start, token and group checks, record schemas, legacy handling and captured
+  settlement meaning are unchanged.
+- Controller provider tests: the lost-supervisor negative control now waits, within a
+  bounded deadline, for its own bootstrap to be reaped. `finalize_lost` retries only the
+  `bootstrap-unreaped` refusal, and the guard itself is retained. A deterministic
+  delayed-reap control shows a refusal records nothing. Fixture failures now report the
+  observed recovery state, and cleanup keeps the evidence directory and lists unresolved
+  attempts, with no change to acceptance criteria or time budgets. Hosted-runner results
+  are not claimed here; the exact runner interpreter UID and mode are unknown until the CI
+  preflight records them.
 - `remote-triggers` no longer prescribes an unverified `RemoteTrigger` payload, a
   hardcoded model, or fixed interval, timezone and lifetime claims (input `f343c57`).
 - `scheduled-tasks` (input `f343c57`): session cron jobs are restored on `--resume` or
