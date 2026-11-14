@@ -138,6 +138,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Documentation for setting up another laptop (input `889658e`). INSTALL.md gains one
+  canonical *Setting up another laptop* checklist, and README, `codex/README.md` and
+  `MEMORY.md` link to it. A clone or pull is source only. Each host installs the editions
+  it needs with its own prerequisites, native CLIs and login. A fresh install previews
+  first and privately backs up existing native files. An existing install inspects its
+  installed state and local changes before pulling, then follows the unchanged upgrade
+  order. The upgrade preview marks Claude-only and Codex-only lines, and a one-edition
+  upgrade skips the other edition's steps. Codex inspection runs `framework-status.py`
+  and `--check` in its Python environment before pulling; version drift is not proof of
+  local edits, and refusals are investigated whatever the SHAs. Readiness records a
+  benign read-only native task per checked profile; one eligible profile suffices. INSTALL
+  states that `jq` is needed to seed and reconcile `settings.json`, that
+  `framework-status.py` exit `0` can include `not_installed`, and that the optional
+  controller is set up per repository and host, with its state and worktrees never
+  transferred to another host (private local backups remain allowed). No installer,
+  runtime or test change.
 - `remote-triggers` (input `f343c57`) is now a procedure. It discovers the live tool schema
   and account scope, requires explicit authority for each create, update, run or send,
   and reports the tool's own receipt. It links the official routines and scheduled-tasks

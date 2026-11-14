@@ -33,6 +33,20 @@ AGENTS.md and relevant source before relying on these notes.
 - The broad Claude `install.sh` owns by basename. It replaces same-name personal files,
   takes no backup, and replaces `.permissions`, `.attribution`, `.statusLine` and framework
   hook bindings on drift. `.env` is add-only and `CLAUDE.md` is seed-only.
+- Another laptop: a clone or pull transports source only. It brings no install, update,
+  repair, account, MCP, hook trust, credentials or local state. Each host runs the
+  installers it needs with its own prerequisites (Claude: git, curl, and jq to seed and
+  reconcile settings, plus Python 3.11+ for the delivery/status scripts it runs; Codex: a
+  Python 3.11+ venv from `codex/requirements.txt`). It then
+  checks installed SHAs, `--quick`/`--check`, and a benign read-only native task recorded
+  per checked profile (open/login/`--help` alone is not readiness; one eligible profile
+  suffices; no substitution claims or account/credential changes to pass). Existing
+  installs inspect before pulling, then follow the one upgrade procedure; a one-edition
+  upgrade skips the other edition's steps. The canonical
+  checklist is INSTALL.md *Setting up another laptop*: link to it rather than duplicating
+  its commands. Controller state, locks, bindings and worktrees stay per host and
+  repository: never transfer them to another host as a migration (private local backups
+  remain appropriate).
 - Availability of a workflow is not an execution or an enforced gate. Report delivery
   states only from receipts; no watcher, daemon, GitHub auto-merge or hook trust exists.
 - Optional local persistent delivery: `delivery/scripts/controller*.py` including the

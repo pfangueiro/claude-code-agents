@@ -4,6 +4,82 @@ Both integrations are user-global by default and apply across projects for that 
 Choose one or install both from the same checkout; their runtime directories are separate.
 Project instructions and alternate profiles can change effective behavior.
 
+## Setting up another laptop
+
+Cloning or pulling this repository gets the **source only**. Nothing installs, updates,
+repairs or sets up accounts by itself. On each laptop, each user runs the installer for
+every edition they want, with their own prerequisites, native CLIs, login and profiles,
+and then verifies the result.
+
+- **Source of truth.** Use reviewed `main` from GitHub. Before installing, confirm that the
+  exact commit you checked out (`git rev-parse HEAD`) was reviewed and that GitHub CI passed
+  at that SHA.
+- **What does not travel.** Framework Git carries no local state, preferences, credentials,
+  sessions, MCP connections or hook trust. Do not commit or copy credentials as a way to
+  set up a laptop. A project's committed instructions come with that project's own
+  repository. Syncing this framework does not bring other projects' overrides.
+- **Prerequisites are local.** Install the prerequisites for the commands you will run. Claude needs `git`, `curl` and `jq` (see
+  [Prerequisites](#prerequisites)). `scripts/install-delivery.py` and `scripts/framework-status.py`
+  need Python 3.11+. Codex needs Python 3.11+ and a virtual environment
+  built from `codex/requirements.txt`. Reuse that environment for later updates and checks.
+  If a Codex install is present, `framework-status.py` also needs those declared
+  dependencies for its read-only Codex check. A broad-Claude-only host with no delivery
+  manifest can check with `./validate.sh --quick` and the `.framework-version` marker
+  instead; it does not need Python just for this summary.
+  You install and log in to only the native CLIs and profiles of the editions you selected;
+  choosing one edition never requires installing the other.
+
+**Fresh machine, or the framework is not installed yet.** Clone, then follow
+[Codex user-global installation](#codex-user-global-installation) and/or
+[Install (one command, user-global)](#install-one-command-user-global) for the editions
+you want. Even without the framework, the native CLIs may already hold personal
+configuration or files with the same names under `~/.claude`, `~/.codex` or
+`~/.agents/skills`. Run each installer's `--dry-run` first and review what it would
+replace ([ownership](#exactly-what-each-path-gets-and-what-happens-on-re-install)). Then
+privately back up the affected files that already exist, adapting the
+[backup pattern](#2-take-a-verified-private-backup) to the paths actually present. An empty
+home has nothing to back up.
+
+**The framework is already installed on this laptop.** Do not pull first. Follow
+[Upgrading an existing installation](#upgrading-an-existing-installation) from step 1. It
+records the installed and checkout SHAs and inspects local changes and customizations
+*before* `git pull --ff-only`. Then it previews, backs up, updates the delivery manifest
+(only if one exists), runs the broad Claude update, updates Codex separately, checks, and
+has you restart sessions. A one-edition upgrade skips the other edition's steps. Keep your local work: commit it or move it aside. Never
+`git reset --hard` or force-reset to get a clean checkout.
+
+**Done means checked, for each edition you selected:**
+
+- The installed SHA matches the reviewed checkout. Claude's `sha=` in
+  `~/.claude/.framework-version` is abbreviated, and `python3 scripts/framework-status.py`
+  reports each integration's installed source SHA.
+- `./validate.sh --quick` (Claude) and `./install-codex.sh --user --check` (Codex) succeed.
+  Run `python3 scripts/install-delivery.py --claude-home "$HOME/.claude" --check` only if
+  `~/.claude/.sdlc-delivery/manifest.json` exists.
+- `framework-status.py` exits `0` even when an integration is `not_installed`. If you asked
+  for that edition, it is not ready.
+- Resource integrity, `--help`, `--version`, or a CLI that opens with a cached login do
+  not show that models and tools run. After the local install, give each selected profile
+  you check a small, benign, read-only task in a native session (for example, summarise a
+  file in this checkout without editing anything). Record the result per profile: CLI,
+  tool, login, runtime, quota and task outcome, or unknown. A failure or transient quota
+  makes that profile INCOMPLETE/unknown, not the whole edition; normal workflow
+  availability needs one eligible profile, not every account at once. Profiles and routing
+  the owner already authorized may be used, but report which profile actually passed.
+  Never present a substitute as the original, enroll accounts, or change credentials,
+  permissions or billing to make a check pass.
+- Start new sessions of the selected CLIs so the updated files load.
+- Configure MCP servers and review optional Codex hook trust on this laptop, and only if you
+  need them ([MCP](#mcp-servers-are-not-auto-installed),
+  [Codex hooks](codex/README.md)).
+
+**Optional persistent delivery controller.** The workflows work without it, and it never
+runs automatically. If you want it, set it up separately for each repository and host,
+with local profiles, authority files and state. It provides no remote, fleet or task
+migration. Do not copy controller ledgers, locks, Git bindings or linked worktrees to
+another laptop. Requirements and setup are in the
+[operator guide](docs/PERSISTENT-DELIVERY.md#requirements).
+
 ## Codex user-global installation
 
 Use Python 3.11+ and the same Python environment for later updates/checks:
@@ -210,9 +286,11 @@ are listed in the [README](./README.md#mcp-integration).
 
 ### Prerequisites
 
-`git` and `curl` are required. `jq` and `npx` are optional — `jq` is what reconciles
-`settings.json`, so without it the hook/permission/statusline reconcile is skipped; `npx` is only used
-by the MCP setup commands you run yourself.
+`git` and `curl` are required: the prerequisite check stops without them. Install `jq` as
+well. The prerequisite check lists it as optional, but `jq` seeds and reconciles
+`settings.json`. Without it, seeding a missing `settings.json` refuses and leaves the file
+unwritten, and the hook/permission/statusline reconcile is skipped. `npx` is only used by
+the MCP setup commands you run yourself.
 
 ## The background daemon (opt-in — `--with-watchdog`, macOS)
 
@@ -292,13 +370,26 @@ The delivery installer and the broad update both copy the five delivery paths. I
 
 ```bash
 cd claude-code-agents
-git status --short                                   # expect no output: the installers read this checkout
+git status --short                                   # both: expect no output; the installers read this checkout
+# Claude only (skip if Claude is not selected):
 grep '^sha=' ~/.claude/.framework-version; git rev-parse --short HEAD
 ./validate.sh --quick                                # before pulling, while HEAD equals the installed sha
+# Codex only (skip if Codex is not selected), in the Python environment of the Codex install:
+[ -f .venv/bin/activate ] && . .venv/bin/activate    # if you built it here; otherwise activate the environment you used
+python3 scripts/framework-status.py                  # compare Codex installed_source_sha with the repository SHA
+./install-codex.sh --user --check
+# Both:
 git pull --ff-only
+# Claude only:
 ./install.sh --dry-run                               # add the same --with-* flags you will pass to --update
 diff <(jq -S .permissions ~/.claude/settings.json) <(jq -S .permissions global-config/settings.json.template)
 ```
+
+**One edition only.** Claude only: skip the Codex lines above and the Codex parts of steps 2, 6 and 7. Codex only: skip every Claude line above and steps 3–5 (no `.framework-version`, `validate.sh`, delivery manifest or broad installer); in step 2 run the first line and the Codex backup only; run step 6; in step 7 run only the Codex `--check` and `framework-status.py` (it still inspects the global Claude home: Claude can show as absent, or, if already installed, as drift from the new checkout; that need not make Codex not ready, but a failing Codex `--check`, a Codex `drift`/`error` or a Codex SHA mismatch does); for step 8 use the Codex bundle's `~/.agents/skills/sdlc-delivery/scripts/controller.py`; then start new Codex sessions. With both selected, the order stays: delivery (only if its manifest exists), broad Claude, then Codex.
+
+If `git status --short` prints anything, commit that work or move it aside first. Never `git reset --hard` or force-reset the checkout to get a clean tree.
+
+For Codex, compare the installed source SHA with the repository SHA (this checkout's HEAD). Different SHAs can produce `adapter drift` from the version difference alone, so drift is not by itself proof of a personal edit, but they do not rule one out either. `--check` first compares owned files and the `AGENTS.md` block with the hashes recorded at install, and refuses at the first `foreign or locally modified` path whatever the source version; that is not a complete list of your edits. Owned files missing locally or removed from source, and a changed manifest, show as drift. Keep any customization, investigate every refusal, and never bypass it or edit the Codex ownership metadata (see [Recovering from an ownership conflict](#recovering-from-an-ownership-conflict)).
 
 Run `./validate.sh --quick` before pulling, while the checkout still matches the installed `sha=`. Each `shared-set drift` line names an installed file that differs from the shipped one. That is a local customization, and the broad update will overwrite it. Move that work to a non-colliding name or to project instructions first. If HEAD does not match the installed `sha=`, those lines can be version differences rather than customizations.
 
@@ -312,11 +403,12 @@ The broad installer takes no backup. Keep this one outside the repository and ne
 
 ```bash
 umask 077; BK="$(mktemp -d)"
+# Claude (skip if Claude is not selected):
 tar -C "$HOME" -czf "$BK/claude.tgz" .claude \
   && tar -tzf "$BK/claude.tgz" > "$BK/claude.list" \
   && grep -qx '\.claude/settings\.json' "$BK/claude.list" \
   && echo "claude backup verified: $BK"
-# If Codex is installed too:
+# Codex (skip if Codex is not selected):
 tar -C "$HOME" -czf "$BK/codex.tgz" .codex .agents/skills \
   && tar -tzf "$BK/codex.tgz" > "$BK/codex.list" \
   && grep -qx '\.codex/framework/manifest\.json' "$BK/codex.list" \
@@ -357,7 +449,7 @@ Omitting an optional flag keeps an existing optional component as it is. Passing
 ### 6. Update Codex separately
 
 ```bash
-source .venv/bin/activate     # the Python environment used for the Codex install
+[ -f .venv/bin/activate ] && . .venv/bin/activate     # if not already active; otherwise activate the environment you used
 ./install-codex.sh --user --dry-run
 ./install-codex.sh --user
 ```
@@ -365,13 +457,13 @@ source .venv/bin/activate     # the Python environment used for the Codex instal
 ### 7. Check, then start fresh sessions
 
 ```bash
-python3 scripts/install-delivery.py --claude-home "$CLAUDE_HOME" --check   # only if the delivery manifest exists
-./validate.sh --quick
-./install-codex.sh --user --check
-python3 scripts/framework-status.py --claude-home "$CLAUDE_HOME"
+python3 scripts/install-delivery.py --claude-home "$CLAUDE_HOME" --check   # Claude, only if the delivery manifest exists
+./validate.sh --quick                                                      # Claude
+./install-codex.sh --user --check                                          # Codex
+python3 scripts/framework-status.py --claude-home "$CLAUDE_HOME"           # both (Codex only: omit --claude-home)
 ```
 
-These checks are read-only. Investigate any nonzero exit before trusting the install. Then start new Claude Code and Codex sessions so the updated instructions, skills and hooks load. If the Codex hook definitions changed, review and trust them again in native `/hooks`.
+These checks are read-only. Investigate any nonzero exit before trusting the install, and identify which integration failed. Readiness means each selected edition's own checks pass and its installed SHA matches the checkout. `framework-status.py` always inspects both global editions, so its exit code is only a summary and can reflect an edition you did not select: do not reinstall that edition just to make it `0`. It also exits `0` when an integration is absent (`not_installed`, or `present: False` for the broad Claude marker), so an edition you use that reports absent is not ready. Then start new sessions of the selected CLIs so the updated instructions, skills and hooks load. If the Codex hook definitions changed, review and trust them again in native `/hooks`.
 
 ### 8. Persistent delivery controller (only if you set one up)
 

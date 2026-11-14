@@ -20,12 +20,19 @@ Describe a task naturally or select a workflow explicitly. Selection uses model 
 | Instructions | `~/.claude/CLAUDE.md` and rules | Managed block in `~/.codex/AGENTS.md` and rules resource |
 | Runtime integration | Core hooks + statusline; opt-in analytics / watchdog / notifications | Opt-in native evidence hooks; [remaining gaps](codex/FEATURES.md) |
 
-**Requirements:** macOS/Linux, Bash and Git. Codex building/installing additionally
-needs Python 3.11+ and [declared Python dependencies](codex/requirements.txt), including
-PyYAML and Requests for the bundled health checker. Claude statusline/validation uses
-`jq`; MCP examples use `npx` where applicable. MCP connections are not auto-registered.
+**Requirements:** macOS/Linux, Bash and Git. The Claude installer also requires `curl`
+and needs `jq` to seed and reconcile `settings.json` (statusline and validation use it
+too). Codex building/installing additionally needs Python 3.11+ and
+[declared Python dependencies](codex/requirements.txt), including PyYAML and Requests for
+the bundled health checker. MCP examples use `npx` where applicable. MCP connections are not auto-registered.
 See [INSTALL.md](INSTALL.md) for both installation paths and [codex/README.md](codex/README.md)
 for Codex ownership, updates, rollback and hook trust.
+
+> **Setting up another laptop?** A clone or pull gets the source only. Nothing installs,
+> updates or logs in by itself. On a fresh machine, follow the initial install. On a laptop
+> that already has the framework, inspect the installed state **before pulling**, then
+> follow the upgrade procedure. Both routes, and the checks that show the setup is done, are
+> in [INSTALL.md: Setting up another laptop](INSTALL.md#setting-up-another-laptop).
 
 ---
 
@@ -45,6 +52,10 @@ python3 -m pip install -r codex/requirements.txt
 ./install-codex.sh --user --dry-run
 ./install-codex.sh --user
 ```
+
+This block is for a fresh install. If the framework is already installed on this machine,
+follow [Upgrading an existing installation](INSTALL.md#upgrading-an-existing-installation)
+instead, which inspects local state before pulling.
 
 Install the integration you use, or both. Claude loads from `~/.claude`; Codex loads
 skills from `~/.agents/skills` and definitions/state from `~/.codex`. No per-project
@@ -291,7 +302,7 @@ conflict rather than being overwritten. [Full Codex instructions](codex/README.m
 | `./install.sh` | Install **core** to `~/.claude`: agents, skills, commands, rules, core hooks, statusline, settings. Analytics, watchdog and notifications are opt-in (below) |
 | `./install.sh [--with-analytics] [--with-watchdog] [--with-notifications]` | Add the opt-in components: dashboard assets + `claude-obs` alias; the launchd watchdog (macOS); the desktop notify hook. Default-off; omitting a flag on an existing install preserves that component |
 | `./install.sh --dry-run` | Print every path **this selection** would touch — changes nothing |
-| `./install.sh --update` | Reconcile `~/.claude` to the checked-out source (pull first). Replaces same-name framework files and drifted framework settings keys; follow the [upgrade procedure](./INSTALL.md#upgrading-an-existing-installation) |
+| `./install.sh --update` | Reconcile `~/.claude` to the checked-out source. Replaces same-name framework files and drifted framework settings keys; follow the [upgrade procedure](./INSTALL.md#upgrading-an-existing-installation) |
 | `./install.sh --upgrade` | Migrate from an old per-project install: reconcile, confirm + tear down old copies, then self-verify ([details](./INSTALL.md#upgrading-from-the-old-per-project-framework)) |
 | `./install.sh --uninstall` | Remove the framework from `~/.claude` — snapshots first, asks first ([details](./INSTALL.md#uninstallation)) |
 | `./install.sh --help` | Show all options |
