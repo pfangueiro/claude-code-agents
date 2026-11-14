@@ -279,7 +279,8 @@ class Recovery(ControllerCheckCase):
 
 
 class Contracts(unittest.TestCase):
-    RECORD = {'identity': {'pid': 100}, 'lingering': False, 'groupEmpty': True, 'membersAtExit': 0,
+    RECORD = {'schema': controller_process.SCHEMA_RECORD_V3,
+              'identity': {'pid': 100}, 'lingering': False, 'groupEmpty': True, 'membersAtExit': 0,
               'groupObservation': 'ok', 'escapedDescendants': 0, 'unresolvedDescendants': 0,
               'termination': 'exited', 'signalsSent': [], 'exitCode': 0, 'signal': None}
 
@@ -291,6 +292,47 @@ class Contracts(unittest.TestCase):
             self.assertEqual(caught.exception.code, code)
         child = checks.child_from_record({**self.RECORD, 'commandPid': 200, 'commandStart': 'x'})
         self.assertEqual((child['pid'], child['groupEmptyAtReceipt']), (200, True))
+
+    def test_group_clean_uses_escaped_settlement_predicate(self):
+        base = {**self.RECORD, 'commandPid': 200, 'commandStart': 'x'}
+        gone = {'pid': 300, 'start': 'lstart:a', 'status': 'gone', 'proof': 'esrch', 'currentStart': None}
+        unknown = {**gone, 'status': 'unknown', 'proof': 'query-failed'}
+        settlement = {'observationComplete': True, 'bootId': 'boot-a', 'observedAt': 'x',
+                      'identities': [gone], 'settled': 1, 'live': 0, 'unknown': 0}
+        settled = {**base, 'schema': controller_process.SCHEMA_RECORD,
+                   'identity': {'pid': 100, 'bootId': 'boot-a'}, 'escapedDescendants': 1,
+                   'escapedOverflow': False, 'escapedSettlement': settlement}
+        reused = {'pid': 300, 'start': 'lstart:a', 'status': 'reused', 'proof': 'start-differs',
+                  'currentStart': 'lstart:b'}
+        live = {'pid': 300, 'start': 'lstart:b', 'status': 'live', 'proof': 'start-matches',
+                'currentStart': 'lstart:b'}
+        foreign = {**live, 'status': 'reused', 'proof': 'start-differs', 'currentStart': 'lstart:c'}
+        two = {**settled, 'escapedDescendants': 2}
+        empty = {**settlement, 'identities': [], 'settled': 0}
+        cases = (
+            ('v4-reused-pid-second-live', {**two, 'unresolvedDescendants': 1, 'escapedSettlement': {
+                **settlement, 'identities': [reused, live], 'settled': 1, 'live': 1}}, False),
+            ('v4-reused-pid-foreign-now', {**two, 'escapedSettlement': {
+                **settlement, 'identities': [reused, foreign], 'settled': 2}}, True),
+            ('v4-capture-from-other-boot', {**settled, 'escapedDescendants': 0,
+                                            'escapedSettlement': {**empty, 'bootId': 'boot-b'}}, False),
+            ('v4-incomplete-observation', {**settled, 'groupObservation': 'unavailable',
+                                           'escapedDescendants': 0, 'escapedSettlement': {
+                                               **empty, 'observationComplete': False}}, False),
+            ('legacy-none', base, True),
+            ('legacy-historical', {**base, 'escapedDescendants': 27}, False),
+            ('v4-settled', settled, True),
+            ('v4-unknown-counted-settled',
+             {**settled, 'escapedSettlement': {**settlement, 'identities': [unknown]}}, False),
+            ('v4-unknown', {**settled, 'unresolvedDescendants': 1, 'escapedSettlement': {
+                **settlement, 'identities': [unknown], 'settled': 0, 'unknown': 1}}, False),
+            ('v4-truncated', {**settled, 'escapedOverflow': True}, False),
+            ('unknown-schema', {**settled, 'schema': 'sdlc-controller/process-lifecycle/v2'}, False),
+        )
+        for name, record, expected in cases:
+            with self.subTest(case=name):
+                self.assertIs(controller_process.escaped_settled(record), expected)
+                self.assertIs(checks.child_from_record(record)['groupEmptyAtReceipt'], expected)
 
     def test_no_nested_recorder_or_provider_terminal(self):
         source = (SCRIPTS / 'controller_checks.py').read_text()

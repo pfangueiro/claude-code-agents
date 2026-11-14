@@ -28,6 +28,42 @@ Recovery and control: startup reconciles every unresolved attempt and effect and
 controller query command before dispatch; STOP stops owned work, settles it and returns
 2; pause starts nothing new; a runtime/rules identity change holds all new work. Nothing
 is reset, rebased, force-pushed, rolled back or deleted; foreign or drifted state is held.
+
+Physical settlement gate (_lifecycle_gap): before a native, check, adopted or recovered
+attempt is finished or reconciled, its validated lifecycle must be finalized with groupEmpty
+True, unresolvedDescendants 0 and process.escaped_settled(record), or prove the attempt was
+never launched. Otherwise (including any read or validation error) the attempt stays
+unknown with its reservation, scope and history (no retry, review, check record or success)
+and the plan is held INCOMPLETE as ``escaped_lifecycle_unsettled`` with an attended Codex
+handoff. The once-written record is never re-probed, so a later empty group upgrades
+nothing. This engine has no path that clears that hold; it needs trusted operator
+reconciliation.
+
+Policy hold (bounded first local release; no policy-loading subsystem): a native session
+reads instruction and settings files from its own worktree, and canonical /review-pr takes
+review policy from the trusted base, so a policy edit is review material, never authority.
+Before any implement or review claim the engine proves that the session worktree carries
+exactly the trusted committed policy: the original repository HEAD, accepted only while
+_require_identity holds and its configured instruction_paths hash (inputs.rules_digest) to
+the frozen rules digest. Policy entries are compared as Git tree entries (mode + object id,
+i.e. identical bytes; no rule equivalence is inferred): every configured instruction_path,
+every AGENTS*.md / CLAUDE*.md at any depth, everything under a .claude/.codex/.agents
+directory, .mcp.json, and every symlink (names case-insensitive). Added, deleted and changed
+entries all count, as does any modified, untracked or ignored policy path in the worktree.
+A difference at the execution base holds the plan as ``base_policy_changed``; at the result
+under review as ``review_policy_changed``. Both are INCOMPLETE with an attended Codex
+handoff: nothing is claimed, no native session starts, and accepted implementation, commit
+and check evidence is kept; reading a changed policy for review needs a separately attended
+trusted-base procedure, and the engine never authorizes a new policy. The same proof is
+repeated after a reviewer's terminal event and before any review is recorded, because a
+reviewer can write a policy file during its own turn and queries.untracked cannot see ignored
+files: a difference then, or a trusted policy that can no longer be proved under the current
+identity, closes the review attempt as an execution failure (never semantic) without
+recording its verdict, keeps the raw attempt evidence and holds the plan as
+``review_policy_changed_after_review`` with the same attended handoff. Ordinary changes with
+equal policy stay eligible. A trusted HEAD that later gains new policy commits holds too
+(fail closed). Not isolated: native user/global configuration, ancestor files (see
+_override_gaps) and submodule contents.
 Limits: same-user trust; no OS sandbox, distributed lock or exactly-once; native quota,
 model and cost are only observed; worktrees are kept: recover, STOP and idle never remove
 one, only the explicit operator cleanup_workspaces entrypoint removes the clean managed
@@ -91,6 +127,13 @@ CONTROL_POLL = 0.25
 EXTERNAL_FX = frozenset({fx.PUSH, fx.PR_CREATE, fx.PR_MERGE})
 NOTHING_RAN = ('not-launched', 'launch-failed')
 BUNDLE_PREFIX = '.sdlc-evidence-'  # controller review-evidence bundle inside a reviewer worktree
+# Native autoload policy names (lower-cased): see the module 'Policy hold' contract.
+POLICY_DIRS = frozenset({'.claude', '.codex', '.agents'})
+POLICY_NAMES = frozenset({'.mcp.json'})
+POLICY_PREFIXES = ('agents', 'claude')  # AGENTS*.md, CLAUDE*.md at any depth
+SYMLINK_MODE = '120000'
+POST_REVIEW_POLICY_HOLD = 'review_policy_changed_after_review'
+LIFECYCLE_HOLD = 'escaped_lifecycle_unsettled'  # finalized attempt whose own process tree is not proven settled
 # Why an effect's recorded evidence root cannot support any observation (held unknown).
 ROOT_GAPS = {'state_missing': 'evidence-root-missing', 'effect_root_unidentified': 'evidence-root-unidentified',
              'state_unsafe': 'evidence-root-unsafe', 'state_unreadable': 'evidence-root-unreadable'}
@@ -186,8 +229,56 @@ def _lifecycle_ended_at(attempt):
     return _utc_epoch(record.get('endedAt'))
 
 
+def _lifecycle_gap(kind, locator):
+    """None when an attempt's own process lifecycle is physically settled, else the named gap.
+
+    Settled is exactly: the validated read_status is finalized with groupEmpty True,
+    unresolvedDescendants 0 and the schema-aware public process.escaped_settled(record) (v3:
+    no historical escape; v4: complete, positively settled escape history), or the attempt is
+    proven never launched (state not-launched or a finalized not-launched record). The record
+    is written once at finalization, so a group found empty later never upgrades it; nothing
+    is re-probed or signalled here. A path, read or validation error is unknown, never failed
+    or zero. Recovery.relaunch_safe is deliberately not used: it says whether the SAME
+    unlaunched attempt may launch, not whether a launched one is quiescent. Physical
+    settlement is separate from native admission, check status and review verdict."""
+    try:
+        path = providers.process_attempt(locator) if kind == 'native' else Path(locator)
+        status = process.read_status(path)
+    except (process.ProcessError, OSError, TypeError, ValueError) as err:
+        return f"lifecycle-unreadable ({getattr(err, 'code', type(err).__name__)})"
+    if not isinstance(status, dict):
+        return 'lifecycle-unreadable (status)'
+    state, record = status.get('state'), status.get('record')
+    if state == 'not-launched':
+        return None
+    if state != 'finalized' or not isinstance(record, dict):
+        return f'lifecycle-{state}' if state in process.STATES else 'lifecycle-unreadable (state)'
+    if record.get('termination') == 'not-launched':
+        return None
+    if record.get('groupEmpty') is not True:
+        return 'process-group-not-proven-empty'
+    unresolved = record.get('unresolvedDescendants')
+    if type(unresolved) is not int or unresolved != 0:
+        return 'unresolved-descendants'
+    if not process.escaped_settled(record):
+        return 'escaped-descendants-unsettled'
+    return None
+
+
 def _actor_ok(actor):
     return type(actor) is str and bool(actor.strip()) and len(actor) <= 200 and actor.isprintable()
+
+
+def _policy_path(path, configured):
+    """Whether a repository-relative path is review/instruction policy a native session may
+    load: a configured instruction path (``configured`` is lower-cased), an AGENTS*.md or
+    CLAUDE*.md at any depth, anything under a .claude/.codex/.agents directory or
+    .mcp.json. Case-insensitive, so a case variant on a case-insensitive filesystem counts."""
+    lowered = path.lower()
+    parts = lowered.split('/')
+    name = parts[-1]
+    return (lowered in configured or any(part in POLICY_DIRS for part in parts) or name in POLICY_NAMES
+            or (name.endswith('.md') and name.startswith(POLICY_PREFIXES)))
 
 
 class _EffectCancel:
@@ -489,6 +580,28 @@ class Engine:
         self.task_holds.setdefault(task_id, code)
         self.say(f'task {task_id} held for the owner ({code}); nothing was reset or deleted')
 
+    def _plan_of(self, task_id):
+        try:
+            return self.ledger.task(task_id)['plan_id']
+        except LedgerError as err:
+            self.say(f'task {task_id}: plan not readable ({err.code}); only the task is held')
+            return None
+
+    def _hold_unsettled(self, attempt_id, task_id, plan_id, state, gap):
+        """Keep an attempt whose own process tree is not proven settled (_lifecycle_gap)
+        UNKNOWN: finish_attempt(reconciled=False) keeps its reservation, scope and history
+        charged, so nothing is released, retried, reviewed, recorded or accepted from it.
+        Only trusted operator reconciliation may close it; this engine has no such path and
+        never signals, resets or deletes anything here."""
+        if state != 'unknown':
+            self.ledger.finish_attempt(attempt_id, 'unknown', False)
+        self._hold_task(task_id, LIFECYCLE_HOLD)
+        detail = (f'attempt {attempt_id} ({gap}): held unknown with its reservation and scope; no retry, '
+                  'review, check record or success until trusted operator reconciliation')
+        self.say(f'INCOMPLETE: task {task_id}: {detail}')
+        if plan_id is not None:
+            self._hold(plan_id, 'INCOMPLETE', LIFECYCLE_HOLD, detail, handoff=True)
+
     def _hash(self, *parts):
         return short_hash(self.ledger.authority_id, *parts)
 
@@ -682,7 +795,11 @@ class Engine:
         """Close a settled attempt left by an earlier controller (or kept open by this
         one). Only a commit already confirmed for this exact attempt counts as success;
         while that task.commit is unresolved the attempt stays open (no retry, no replay);
-        the rest is an interruption."""
+        the rest is an interruption. A process tree not proven settled is held first."""
+        gap = _lifecycle_gap(kind, locator)
+        if gap is not None:
+            self._hold_unsettled(row['id'], row['task_id'], self._plan_of(row['task_id']), row['state'], gap)
+            return
         category = None
         if kind == 'native':
             with contextlib.suppress(process.ProcessError):
@@ -958,6 +1075,10 @@ class Engine:
             return
         outcome = result.outcome
         self._observe(job.profile, outcome, result.ended_at)
+        gap = _lifecycle_gap('native', job.locator)
+        if gap is not None:
+            self._hold_unsettled(job.attempt_id, job.task_id, job.plan_id, None, gap)
+            return
         if not outcome.execution_admitted or result.stopped or result.timed_out:
             attribution, reason = self._attribute(job.kind, outcome, result)
             self._finish(job.attempt_id, 'cancelled' if attribution == 'operator' else 'failure', attribution,
@@ -1049,19 +1170,31 @@ class Engine:
         return None
 
     def _accept_review(self, job, outcome, seconds):
+        """Record a reviewer's verdict only when, after its terminal event, its worktree is
+        still exactly what was assigned (HEAD at the result, tracked files clean, the same
+        untracked set, the evidence bundle intact) AND, re-proved now under the current frozen
+        identity, it carries exactly the trusted committed policy with no modified, untracked
+        or ignored policy path (_policy_divergence: queries.untracked cannot see ignored
+        files). Otherwise the attempt closes as an execution failure, nothing is recorded or
+        accepted, raw attempt evidence is kept, and a policy difference also holds the plan."""
         extra = job.extra
         cwd = extra['cwd']
         intact = (self.queries.head(cwd) == extra['result'] and self.queries.tracked_clean(cwd)
                   and self.queries.untracked(cwd) == extra['untracked'] and bundle_intact(extra['bundle']))
+        policy = self._post_review_policy(extra['result'], cwd)
         fresh = outcome.session_id is not None and outcome.session_id not in extra['producers']
         decision = self._decision(outcome.verdict_candidate, extra)
-        if not (intact and fresh and decision):
-            problem = ('reviewer changed its worktree' if not intact else 'not a fresh session' if not fresh
+        if not (intact and not policy and fresh and decision):
+            problem = ('reviewer changed its worktree' if not intact
+                       else 'review policy differs after the review' if policy
+                       else 'not a fresh session' if not fresh
                        else outcome.verdict_problem or 'verdict inconsistent or INCOMPLETE')
             self._finish(job.attempt_id, 'failure', 'execution', 'unknown', seconds=seconds)
             self.say(f'review of {job.task_id}: INCOMPLETE ({problem}); nothing recorded')
             if not intact:
                 self._hold_task(job.task_id, 'review_workspace_changed')
+            if policy:
+                self._hold_review_policy(job, policy)
             return
         self._finish(job.attempt_id, 'success', seconds=seconds)
         self._require_identity()
@@ -1071,6 +1204,12 @@ class Engine:
             self.ledger.transition(job.task_id, 'reviewed', 'accepted', gate)
 
     def _complete_check(self, job, outcome):
+        """Close one harvested check attempt. Every retained launch passes the physical
+        settlement gate (_lifecycle_gap) before it is finished, including a launch whose
+        release was denied: its bootstrap was spawned, and Pending.abort only bounds its wait,
+        so an unreleased attempt is cancelled only once the validated lifecycle proves it
+        never launched. Anything else (awaiting-release, unknown, unreadable) is held unknown
+        with its reservation and scope (_hold_unsettled), also under STOP."""
         row = next((a for a in self.ledger.owned_work()['attempts'] if a['id'] == job.attempt_id), None)
         if row is None:
             return
@@ -1078,6 +1217,10 @@ class Engine:
             self._finish(job.attempt_id, 'failure', 'execution', 'launch_failed')
             return
         if row['released_at'] is None:
+            gap = _lifecycle_gap('check', row['launch'].get('locator'))
+            if gap is not None:
+                self._hold_unsettled(job.attempt_id, job.task_id, job.plan_id, row['state'], gap)
+                return
             stopped = self.ledger.control() == 'stopped'
             self._finish(job.attempt_id, 'cancelled', 'operator', 'stop' if stopped else 'cancelled')
             return
@@ -1085,6 +1228,13 @@ class Engine:
             state = process.recover(row['launch']['locator']).state
         except process.ProcessError:
             state = 'unreadable'
+        if state not in ('finalized', *process.FINALIZABLE_STATES):
+            self.ledger.finish_attempt(job.attempt_id, 'unknown', False)
+            return
+        gap = _lifecycle_gap('check', row['launch']['locator'])
+        if gap is not None:
+            self._hold_unsettled(job.attempt_id, job.task_id, job.plan_id, row['state'], gap)
+            return
         status, refs = 'INCOMPLETE', None
         if outcome is not None and outcome.status in ('PASS', 'FAIL') and state == 'finalized':
             self._finish(job.attempt_id, 'success')
@@ -1093,16 +1243,13 @@ class Engine:
             except (EngineError, ValueError, process.ProcessError) as err:
                 self.say(f"check {job.extra['name']} of {job.task_id}: receipt not verifiable "
                          f"({getattr(err, 'code', type(err).__name__)}); INCOMPLETE")
-        elif state in ('finalized', *process.FINALIZABLE_STATES):
+        else:
             reasons = outcome.reasons if outcome is not None else ()
             if self.stop_event.is_set():
                 self._finish(job.attempt_id, 'cancelled', 'operator', 'stop')
             else:
                 reason = 'timeout' if any('timeout' in item for item in reasons) else 'unknown'
                 self._finish(job.attempt_id, 'failure', 'execution', reason)
-        else:
-            self.ledger.finish_attempt(job.attempt_id, 'unknown', False)
-            return
         gate = self.ledger.task(job.task_id)['gate']
         self.ledger.record_check_outcome(job.task_id, job.extra['name'], status, gate, refs, job.attempt_id)
 
@@ -1710,6 +1857,8 @@ class Engine:
         for rank, plan, view in sorted(work, key=lambda item: item[0]):
             if not self._identity_current():
                 return changed
+            if plan['id'] in self.holds:
+                continue  # held earlier in this pass (e.g. a policy hold): nothing more starts
             start = (self._start_review, self._start_check, self._start_implement)[rank]
             try:
                 changed |= start(plan, view, observations)
@@ -1776,6 +1925,91 @@ class Engine:
         return 'Read and follow these committed project instruction files in this worktree first:\n' + '\n'.join(
             f'- {path}' for path in paths)
 
+    # ---- policy hold (see the module 'Policy hold' contract) ------------------------------
+
+    def _trusted_policy_head(self):
+        """The original repository HEAD as the trusted policy reference, only while the
+        current identity holds and that HEAD's configured instruction_paths hash to exactly
+        the frozen rules digest (the same inputs.rules_digest the identity uses)."""
+        self._require_identity()
+        head = self.queries.head(self.repo)
+        frozen = (self.identity or {}).get('rules')
+        if inputs.rules_digest(self.repo, head, self.policy['instruction_paths']) != frozen:
+            raise EngineError('identity_changed', 'the repository HEAD no longer carries the frozen rules')
+        return head
+
+    def _policy_entries(self, sha, configured):
+        """{path: (mode, object id)} of every policy entry and every symlink in the commit's
+        full tree (object reads only; no checkout, filter or hook)."""
+        out = self.queries.run(self.repo, 'ls-tree', '-r', '-z', '--full-tree', sha)[1]
+        entries = {}
+        for record in filter(None, out.split(b'\0')):
+            meta, tab, raw = record.partition(b'\t')
+            fields = meta.decode('ascii', 'replace').split(' ')
+            if not tab or len(fields) != 3:
+                raise EngineError('policy_tree_unreadable', sha[:12])
+            path = raw.decode('utf-8', 'surrogateescape')
+            if fields[0] == SYMLINK_MODE or _policy_path(path, configured):
+                entries[path] = (fields[0], fields[2])
+        return entries
+
+    def _worktree_policy(self, cwd, configured):
+        """Policy paths a native session in ``cwd`` would read beyond its HEAD tree: modified,
+        untracked or ignored (files inside ignored directories are listed individually)."""
+        out = self.queries.run(cwd, 'status', '--porcelain=v1', '-z', '--untracked-files=all',
+                               '--ignored=traditional', '--no-renames')[1]
+        found = []
+        for item in out.split(b'\0'):
+            if len(item) <= 3:
+                continue
+            path = item[3:].decode('utf-8', 'surrogateescape').rstrip('/')
+            if _policy_path(path, configured):
+                found.append(f"{path} ({item[:2].decode('ascii', 'replace').strip()} in worktree)")
+        return sorted(found)
+
+    def _policy_divergence(self, sha, cwd):
+        """Every policy path whose bytes at ``sha`` or in ``cwd`` differ from the trusted
+        committed policy (added, deleted or changed); empty when they are identical."""
+        configured = frozenset(path.lower() for path in self.policy['instruction_paths'])
+        head = self._trusted_policy_head()
+        trusted = self._policy_entries(head, configured)
+        actual = trusted if sha == head else self._policy_entries(sha, configured)
+        changed = sorted(path for path in trusted.keys() | actual.keys() if trusted.get(path) != actual.get(path))
+        return changed + self._worktree_policy(cwd, configured)
+
+    def _post_review_policy(self, result, cwd):
+        """Policy paths that differ from the trusted committed policy in a reviewer worktree
+        after the reviewer's turn; a trusted policy that cannot be proved now (identity
+        change, unreadable tree or failed query) is itself a named difference (fail closed)."""
+        try:
+            return self._policy_divergence(result, cwd)
+        except EngineError as err:
+            return [f'trusted policy not provable after the review ({err.code})']
+
+    def _hold_review_policy(self, job, changed):
+        """Hold the task and its plan (attended Codex handoff) when a finished reviewer's
+        worktree no longer carries the trusted committed policy; its verdict is never used."""
+        self._hold_task(job.task_id, POST_REVIEW_POLICY_HOLD)
+        self._hold(job.plan_id, 'INCOMPLETE', POST_REVIEW_POLICY_HOLD,
+                   f"task {job.task_id} review attempt {job.attempt_id} at {job.extra['result'][:12]}: "
+                   f'{len(changed)} policy path(s) differ from the trusted committed policy after the '
+                   f"reviewer's turn {changed[:5]}; its verdict was neither recorded nor accepted, the raw "
+                   f'attempt evidence is kept at {job.locator} and nothing was cleaned; an attended '
+                   'trusted-base review must decide (a changed policy is review material, never authority)',
+                   handoff=True)
+
+    def _policy_held(self, plan, view, code, sha, cwd):
+        """Hold the plan (``code``, attended Codex handoff) before any claim when the session
+        worktree policy is not the trusted committed policy; True when held."""
+        changed = self._policy_divergence(sha, cwd)
+        if not changed:
+            return False
+        self._hold(plan['id'], 'INCOMPLETE', code,
+                   f"task {view['id']} at {sha[:12]}: {len(changed)} policy path(s) differ from the trusted "
+                   f'committed policy {changed[:5]}; no native session started; an attended trusted-base '
+                   'review must decide (a changed policy is review material, never authority)', handoff=True)
+        return True
+
     @staticmethod
     def _envelope(plan, view, role, base, result, dependencies, manifest):
         spec = view['spec']
@@ -1787,10 +2021,13 @@ class Engine:
 
     def _start_implement(self, plan, view, observations):
         sow = self._sow(plan, view)
+        binding = view['binding']
+        if self._policy_held(plan, view, 'base_policy_changed', binding['execution_base'],
+                             binding['workspace']['path']):
+            return False
         profile = self._choose('implement', observations)
         if profile is None:
             return False
-        binding = view['binding']
 
         def build(_attempt_id):
             envelope = self._envelope(plan, view, 'implement', binding['execution_base'], None,
@@ -1805,14 +2042,16 @@ class Engine:
     def _start_review(self, plan, view, observations):
         sow = self._sow(plan, view)
         candidate = view['spec']['kind'] == CANDIDATE_KIND
-        external = candidate and bool(self._requested(plan))
-        profile = self._choose('review', observations, codex_only=external)
-        if profile is None:
-            return False
         binding, result = view['binding'], view['result']
         cwd, base = binding['workspace']['path'], binding['execution_base']
         if self.queries.head(cwd) != result or not self.queries.tracked_clean(cwd):
             self._hold_task(view['id'], 'review_workspace_drift')
+            return False
+        if self._policy_held(plan, view, 'review_policy_changed', result, cwd):
+            return False
+        external = candidate and bool(self._requested(plan))
+        profile = self._choose('review', observations, codex_only=external)
+        if profile is None:
             return False
         sessions, notes = self._producers(view, candidate)
 

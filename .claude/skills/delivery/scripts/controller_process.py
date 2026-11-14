@@ -22,19 +22,36 @@ API
                                           'attempt-<state>' while it is still unreaped)
     recover(attempt) -> Recovery(state, relaunch_safe, identity_status, reason)
     read_status(attempt) -> status dict   read-only; creates nothing
+    escaped_settled(record) -> bool       escaped-descendant predicate for a VALIDATED record
     python3 -I -B controller_process.py --status <attempt>
 
 States: prepared, awaiting-release, releasing, running, exiting (the four active states),
 exited, not-launched, lost, unknown, corrupt, finalized. relaunch_safe is True only for
-'prepared' and conclusive not-launched evidence; a retry still needs a NEW attempt id.
+'prepared' and conclusive not-launched evidence: it means the SAME unlaunched work may be
+launched (under a NEW attempt id). It is NOT a quiescence flag: it is False for every
+launched attempt, including a finalized successful one; read the quiescence of a finalized
+attempt from its validated record (executionSuccess, escaped_settled, group fields).
 Only a structurally valid native journal ending in a recognized pre-launch abort is
 conclusive; once launch is journaled, nothing but an exit record settles the attempt.
 
-Lifecycle record: schema, attemptId, intentSha256, identity, commandPid, commandStart,
+Lifecycle record (v4): schema, attemptId, intentSha256, identity, commandPid, commandStart,
 termination, stopSource, exitCode, signal, forced, signalsSent, lingering, membersAtExit,
-groupEmpty, groupObservation, escapedDescendants, unresolvedDescendants, startedAt, endedAt,
-durationSeconds, logs{stdout,stderr: {path,size,sha256} | null}, reasons, executionSuccess,
-limitations, finalizedAt. identity is the BOOTSTRAP anchor (its pid is the group leader, never
+groupEmpty, groupObservation, escapedDescendants, escapedOverflow, escapedSettlement,
+unresolvedDescendants, startedAt, endedAt, durationSeconds,
+logs{stdout,stderr: {path,size,sha256} | null}, reasons, executionSuccess, limitations,
+finalizedAt. escapedDescendants is the HISTORICAL count of distinct (pid, start) identities
+the supervisor saw leave the group (a reused pid with another start, or an unknown start, is
+its own identity; only exact duplicates collapse); escapedOverflow says one more was seen
+after MAX_ESCAPED were retained; escapedSettlement {observationComplete, bootId, observedAt,
+identities[{pid, start, status, proof, currentStart}], settled, live, unknown} is the
+supervisor's OWN bounded probe of every recorded identity, captured after the owned group
+drained and BEFORE exit/v2 closed (durationSeconds includes it), and copied unchanged into
+lifecycle/v4 (gone/reused settle an identity; live/unknown never do). finalize never
+re-probes, so a later exit, reboot or absence cannot upgrade an incomplete capture.
+Synthetic v4 records hold no identity: not-launched is complete and empty, lost is
+incomplete (unknown, never settled). An exit/v1 written by an older supervisor still
+finalizes to the exact v3 record (no settlement; any escape fails); an exit/v2 without a
+settlement is invalid (corrupt), never upgraded. identity is the BOOTSTRAP anchor (its pid is the group leader, never
 the declared command). commandPid/commandStart are the declared command's own pid and OS start
 identity copied from the raw exit record (commandStart null when the OS could not report it);
 they must differ from the anchor pid and equal the journal's command-started pid, and are null
@@ -42,8 +59,8 @@ for launch-failed and the synthetic not-launched/lost records (a lost attempt ha
 exit record to bind a command pid to). Exit-derived fields must equal the retained raw exit.json; membersAtExit is the
 supervisor's group count at that record (null = unobserved) and a group found empty later
 never replaces it. executionSuccess means only: exit 0, no signal, no forced cleanup, no
-lingering/escaped/unresolved descendants, zero members at the exit record, a proven-empty
-group at finalization and both logs present.
+lingering or unresolved descendants, escaped_settled(record), zero members at the exit
+record, a proven-empty group at finalization and both logs present.
 
 Contract: the caller persists its durable claim before prepare/spawn and persists
 Pending.identity before release(); it owns check/effect authorization, pausing and
@@ -91,8 +108,11 @@ from typing import Mapping  # noqa: E402
 SCHEMA_INTENT = 'sdlc-controller/process-intent/v2'
 SCHEMA_SPAWN = 'sdlc-controller/process-spawn/v1'
 SCHEMA_RELEASE = 'sdlc-controller/process-release/v1'
-SCHEMA_EXIT = 'sdlc-controller/process-exit/v1'
-SCHEMA_RECORD = 'sdlc-controller/process-lifecycle/v3'  # v2 records (no command pid) read as corrupt, never migrated
+SCHEMA_EXIT = 'sdlc-controller/process-exit/v2'  # adds escapedOverflow + the supervisor's escapedSettlement
+SCHEMA_EXIT_V1 = 'sdlc-controller/process-exit/v1'  # older supervisor: still read, finalizes to v3
+SCHEMA_RECORD = 'sdlc-controller/process-lifecycle/v4'  # adds the escaped settlement proof
+SCHEMA_RECORD_V3 = 'sdlc-controller/process-lifecycle/v3'  # still read with its exact old meaning
+# v2 lifecycle records (no command pid) read as corrupt, never migrated
 SCHEMA_STATUS = 'sdlc-controller/process-status/v1'
 
 INTENT = 'intent.json'
@@ -152,23 +172,36 @@ REASONS = frozenset({
     'signalled', 'forced', 'lingering-descendants', 'exit-group-not-proven-empty',
     'group-not-proven-empty',
     'group-observation-unavailable', 'escaped-descendants', 'unresolved-descendants',
-    'logs-missing'})
+    'escaped-observation-truncated', 'escaped-descendants-unsettled', 'logs-missing'})
 
 IDENTITY_KEYS = frozenset({'attemptId', 'intentSha256', 'pid', 'pgid', 'bootId',
                            'processStart', 'token'})
 INTENT_KEYS = frozenset({'schema', 'attemptId', 'argv', 'cwd', 'executable', 'stdin',
                          'environment', 'bindings', 'timeoutSeconds', 'termGraceSeconds',
                          'lingerSeconds', 'releaseTimeoutSeconds', 'createdAt'})
-EXIT_KEYS = frozenset({'schema', 'attemptId', 'termination', 'stopSource', 'commandPid',
-                       'commandStart', 'exitCode', 'signal', 'lingering', 'signalsSent',
-                       'forced', 'membersAtRecord', 'groupObservation', 'escaped',
-                       'startedAt', 'endedAt', 'durationSeconds'})
-RECORD_KEYS = frozenset({'schema', 'attemptId', 'intentSha256', 'identity', 'commandPid',
-                         'commandStart', 'termination', 'stopSource', 'exitCode', 'signal', 'forced', 'signalsSent',
-                         'lingering', 'membersAtExit', 'groupEmpty', 'groupObservation',
-                         'escapedDescendants',
-                         'unresolvedDescendants', 'startedAt', 'endedAt', 'durationSeconds',
-                         'logs', 'reasons', 'executionSuccess', 'limitations', 'finalizedAt'})
+EXIT_KEYS_V1 = frozenset({'schema', 'attemptId', 'termination', 'stopSource', 'commandPid',
+                          'commandStart', 'exitCode', 'signal', 'lingering', 'signalsSent',
+                          'forced', 'membersAtRecord', 'groupObservation', 'escaped',
+                          'startedAt', 'endedAt', 'durationSeconds'})
+EXIT_KEYS = EXIT_KEYS_V1 | {'escapedOverflow', 'escapedSettlement'}
+RECORD_KEYS_V3 = frozenset({'schema', 'attemptId', 'intentSha256', 'identity', 'commandPid',
+                            'commandStart', 'termination', 'stopSource', 'exitCode', 'signal', 'forced', 'signalsSent',
+                            'lingering', 'membersAtExit', 'groupEmpty', 'groupObservation',
+                            'escapedDescendants',
+                            'unresolvedDescendants', 'startedAt', 'endedAt', 'durationSeconds',
+                            'logs', 'reasons', 'executionSuccess', 'limitations', 'finalizedAt'})
+RECORD_KEYS = RECORD_KEYS_V3 | {'escapedOverflow', 'escapedSettlement'}
+SETTLEMENT_KEYS = frozenset({'observationComplete', 'bootId', 'observedAt', 'identities',
+                             'settled', 'live', 'unknown'})
+SETTLEMENT_ITEM_KEYS = frozenset({'pid', 'start', 'status', 'proof', 'currentStart'})
+# status -> the only proofs that may support it. gone: kernel ESRCH, procfs ENOENT or absence
+# from one complete typed snapshot, or a different boot; reused: same boot, both starts known
+# and different. live/unknown never settle an identity.
+SETTLEMENT_PROOFS = {'gone': frozenset({'esrch', 'absent', 'boot-changed'}),
+                     'reused': frozenset({'start-differs'}),
+                     'live': frozenset({'start-matches'}),
+                     'unknown': frozenset({'boot-unknown', 'query-failed', 'original-start-missing'})}
+SETTLED_STATUSES = frozenset({'gone', 'reused'})
 LOG_KEYS = frozenset({'path', 'size', 'sha256'})
 DIR_BINDING_KEYS = frozenset({'path', 'device', 'inode'})
 
@@ -221,6 +254,12 @@ LIMITATIONS = (
     'a clean lifecycle record says the process tree ended cleanly; it is never semantic or '
     'acceptance evidence',
     'recover() assumes no other live controller is concurrently driving the same attempt',
+    "escaped-descendant settlement is the supervisor's bounded probe before its exit record "
+    'closes (kernel ESRCH, procfs ENOENT or one complete ps snapshot, with boot and start '
+    'identity); it proves only that each recorded pid/start identity was gone then, not what '
+    'that process did before it exited, and it is never re-probed or upgraded later',
+    'start identity has OS resolution (ps lstart is whole seconds): a pid reused within the '
+    'same second is indistinguishable and stays live/unknown, never settled',
 )
 
 
@@ -247,6 +286,11 @@ class CommandSpec:
 
 @dataclass(frozen=True)
 class Recovery:
+    """Classification of an attempt. relaunch_safe means only that the SAME unlaunched work
+    may be launched again under a NEW attempt id ('prepared' or conclusive not-launched
+    evidence). It is never a quiescence flag: it is False for every launched attempt,
+    including a finalized successful one."""
+
     state: str
     relaunch_safe: bool
     identity_status: str | None
@@ -707,10 +751,126 @@ def _group_empty(pgid: int) -> bool:
 
 
 def _escaped_alive(item: dict) -> bool:
+    """v3 records only (exit/v1): the legacy alive count, kept with its exact old meaning."""
     current = process_start(item['pid'])
     if current is None:
         return _pid_exists(item['pid'])
     return item['start'] is None or current == item['start']
+
+
+def _presence(pid: int) -> str:
+    """'absent' only on kernel ESRCH. Signal 0 is the permission/existence check: nothing is
+    delivered, so no process outside the owned group is ever signalled."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return 'absent'
+    except PermissionError:
+        return 'present'
+    except OSError:
+        return 'unknown'
+    return 'present'
+
+
+def _procfs_start(pid: int) -> tuple[str, str | None]:
+    """('ok', start) | ('absent', None) on ENOENT/ESRCH | ('unknown', None) otherwise."""
+    try:
+        raw = Path(f'/proc/{pid}/stat').read_bytes()
+    except (FileNotFoundError, ProcessLookupError):
+        return 'absent', None
+    except OSError:
+        return 'unknown', None
+    tail = raw.rsplit(b')', 1)[-1].split()
+    if len(tail) > 19 and tail[19].isdigit():
+        return 'ok', 'ticks:' + tail[19].decode()
+    return 'unknown', None
+
+
+def _start_table() -> dict[int, str] | None:
+    """One complete typed ps snapshot of every process start, or None. A missing tool, a
+    nonzero exit, timeout, empty output, any malformed or duplicate row, or a table that
+    omits this very process (truncated) is never read as anyone's absence."""
+    text = _system_query(['ps', '-A', '-o', 'pid=', '-o', 'lstart='])
+    if text is None:
+        return None
+    table: dict[int, str] = {}
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) != 6 or not (parts[0].isascii() and parts[0].isdigit()):
+            return None
+        pid = int(parts[0])
+        if pid in table:
+            return None
+        table[pid] = 'lstart:' + ' '.join(parts[1:])  # the same form process_start() records
+    return table if os.getpid() in table else None
+
+
+def _start_lookup():
+    """pid -> ('ok', start) | ('absent', None) | ('unknown', None) for one settlement round;
+    without procfs one snapshot is taken lazily and shared by every identity."""
+    if _procfs():
+        return _procfs_start
+    snapshot: list[dict[int, str] | None] = []
+
+    def lookup(pid: int) -> tuple[str, str | None]:
+        if not snapshot:
+            snapshot.append(_start_table())
+        table = snapshot[0]
+        if table is None:
+            return 'unknown', None
+        start = table.get(pid)
+        return ('absent', None) if start is None else ('ok', start)
+    return lookup
+
+
+def _probe_escaped(item: dict, anchor_boot: str | None, current_boot: str | None, lookup) -> dict:
+    """Typed settlement proof for one recorded escaped identity; observes, never signals."""
+    pid, start = item['pid'], item['start']
+
+    def proof(status: str, code: str, current: str | None = None) -> dict:
+        return {'pid': pid, 'start': start, 'status': status, 'proof': code, 'currentStart': current}
+    if current_boot is not None and anchor_boot is not None and current_boot != anchor_boot:
+        return proof('gone', 'boot-changed')
+    if _presence(pid) == 'absent':
+        return proof('gone', 'esrch')
+    if current_boot is None or anchor_boot is None:
+        return proof('unknown', 'boot-unknown')
+    found, current = lookup(pid)
+    if found == 'absent':
+        return proof('gone', 'absent')
+    if found != 'ok':
+        return proof('unknown', 'query-failed')
+    if start is None:
+        return proof('unknown', 'original-start-missing', current)
+    if current != start:
+        return proof('reused', 'start-differs', current)
+    return proof('live', 'start-matches', current)
+
+
+def _escaped_settlement(items: list[dict], anchor_boot: str | None,
+                        observation_complete: bool) -> dict:
+    """One probe round over EVERY recorded identity (the full history is kept)."""
+    current_boot = boot_identity()
+    lookup = _start_lookup()
+    identities = [_probe_escaped(item, anchor_boot, current_boot, lookup) for item in items]
+    statuses = [entry['status'] for entry in identities]
+    return {'observationComplete': observation_complete, 'bootId': current_boot,
+            'observedAt': utc_now(), 'identities': identities,
+            'settled': sum(status in SETTLED_STATUSES for status in statuses),
+            'live': statuses.count('live'), 'unknown': statuses.count('unknown')}
+
+
+def _settle_escaped(items: list[dict], anchor_boot: str | None, observation_complete: bool,
+                    drain_seconds: float, interrupted=None) -> dict:
+    """Re-probe while any identity is unsettled, for at most drain_seconds (one round when
+    it is 0 or interrupted() is true); the last round is recorded as observed, never upgraded."""
+    deadline = time.monotonic() + drain_seconds
+    while True:
+        settlement = _escaped_settlement(items, anchor_boot, observation_complete)
+        if not (settlement['live'] or settlement['unknown']) or time.monotonic() >= deadline \
+                or (interrupted is not None and interrupted()):
+            return settlement
+        time.sleep(SCAN_SECONDS)
 
 
 # ---------------------------------------------------------------- prepare
@@ -1210,6 +1370,12 @@ def _escaped_item_ok(item) -> bool:
             and _pid_ok(item['pid']) and _optional(item['start'], _text_ok))
 
 
+def _overflow_ok(record: dict) -> bool:
+    """exit/v2: overflow is set only once the retained history is full."""
+    overflow = record['escapedOverflow']
+    return type(overflow) is bool and (not overflow or len(record['escaped']) == MAX_ESCAPED)
+
+
 def _exit_consistent(record: dict) -> bool:
     """Cross-field facts the supervisor always emits; types are already checked."""
     if record['termination'] == 'launch-failed':
@@ -1234,8 +1400,13 @@ def _exit_consistent(record: dict) -> bool:
 
 
 def _exit_ok(record: dict, attempt_id: str) -> bool:
+    """An exit/v2 (current supervisor: unique escaped identities and its own pre-closure
+    settlement of exactly that history) or an exit/v1 (older supervisor, no overflow flag
+    and no settlement)."""
     try:
-        return (set(record) == EXIT_KEYS and record['schema'] == SCHEMA_EXIT
+        schema = record['schema']
+        keys = EXIT_KEYS if schema == SCHEMA_EXIT else EXIT_KEYS_V1 if schema == SCHEMA_EXIT_V1 else None
+        return (keys is not None and set(record) == keys
                 and record['attemptId'] == attempt_id
                 and record['termination'] in EXIT_TERMINATIONS
                 and _optional(record['stopSource'], lambda value: value in STOP_SOURCES)
@@ -1251,9 +1422,132 @@ def _exit_ok(record: dict, attempt_id: str) -> bool:
                 and record['groupObservation'] in OBSERVATIONS
                 and isinstance(record['escaped'], list) and len(record['escaped']) <= MAX_ESCAPED
                 and all(_escaped_item_ok(item) for item in record['escaped'])
+                and (schema == SCHEMA_EXIT_V1 or (_overflow_ok(record)
+                                                  and _escaped_unique(record['escaped'])
+                                                  and _exit_settlement_ok(record)))
                 and _text_ok(record['startedAt']) and _text_ok(record['endedAt'])
                 and _seconds_ok(record['durationSeconds'], MAX_DURATION, True)
                 and _exit_consistent(record))
+    except (KeyError, TypeError):
+        return False
+
+
+def _settlement_item_ok(item, anchor_boot: str | None, settle_boot: str | None) -> bool:
+    """One identity's proof is typed and agrees with its status, starts and boot context."""
+    if not isinstance(item, dict) or set(item) != SETTLEMENT_ITEM_KEYS:
+        return False
+    if not _escaped_item_ok({'pid': item['pid'], 'start': item['start']}):
+        return False
+    status, code, start, current = item['status'], item['proof'], item['start'], item['currentStart']
+    if not isinstance(status, str) or not isinstance(code, str) \
+            or code not in SETTLEMENT_PROOFS.get(status, ()) or not _optional(current, _text_ok):
+        return False
+    same_boot = anchor_boot is not None and settle_boot == anchor_boot
+    if code == 'boot-changed':
+        return (current is None and anchor_boot is not None and settle_boot is not None
+                and settle_boot != anchor_boot)
+    if code == 'esrch':
+        return current is None and (settle_boot is None or anchor_boot is None or same_boot)
+    if code == 'boot-unknown':
+        return current is None and (settle_boot is None or anchor_boot is None)
+    if not same_boot:
+        return False
+    if code in ('absent', 'query-failed'):
+        return current is None
+    if code == 'original-start-missing':
+        return start is None and current is not None
+    if code == 'start-differs':
+        return start is not None and current is not None and current != start
+    return start is not None and current == start  # start-matches
+
+
+def _settlement_counts(settlement, count: int, complete: bool,
+                       anchor_boot: str | None) -> tuple[int, int, int] | None:
+    """(settled, live, unknown) of a typed settlement holding exactly `count` proofs whose
+    observation status and counts agree with its own proofs; None otherwise."""
+    if not isinstance(settlement, dict) or set(settlement) != SETTLEMENT_KEYS:
+        return None
+    items, settle_boot = settlement['identities'], settlement['bootId']
+    if not isinstance(items, list) or len(items) != count \
+            or not _optional(settle_boot, _text_ok) or not _text_ok(settlement['observedAt']):
+        return None
+    if settlement['observationComplete'] is not complete:
+        return None
+    if not all(_settlement_item_ok(item, anchor_boot, settle_boot) for item in items):
+        return None
+    statuses = [item['status'] for item in items]
+    counts = (sum(status in SETTLED_STATUSES for status in statuses), statuses.count('live'),
+              statuses.count('unknown'))
+    if not all(_count_ok(settlement[key]) for key in ('settled', 'live', 'unknown')) \
+            or (settlement['settled'], settlement['live'], settlement['unknown']) != counts:
+        return None
+    return counts
+
+
+def _escaped_unique(items: list[dict]) -> bool:
+    """exit/v2 retains each observed (pid, start) identity once; a repeat is never emitted."""
+    return len({(item['pid'], item['start']) for item in items}) == len(items)
+
+
+def _exit_settlement_ok(record: dict) -> bool:
+    """exit/v2: the supervisor's own settlement of exactly its escaped history, in order. It
+    probed inside its own boot, so its anchor is its own boot identity (never boot-changed)."""
+    settlement = record['escapedSettlement']
+    if not isinstance(settlement, dict):
+        return False
+    complete = record['groupObservation'] == 'ok' and record['escapedOverflow'] is False
+    if _settlement_counts(settlement, len(record['escaped']), complete,
+                          settlement.get('bootId')) is None:
+        return False
+    pairs = [(item['pid'], item['start']) for item in settlement['identities']]
+    return pairs == [(item['pid'], item['start']) for item in record['escaped']]
+
+
+def _settlement_ok(record: Mapping) -> bool:
+    """A v4 settlement is typed, keeps one proof per historical identity, and its counts,
+    observation status and unresolved total agree with its proofs and the record. An
+    exit-backed capture was taken inside the anchor's boot; a synthetic one holds nothing."""
+    settlement, identity = record['escapedSettlement'], record['identity']
+    anchor_boot = identity.get('bootId') if isinstance(identity, dict) else None
+    complete = record['groupObservation'] == 'ok' and record['escapedOverflow'] is False
+    counts = _settlement_counts(settlement, record['escapedDescendants'], complete, anchor_boot)
+    if counts is None:
+        return False
+    settle_boot = settlement['bootId']
+    if record['termination'] in EXIT_TERMINATIONS:
+        if None not in (anchor_boot, settle_boot) and settle_boot != anchor_boot:
+            return False
+    elif counts != (0, 0, 0):
+        return False
+    unresolved = (counts[1] + counts[2] + (1 if record['groupEmpty'] is False else 0)
+                  + (1 if record['escapedOverflow'] is True else 0))
+    return record['unresolvedDescendants'] == unresolved
+
+
+def escaped_settled(record) -> bool:
+    """Escaped-descendant predicate for a record ALREADY validated by finalize/read_status.
+
+    v3 keeps its exact old meaning: no escaped identity was ever observed (historical 0).
+    v4: the supervisor's pre-exit capture (copied unchanged from exit/v2) is complete (group
+    observed, history not truncated), was taken inside the anchor's boot, and positively
+    settles EVERY recorded (pid, start) identity with self-consistent proofs and counts. A
+    synthetic lost record is incomplete and never settled. The exact raw-exit binding is
+    checked only by read_status, so call this after a validated read. Anything else
+    (unknown schema, missing/mistyped fields) is False.
+    """
+    if not isinstance(record, Mapping):
+        return False
+    try:
+        schema = record['schema']
+        if schema == SCHEMA_RECORD_V3:
+            return _count_ok(record['escapedDescendants']) and record['escapedDescendants'] == 0
+        if schema != SCHEMA_RECORD or not _count_ok(record['escapedDescendants']) \
+                or type(record['escapedOverflow']) is not bool or not _settlement_ok(record):
+            return False
+        settlement = record['escapedSettlement']
+        return (settlement['observationComplete'] is True and settlement['live'] == 0
+                and settlement['unknown'] == 0
+                and settlement['settled'] == record['escapedDescendants'])
     except (KeyError, TypeError):
         return False
 
@@ -1285,6 +1579,16 @@ def _logs_shape_ok(logs) -> bool:
                for ref in logs.values())
 
 
+def _escaped_checks(record: dict) -> tuple[tuple[bool, str], ...]:
+    """v3: any historical escape fails (exact old meaning). v4: a truncated history or any
+    identity not positively settled fails; a settled historical escape does not."""
+    if record['schema'] == SCHEMA_RECORD_V3:
+        return ((record['escapedDescendants'] > 0, 'escaped-descendants'),)
+    settlement = record['escapedSettlement']
+    return ((record['escapedOverflow'] is True, 'escaped-observation-truncated'),
+            (settlement['live'] + settlement['unknown'] > 0, 'escaped-descendants-unsettled'))
+
+
 def _reasons(record: dict) -> list[str]:
     termination = record['termination']
     checks = (
@@ -1299,7 +1603,7 @@ def _reasons(record: dict) -> list[str]:
          'exit-group-not-proven-empty'),
         (record['groupEmpty'] is not True, 'group-not-proven-empty'),
         (record['groupObservation'] != 'ok', 'group-observation-unavailable'),
-        (record['escapedDescendants'] > 0, 'escaped-descendants'),
+        *_escaped_checks(record),
         (record['unresolvedDescendants'] > 0, 'unresolved-descendants'),
         (any(record['logs'][key] is None for key in ('stdout', 'stderr')), 'logs-missing'),
     )
@@ -1311,7 +1615,7 @@ def _execution_success(record: dict) -> bool:
             and _pid_ok(record['commandPid'])
             and type(record['exitCode']) is int and record['exitCode'] == 0
             and type(record['membersAtExit']) is int and record['membersAtExit'] == 0
-            and record['groupEmpty'] is True)
+            and record['groupEmpty'] is True and escaped_settled(record))
 
 
 def _record_types_ok(record: dict) -> bool:
@@ -1328,6 +1632,7 @@ def _record_types_ok(record: dict) -> bool:
             and _optional(record['groupEmpty'], lambda value: type(value) is bool)
             and record['groupObservation'] in OBSERVATIONS
             and _count_ok(record['escapedDescendants']) and _count_ok(record['unresolvedDescendants'])
+            and (record['schema'] == SCHEMA_RECORD_V3 or type(record['escapedOverflow']) is bool)
             and _optional(record['durationSeconds'], lambda value: _seconds_ok(value, MAX_DURATION, True))
             and all(_optional(record[key], _text_ok) for key in ('startedAt', 'endedAt'))
             and _text_ok(record['finalizedAt'])
@@ -1359,7 +1664,9 @@ def _record_matches_journal(dir_fd: int, record: dict) -> bool:
 def _record_problem(dir_fd: int, attempt_path: str, record: dict, intent: dict,
                     intent_sha: str) -> str | None:
     """Fixed problem code for a stored lifecycle record, or None when it fully checks out."""
-    if set(record) != RECORD_KEYS or record['schema'] != SCHEMA_RECORD:
+    schema = record.get('schema')
+    keys = RECORD_KEYS if schema == SCHEMA_RECORD else RECORD_KEYS_V3 if schema == SCHEMA_RECORD_V3 else None
+    if keys is None or set(record) != keys:
         return 'record-fields'
     if record['attemptId'] != intent['attemptId']:
         return 'record-attempt-mismatch'
@@ -1375,6 +1682,8 @@ def _record_problem(dir_fd: int, attempt_path: str, record: dict, intent: dict,
         return 'record-command-inconsistent'
     if not _logs_shape_ok(record['logs']):
         return 'record-logs-invalid'
+    if record['schema'] == SCHEMA_RECORD and not _settlement_ok(record):
+        return 'record-settlement-invalid'
     if record['reasons'] != _reasons(record):
         return 'record-reasons-inconsistent'
     if record['executionSuccess'] is not _execution_success(record):
@@ -1394,7 +1703,15 @@ def _synthetic_exit(state: str) -> dict:
             'commandPid': None, 'commandStart': None, 'stopSource': None, 'exitCode': None, 'signal': None, 'forced': False,
             'signalsSent': [], 'lingering': False, 'membersAtRecord': None,
             'groupObservation': 'ok' if state == 'not-launched' else 'unavailable',
-            'escaped': [], 'startedAt': None, 'endedAt': None, 'durationSeconds': None}
+            'escaped': [], 'escapedOverflow': False, 'startedAt': None, 'endedAt': None,
+            'durationSeconds': None}
+
+
+def _synthetic_settlement(source: dict) -> dict:
+    """No supervisor recorded an exit: not-launched is proven to have no command (complete,
+    no identity); lost is UNKNOWN (incomplete, never settled). Nothing is probed or invented."""
+    return {'observationComplete': source['groupObservation'] == 'ok', 'bootId': boot_identity(),
+            'observedAt': utc_now(), 'identities': [], 'settled': 0, 'live': 0, 'unknown': 0}
 
 
 def _exit_facts(source: dict) -> dict:
@@ -1406,37 +1723,72 @@ def _exit_facts(source: dict) -> dict:
             'lingering': source['lingering'], 'membersAtExit': source['membersAtRecord'],
             'groupObservation': source['groupObservation'],
             'escapedDescendants': len(source['escaped']), 'startedAt': source['startedAt'],
-            'endedAt': source['endedAt'], 'durationSeconds': source['durationSeconds']}
+            'endedAt': source['endedAt'], 'durationSeconds': source['durationSeconds'],
+            # exit/v1 carries no overflow flag, so its v3 record has none either.
+            **({'escapedOverflow': source['escapedOverflow']} if 'escapedOverflow' in source else {}),
+            # exit/v2: the supervisor's pre-closure settlement, copied (and compared) exactly.
+            **({'escapedSettlement': source['escapedSettlement']}
+               if 'escapedSettlement' in source else {})}
+
+
+def _facts_equal(record: dict, expected: dict) -> bool:
+    return {key: record.get(key) for key in expected} == expected
 
 
 def _record_matches_exit(dir_fd: int, record: dict, attempt_id: str) -> bool:
-    """Exit-derived record fields equal the retained raw exit.json (absent when synthetic)."""
+    """Exit-derived record fields equal the retained raw exit.json (absent when synthetic).
+
+    A v3 record pairs only with an exit/v1, a v4 record only with an exit/v2, whose
+    settlement the record must equal exactly (and every identity is bound, in order, to the
+    raw exit's escaped pid/start history).
+    """
     exit_record = _load_json(dir_fd, EXIT)
+    current = record['schema'] == SCHEMA_RECORD
     if record['termination'] not in EXIT_TERMINATIONS:
-        return exit_record is None
-    if exit_record is None or not _exit_ok(exit_record, attempt_id):
+        if exit_record is not None:
+            return False
+        return not current or _facts_equal(record, _exit_facts(_synthetic_exit(record['termination'])))
+    if exit_record is None or not _exit_ok(exit_record, attempt_id) \
+            or exit_record['schema'] != (SCHEMA_EXIT if current else SCHEMA_EXIT_V1):
         return False
-    expected = _exit_facts(exit_record)
-    return {key: record[key] for key in expected} == expected
+    if not _facts_equal(record, _exit_facts(exit_record)):
+        return False
+    if not current:
+        return True
+    settled = [(item['pid'], item['start']) for item in record['escapedSettlement']['identities']]
+    return settled == [(item['pid'], item['start']) for item in exit_record['escaped']]
 
 
 def _build_record(dir_fd: int, attempt_path: str, facts: _Facts) -> dict:
     state, identity = facts.recovery.state, facts.identity
     source = facts.exit_record if state == 'exited' else _synthetic_exit(state)
+    legacy = source.get('schema') == SCHEMA_EXIT_V1  # older supervisor: the exact v3 record
     group_empty = _group_empty(identity['pgid']) if identity is not None else None
-    alive = sum(1 for item in source['escaped'] if _escaped_alive(item))
     record = {
-        'schema': SCHEMA_RECORD, 'attemptId': facts.intent['attemptId'],
+        'schema': SCHEMA_RECORD_V3 if legacy else SCHEMA_RECORD,
+        'attemptId': facts.intent['attemptId'],
         'intentSha256': facts.intent_sha, 'identity': identity,
         **_exit_facts(source),
         # Observed now; it never replaces the settlement evidence kept in membersAtExit.
         'groupEmpty': group_empty,
-        'unresolvedDescendants': alive + (1 if group_empty is False else 0),
-        # Hashed only now: the group is terminal (or recorded as not proven so).
-        'logs': {'stdout': _log_reference(dir_fd, attempt_path, STDOUT),
-                 'stderr': _log_reference(dir_fd, attempt_path, STDERR)},
-        'limitations': list(LIMITATIONS), 'finalizedAt': utc_now(),
     }
+    group_unresolved = 1 if group_empty is False else 0
+    if legacy:
+        alive = sum(1 for item in source['escaped'] if _escaped_alive(item))
+        record['unresolvedDescendants'] = alive + group_unresolved
+    else:
+        # exit/v2: the supervisor's capture, already copied verbatim by _exit_facts. It is never
+        # re-probed here, so a later exit, absence or reboot cannot upgrade it.
+        if state != 'exited':
+            record['escapedSettlement'] = _synthetic_settlement(source)
+        settlement = record['escapedSettlement']
+        record['unresolvedDescendants'] = (settlement['live'] + settlement['unknown'] + group_unresolved
+                                           + (1 if source['escapedOverflow'] else 0))
+    # Hashed only now: the group is terminal (or recorded as not proven so) and settled
+    # escaped identities can no longer append to an inherited log.
+    record.update(logs={'stdout': _log_reference(dir_fd, attempt_path, STDOUT),
+                        'stderr': _log_reference(dir_fd, attempt_path, STDERR)},
+                  limitations=list(LIMITATIONS), finalizedAt=utc_now())
     record['reasons'] = _reasons(record)
     record['executionSuccess'] = _execution_success(record)
     return record
@@ -1466,12 +1818,22 @@ def finalize(attempt) -> dict:
 
 # ---------------------------------------------------------------- bootstrap (anchor side)
 
-def _process_table() -> list[tuple[int, int, int]] | None:
+def _table_int_ok(part: str) -> bool:
+    return part.isdigit() and len(part) <= 10 and int(part) <= MAX_PID
+
+
+def _process_table() -> list[tuple[int, int, int, str]] | None:
+    """One complete typed ps snapshot: (pid, ppid, pgid, lstart identity) per process, or None.
+
+    A missing tool, nonzero exit, timeout, non-ASCII, empty, malformed, truncated or duplicate
+    row, an out-of-range id, or a table that omits this observer itself is UNAVAILABLE, never
+    a clean partial inventory. Only the ps process itself is left out of the rows."""
     tool = shutil.which('ps', path=SYSTEM_PATH)
     if tool is None:
         return None
     try:
-        proc = subprocess.Popen([tool, '-A', '-o', 'pid=', '-o', 'ppid=', '-o', 'pgid='],
+        proc = subprocess.Popen([tool, '-A', '-o', 'pid=', '-o', 'ppid=', '-o', 'pgid=',
+                                 '-o', 'lstart='],
                                 env=SYSTEM_ENV, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                 stderr=subprocess.DEVNULL, close_fds=True)
     except OSError:
@@ -1484,36 +1846,67 @@ def _process_table() -> list[tuple[int, int, int]] | None:
         return None
     if proc.returncode != 0:
         return None
-    rows = []
-    for line in output.decode('ascii', 'replace').splitlines():
+    try:
+        lines = output.decode('ascii').splitlines()
+    except UnicodeDecodeError:
+        return None
+    rows, listed = [], set()
+    for line in lines:
         parts = line.split()
-        if len(parts) == 3 and all(part.isdigit() for part in parts):
-            pid, ppid, pgid = (int(part) for part in parts)
-            if pid != proc.pid:
-                rows.append((pid, ppid, pgid))
-    return rows
+        if len(parts) != 8 or not all(_table_int_ok(part) for part in parts[:3]):
+            return None
+        pid, ppid, pgid = (int(part) for part in parts[:3])
+        if pid in listed:
+            return None
+        listed.add(pid)
+        if pid != proc.pid:
+            rows.append((pid, ppid, pgid, 'lstart:' + ' '.join(parts[3:])))
+    return rows if os.getpid() in listed else None
 
 
 class _GroupWatch:
-    """Observes (never signals) owned group members and descendants that left the group."""
+    """Observes (never signals) owned group members and descendants that left the group.
+
+    Escaped descendants are retained as distinct (pid, start) identities: a pid reused by a
+    later observed descendant with another start is a SECOND identity, never folded into the
+    first, and an unknown start (None) is its own uncertain identity; only exact duplicates
+    collapse. Two descendants started within one lstart second under the same pid cannot be
+    told apart and stay one identity that a probe can only call live/unknown. Past
+    MAX_ESCAPED distinct identities, overflow is recorded (blocking), never a clean history."""
 
     def __init__(self, pgid: int):
         self.pid = os.getpid()
         self.pgid = pgid
-        self.escaped: dict[int, str | None] = {}
+        self._escaped: set[tuple[int, str | None]] = set()
+        self.overflow = False  # an escape was seen after the retained history was full
         self.available = True
         self._next_scan = 0.0
+
+    def identities(self) -> list[dict]:
+        """The retained history ordered by pid, then start (an unknown start first)."""
+        ordered = sorted(self._escaped,
+                         key=lambda pair: (pair[0], pair[1] is not None, pair[1] or ''))
+        return [{'pid': pid, 'start': start} for pid, start in ordered]
+
+    def _retain(self, identity: tuple[int, str | None]) -> None:
+        if identity in self._escaped:
+            return
+        if len(self._escaped) < MAX_ESCAPED:
+            self._escaped.add(identity)
+        else:
+            self.overflow = True  # recorded, never truncated into a clean history
 
     def snapshot(self) -> set[int] | None:
         rows = _process_table()
         if rows is None:
             self.available = False
             return None
+        procfs = _procfs()
         children: dict[int, list[int]] = {}
-        groups = {}
-        for pid, ppid, pgid in rows:
+        groups, starts = {}, {}
+        for pid, ppid, pgid, start in rows:
             children.setdefault(ppid, []).append(pid)
-            groups[pid] = pgid
+            groups[pid], starts[pid] = pgid, start
         stack, seen = [self.pid], set()
         while stack:
             for child in children.get(stack.pop(), ()):
@@ -1521,10 +1914,11 @@ class _GroupWatch:
                     continue
                 seen.add(child)
                 stack.append(child)
-                if groups.get(child) != self.pgid and child not in self.escaped \
-                        and len(self.escaped) < MAX_ESCAPED:
-                    self.escaped[child] = process_start(child)
-        return {pid for pid, _ppid, pgid in rows if pgid == self.pgid and pid != self.pid}
+                if groups[child] != self.pgid:
+                    # The start form the settlement probe compares: procfs ticks, else this
+                    # snapshot's own lstart (the form process_start() and _start_table use).
+                    self._retain((child, process_start(child) if procfs else starts[child]))
+        return {pid for pid, _ppid, pgid, _start in rows if pgid == self.pgid and pid != self.pid}
 
     def maybe_scan(self) -> None:
         now = time.monotonic()
@@ -1689,7 +2083,8 @@ def _empty_exit_record(intent: dict) -> dict:
             'stopSource': None, 'commandPid': None, 'commandStart': None, 'exitCode': None,
             'signal': None, 'lingering': False, 'signalsSent': [], 'forced': False,
             'membersAtRecord': None, 'groupObservation': 'ok', 'escaped': [],
-            'startedAt': utc_now(), 'endedAt': None, 'durationSeconds': None}
+            'escapedOverflow': False, 'escapedSettlement': None, 'startedAt': utc_now(),
+            'endedAt': None, 'durationSeconds': None}
 
 
 def _closed(record: dict, began: float) -> dict:
@@ -1711,13 +2106,16 @@ def _supervise(dir_fd: int, intent: dict, fds, stop: dict) -> dict:
         _close_all(fds)
     if command is None:
         _append_journal(dir_fd, 'launch-failed')
-        record.update(termination='launch-failed', membersAtRecord=0)
+        # Nothing ran, so nothing escaped: a complete, empty capture in this boot.
+        record.update(termination='launch-failed', membersAtRecord=0,
+                      escapedSettlement=_escaped_settlement([], boot_identity(), True))
         return _closed(record, began)
     record.update(commandPid=command.pid, commandStart=process_start(command.pid))
     _append_journal(dir_fd, 'command-started', pid=command.pid)
     pgid = os.getpgid(0)
     watch = _GroupWatch(pgid)
     termination, source = _await_command(command, dir_fd, intent, watch, stop, began)
+    settle_by = time.monotonic() + intent['lingerSeconds']  # one drain budget, shared below
     members = watch.snapshot()
     if termination == 'exited':
         members = _await_drain(watch, members, dir_fd, stop, intent['lingerSeconds'])
@@ -1727,7 +2125,8 @@ def _supervise(dir_fd: int, intent: dict, fds, stop: dict) -> dict:
         record['signalsSent'].append('SIGTERM')
         members = _await_term(command, watch, intent['termGraceSeconds'])
     code = command.poll()
-    if code is None or members is None or members:
+    kill_pending = code is None or members is None or bool(members)
+    if kill_pending:
         record['signalsSent'].append('SIGKILL')  # sent by the anchor right after this record
     record.update(
         termination=termination, stopSource=source, forced=bool(record['signalsSent']),
@@ -1735,8 +2134,20 @@ def _supervise(dir_fd: int, intent: dict, fds, stop: dict) -> dict:
         signal=_signal_name(-code) if code is not None and code < 0 else None,
         membersAtRecord=None if members is None else len(members),
         groupObservation='ok' if watch.available else 'unavailable',
-        escaped=[{'pid': pid, 'start': start} for pid, start in sorted(watch.escaped.items())])
+        escaped=watch.identities(), escapedOverflow=watch.overflow)
+    budget = 0.0 if kill_pending else settle_by - time.monotonic()
+    record['escapedSettlement'] = _capture_settlement(record, dir_fd, stop, budget)
     return _closed(record, began)
+
+
+def _capture_settlement(record: dict, dir_fd: int, stop: dict, budget: float) -> dict:
+    """Probe every escaped identity after the owned group drained and BEFORE the exit record
+    closes, inside this supervisor's own boot. Unsettled identities are re-probed only within
+    the remaining drain budget (one round while a SIGKILL is pending or a stop is requested).
+    Observes; never signals anything outside the owned group."""
+    complete = record['groupObservation'] == 'ok' and not record['escapedOverflow']
+    return _settle_escaped(record['escaped'], boot_identity(), complete, max(0.0, budget),
+                           lambda: stop['signal'] or _stop_present(dir_fd))
 
 
 def _run_supervised(dir_fd: int, intent: dict, fds, stop: dict) -> int:

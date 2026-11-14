@@ -27,7 +27,9 @@ receipt whose sole findings are a nonzero exit with a clean lifecycle. Everythin
 missing receipt) is INCOMPLETE. A receipt is necessary evidence, never review or CI.
 
 Limits: same-user trust as the helper and recorder; the launched argv[0] is the resolved
-executable path; descendantsObservedAfterExit maps only the helper's lingering fact.
+executable path; descendantsObservedAfterExit maps only the helper's lingering fact;
+groupEmptyAtReceipt also requires the helper's escaped_settled (the supervisor's complete
+pre-exit capture settling every recorded escape), never a later re-probe.
 """
 
 from __future__ import annotations
@@ -356,7 +358,7 @@ def child_from_record(record: dict) -> dict:
     lingering = record['lingering'] is True
     group_clean = (record['groupEmpty'] is True and record['membersAtExit'] == 0
                    and record['groupObservation'] == 'ok'
-                   and record['escapedDescendants'] == 0 and record['unresolvedDescendants'] == 0)
+                   and process.escaped_settled(record) and record['unresolvedDescendants'] == 0)
     return {'launched': True, 'pid': pid, 'timedOut': record['termination'] == 'timeout',
             'descendantsObservedAfterExit': lingering, 'descendantsOutlivedDeadline': lingering,
             'groupEmptyAtReceipt': group_clean, 'signalsSent': list(record['signalsSent']),

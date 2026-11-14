@@ -375,7 +375,7 @@ These checks are read-only. Investigate any nonzero exit before trusting the ins
 
 ### 8. Persistent delivery controller (only if you set one up)
 
-No installer reads, rewrites or deletes controller state, its Git-directory binding, your private policy or authority files, or STOP. No installer asks the setup questions again or discovers accounts. After updating, check each state directory you use:
+No installer reads, rewrites or deletes controller state placed outside the repository and the installed skills tree (for example under `~/.local/state`), its Git-directory binding, your private policy or authority files, or STOP. No installer asks the setup questions again or discovers accounts. An update does not move or re-check existing state: a state directory left inside the skills tree by an earlier prototype can be replaced with that tree, so back it up and review it before touching it. New `setup`/`init` refuses such placements. After updating, check each state directory you use:
 
 ```bash
 python3 "$CLAUDE_HOME/skills/delivery/scripts/controller.py" status --state /absolute/state/dir

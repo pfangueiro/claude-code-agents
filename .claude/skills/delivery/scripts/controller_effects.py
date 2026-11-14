@@ -47,15 +47,19 @@ Journal contract (what the engine must do around these calls)
        is the engine-owned directory of ONE effect intent (journalled before any call), so
        every later observe/execute for that intent first inspects the command attempts of
        all earlier calls under it. A command that is not provably terminal (active, owned,
-       unknown, corrupt, unreadable, or finalized with a non-empty group / unresolved
-       descendants) holds: observe returns ``unknown:prior-command-unresolved`` and execute
+       unknown, corrupt, unreadable, or finalized with a non-empty group, unresolved
+       descendants, or escaped descendants the helper's schema-aware ``escaped_settled``
+       does not positively settle - including a lost supervisor or any incomplete/unknown
+       escape capture, which is never re-probed or relabelled here and stays held for
+       operator reconciliation) holds: observe returns
+       ``unknown:prior-command-unresolved`` and execute
        returns ``incomplete:prior-command-unresolved`` without running any command, Git
        read or provider query. ``inspect_commands(evidence_root)`` is the read-only view;
        its typed ``PriorCommand.attempt`` is what the engine passes to
        ``controller_process.request_stop`` for a positively owned attempt (the helper never
        acts on an unproven identity). A settled-but-unfinalized prior attempt is finalized
        (evidence only) before observing. A terminal prior MUTATION that did not end by
-       itself (timeout, STOP, forced cleanup, lingering, escaped, lost) still allows a
+       itself (timeout, STOP, forced cleanup, lingering) still allows a
        confirmed/conflict observation, but ``not_applied`` becomes
        ``unknown:prior-mutation-unclean`` and execute refuses to replay. A prior command
        that exited nonzero with a clean lifecycle does not hold. Call
@@ -480,8 +484,9 @@ class PriorCommand:
     """One command attempt left under an effect's evidence root by an earlier call.
 
     ``hold`` is True when the command is not provably terminal (active, owned, unknown,
-    corrupt, unreadable, settled-but-unfinalized, or finalized with a non-empty group or
-    unresolved descendants) or its evidence is missing (a claim or receipt whose attempt
+    corrupt, unreadable, settled-but-unfinalized, or finalized with a non-empty group,
+    unresolved descendants or escapes the helper's ``escaped_settled`` does not positively
+    settle) or its evidence is missing (a claim or receipt whose attempt
     is gone, an untrusted claim/receipt, a lost commands root, a claimed attempt with no
     spawn evidence, or a receipt recording a spawn or settlement the helper facts
     contradict): nothing may observe or replay the effect while it holds.
@@ -1062,23 +1067,30 @@ def _signal_number(name: object) -> int | None:
 
 
 def _lifecycle_terminal(record: Mapping[str, Any]) -> bool:
-    """The owned group is proven gone (as far as the helper can observe): nothing this
-    command started can still act."""
+    """The owned group is proven gone AND every escaped descendant is positively settled
+    (the helper's schema-aware ``escaped_settled``: v3 none ever observed; v4 the
+    supervisor's complete pre-exit capture settles every recorded identity), as far as the
+    helper can observe: nothing this command started can still act. groupEmpty and a zero
+    unresolved count alone never suffice: a lost supervisor or an incomplete/unknown escape
+    capture is not terminal and is never re-probed here."""
     if record['termination'] == 'not-launched':
         return True
-    return record['groupEmpty'] is True and record['unresolvedDescendants'] == 0
+    return (record['groupEmpty'] is True and record['unresolvedDescendants'] == 0
+            and _process.escaped_settled(record))
 
 
 def _lifecycle_clean(record: Mapping[str, Any]) -> bool:
     """Terminal AND ended by itself (any exit code) or never ran: no timeout, STOP, forced
-    cleanup, lingering or escaped descendants, an observed group and both raw logs."""
+    cleanup, lingering or unsettled escaped descendants (the helper's ``escaped_settled``:
+    v3 none ever observed, v4 every recorded escape positively settled), an observed group
+    and both raw logs."""
     if not _lifecycle_terminal(record):
         return False
     if record['termination'] in _NOTHING_RAN:
         return True
     logs = record['logs']
     return (record['termination'] == 'exited' and not record['forced'] and not record['signalsSent']
-            and not record['lingering'] and record['escapedDescendants'] == 0
+            and not record['lingering'] and _process.escaped_settled(record)
             and record['groupObservation'] == 'ok'
             and logs['stdout'] is not None and logs['stderr'] is not None)
 

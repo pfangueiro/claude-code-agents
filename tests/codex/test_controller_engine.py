@@ -216,14 +216,14 @@ class ControllerHarness(unittest.TestCase):
             json.dump(data, handle)
         return path
 
-    def setup_controller(self, checks, max_parallel=1, auto_route=False, max_attempts=3):
+    def setup_controller(self, checks, max_parallel=1, auto_route=False, max_attempts=3, instruction_paths=()):
         policy = {'version': 1, 'repository': str(self.repo), 'profiles': self.profiles,
                   'auto_route': auto_route, 'execution_enabled': True, 'background_enabled': False,
                   'max_parallel': max_parallel, 'review_reserve': 0,
                   'limits': {'max_attempts': max_attempts, 'attempt_seconds': 600,
                              'max_total_seconds': 14400, 'max_no_progress': 3, 'max_cost_usd': None},
                   'allowed_checks': checks, 'effects': ['commit', 'integrate'], 'delivery': None,
-                  'instruction_paths': []}
+                  'instruction_paths': list(instruction_paths)}
         self.policy_path = self._private_json(self.root / 'policy.json', policy)
         self.accounts_before = self._accounts_snapshot()
         self.expect_cli(0, 'init', '--policy', str(self.policy_path))

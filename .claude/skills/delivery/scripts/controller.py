@@ -32,7 +32,8 @@ from controller_ledger import (BINDING_FILE, LEDGER_FILE, POLICY_FILE, Controlle
 import controller_requests as inbox
 
 EXIT = {'PASS': 0, 'FAIL': 1, 'INCOMPLETE': 2}
-INCOMPLETE_CODES = frozenset({'locked', 'missing', 'unbound', 'owned_work'})
+INCOMPLETE_CODES = frozenset({'locked', 'missing', 'unbound', 'owned_work', 'repository_inventory',
+                              'repository_layout_unsupported', 'runtime_layout_unsupported'})
 ACK_OUTCOME = {'admitted': 'PASS', 'observed': 'PASS', 'incomplete': 'INCOMPLETE',
                'refused': 'FAIL'}
 ENGINE_FILE = 'controller_engine.py'

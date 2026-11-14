@@ -117,6 +117,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     a strict journalled effect; keeps branches, commits, receipts and history; retains
     dirty, untracked, unknown or review-bundle worktrees with a named reason. `recover`,
     STOP and idle never remove a worktree.
+  - State placement: `init`/`setup` refuse a state directory equal to or inside the
+    selected work tree, Git common directory, any registered worktree or the main work tree
+    (`inside_repository`), or overlapping the installer-managed skills tree of the executing
+    `delivery`/`sdlc-delivery` bundle (`inside_runtime`), before any lock, binding or state
+    write. An unknown runtime layout (`runtime_layout_unsupported`), a main work tree that
+    cannot be proven from a linked selection (`repository_layout_unsupported`) and
+    unobtainable read-only boundary evidence (`repository_inventory`) are INCOMPLETE (exit
+    2). There is no Git configuration fallback, and existing state is not relocated or
+    migrated.
+  - Policy invariance: before claims and again after a reviewer's turn, instruction and
+    native policy entries are compared with the trusted committed policy. A difference holds
+    INCOMPLETE (`base_policy_changed`, `review_policy_changed`,
+    `review_policy_changed_after_review`) with an attended Codex handoff, keeping results,
+    checks and history. Automated policy-editing tasks are unsupported.
+  - Process evidence `process-exit/v2` and `process-lifecycle/v4` keep historical escapes
+    separate from a typed settlement proof. Demonstrably settled escapes can pass; live,
+    unknown, incompletely observed or overflowed ones do not. v3 records keep their meaning,
+    and the v1 receipt schema is unchanged.
 
 ### Changed
 

@@ -81,8 +81,33 @@ zero. A native CLI exiting 0 is never acceptance by itself.
 
 ## 1. Minimal setup (once per repository)
 
-Pick a state directory **outside** the repository and its Git directory. Its parent must
-exist. The controller creates the state directory itself with mode 0700.
+Pick a state directory **outside** the repository and outside the installed skills tree.
+Its parent must exist. The controller creates the state directory itself with mode 0700.
+The recommended location below, under `~/.local/state`, satisfies every placement rule.
+
+Before it takes the repository lock or writes any binding, lock, policy or ledger file,
+`init` (and therefore `setup`) refuses a `--state` that:
+
+- equals or lies inside the selected work tree, the Git common directory, any worktree Git
+  registers, or the main work tree (`inside_repository`, FAIL)
+- equals, lies inside, or is an ancestor of the installer-managed skills tree that holds the
+  executing `delivery` (Codex: `sdlc-delivery`) bundle and its sibling skills
+  (`inside_runtime`, FAIL). A broad installer update replaces that tree wholesale.
+
+Some layouts cannot be proven. They end INCOMPLETE (exit 2) and also write nothing:
+
+- `runtime_layout_unsupported`: the controller is not running from the `scripts/`
+  directory of a known `delivery` or `sdlc-delivery` skill, so the managed tree is unknown.
+- `repository_layout_unsupported`: the selected repository is a linked worktree and Git
+  does not confirm its main work tree, for example a linked worktree of a repository whose
+  Git directory is separated from its work tree. Select the main work tree instead. A
+  separated Git directory selected at its original main work tree is supported.
+- `repository_inventory`: the read-only Git layout or worktree inventory this boundary
+  needs could not be obtained, parsed or established.
+
+The boundary comes only from Git's own read-only answers and the runtime's own location.
+The controller never reads or changes Git configuration for it, repairs anything, searches
+the disk for a root, or migrates or resets state.
 
 ```bash
 mkdir -p -m 700 "$HOME/.local/state/sdlc-controller"
@@ -296,6 +321,27 @@ What `run` does:
   directory above the repository (and not above the state's worktrees) holds `CLAUDE.md`,
   `CLAUDE.local.md`, `AGENTS.md` or `AGENTS.override.md`, every plan is held INCOMPLETE
   (`native_override_unsupported`). No weaker defaults are substituted.
+- A candidate's policy changes are review material, never acceptance authority. Before any
+  implement or review claim, and again after a reviewer's terminal event and before its
+  review is recorded, the engine compares the session worktree with the trusted committed
+  policy of the frozen context: the original repository HEAD, whose configured
+  `instruction_paths` must still match the frozen rules digest. It compares every configured
+  instruction path, every `AGENTS*.md` and `CLAUDE*.md` at any depth, everything under a
+  `.claude`, `.codex` or `.agents` directory, `.mcp.json` and every symlink, as identical
+  Git tree entries. Added, deleted and changed entries count, as do modified, untracked and
+  ignored policy paths, including ignored ones created during a review.
+- A difference holds the plan INCOMPLETE with an attended Codex handoff:
+  `base_policy_changed` at the execution base, `review_policy_changed` at the result under
+  review, or `review_policy_changed_after_review` when it appears during the review turn.
+  In the last case that review attempt closes as an execution failure and its verdict is
+  not recorded. Results, commits, checks and history are kept.
+- Automated tasks that edit policy files are therefore intentionally unsupported. They need
+  a separately attended review against the trusted base, or a new approved context. The
+  controller imports no approval and never adopts a changed policy by itself. Tasks that
+  change ordinary source and leave policy unchanged stay eligible.
+- This comparison detects policy changes. It does not prevent every filesystem write and
+  is not sandbox isolation. Native user or global configuration, ancestor files and
+  submodule contents are outside it.
 - The worker leaves its changes uncommitted. The controller checks the branch, HEAD and
   `write_scope`, then commits through its `task.commit` effect. Changes outside the scope
   hold the task for the owner (`scope_violation`).
@@ -360,8 +406,21 @@ What recovery records:
   until that commit is observed; it is never re-implemented.
 - Effects are at-least-once attempts with observation-based deduplication, not
   exactly-once. Cleanup acts only on processes, commands and effects the controller can
-  prove it owns. Escaped descendant processes are handled best effort; there is no process
-  containment guarantee.
+  prove it owns.
+- New process evidence (raw exit `process-exit/v2`, lifecycle record
+  `process-lifecycle/v4`) keeps the historical count of descendants observed leaving the
+  process group separate from a typed settlement proof for each of them. Escaped
+  descendants, for example MCP server children, that were demonstrably observed as settled
+  can pass. A live or unknown escapee, an incomplete group observation, or an escape history
+  that overflowed its cap does not.
+- Every other gate still applies: the raw proof, identity counts, binding of the settlement
+  to the raw exit's escape history, and the terminal-event, exit, log, empty-group and
+  review gates. Earlier records keep their meaning (a v3 record with any escape fails) and
+  are not relabelled. The `verified-handoff` v1 receipt schema is unchanged.
+- An attempt with a live or unknown escapee keeps its scope and capacity and is held for
+  your reconciliation. It is never retried automatically, and nothing outside its process
+  group is signalled. Settlement covers only processes the supervisor observed by polling:
+  there is no OS process containment guarantee.
 
 ### Removing managed worktrees
 
@@ -398,11 +457,17 @@ polling and every other path never do.
 
 Ordinary source updates are `./install.sh --update`, `scripts/install-delivery.py` and
 `./install-codex.sh --user`. They replace the skill files, including the controller
-scripts. They never touch `--state`, the Git-directory binding, your private policy or
-authority files, history or STOP. They ask no policy questions, discover or enable no
-accounts, and install no service or schedule. A completed `./install.sh --update` prints a
-short informational note about the controller; a run that backs off because another
-install holds the lock prints none.
+scripts. They never touch a `--state` placed as section 1 requires, the Git-directory
+binding, your private policy or authority files, history or STOP. They ask no policy
+questions, discover or enable no accounts, and install no service or schedule. A completed
+`./install.sh --update` prints a short informational note about the controller; a run that
+backs off because another install holds the lock prints none.
+
+An update neither moves nor re-checks existing state. A state directory created by an
+earlier prototype in a location that `init` now refuses stays where it is, and one inside
+the skills tree can be replaced along with that tree. Back such a directory up and review
+it yourself before touching it; there is no automatic relocation, migration or reset. This
+guide does not promise that an arbitrary state path survives an installer replacement.
 
 If the update changed the runtime bytes, or you changed committed instruction files or
 the policy, the recorded context no longer matches. `status` shows `HOLD`, and `submit`,

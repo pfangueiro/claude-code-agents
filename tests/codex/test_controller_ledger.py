@@ -65,6 +65,18 @@ def task_row(led, tid):
     return next(row for row in led.status()['tasks'] if row['id'] == tid)
 
 
+def tree(*roots):
+    """Recursive lstat snapshot of every entry under ``roots``: type and mode, inode, size
+    and modification time. A created, removed, replaced or rewritten entry changes it."""
+    seen = {}
+    for root in roots:
+        for parent, dirs, files in os.walk(root):
+            for path in [parent, *(os.path.join(parent, name) for name in dirs + files)]:
+                info = os.lstat(path)
+                seen[path] = (info.st_mode, info.st_ino, info.st_size, info.st_mtime_ns)
+    return seen
+
+
 def fingerprint(directory):
     out = {}
     for name in sorted(os.listdir(directory)):
@@ -2972,6 +2984,206 @@ class ObservationTests(Base):
             stored = led.observe('alpha', good)
             self.assertEqual((stored['admitted'], stored['reason']), (True, 'admitted'))
             self.assertEqual(led.status()['observations'][0]['data'], good)
+
+
+class RepositoryBoundaryTests(Base):
+    """The state directory stays outside every actual root of the repository and outside the
+    installer-managed tree of the runtime. Real disposable Git repositories and a disposable
+    installed layout (no installer runs); a refusal is proven by an unchanged recursive
+    snapshot of those roots, not only by its code. The identity is the fixture digests
+    (ledger state only)."""
+
+    def separate(self):
+        """A repository whose Git directory lives outside its work tree."""
+        store, root = os.path.join(self.tmp, 'git-store'), os.path.join(self.tmp, 'split')
+        self.git('init', '-q', '--separate-git-dir', store, root)
+        Path(root, 'AGENTS.md').write_text('rules\n')
+        self.git('-C', root, 'add', '-A')
+        self.git('-C', root, 'commit', '-q', '-m', 'init')
+        common = self.common_of(root)
+        self.assertEqual(common, store)
+        self.assertTrue(os.path.isfile(os.path.join(root, '.git')))
+        return root, common
+
+    def linked(self, repo, name):
+        path = os.path.join(self.tmp, name)
+        self.git('-C', repo, 'worktree', 'add', '-q', '-b', name, path)
+        return path
+
+    def refused(self, code, policy, common, roots, *states):
+        """Each state is refused with exactly ``code`` and nothing is created or changed:
+        no state directory, no lock, no binding, no entry under ``roots``."""
+        for state in states:
+            before, existed = tree(*roots), os.path.lexists(state)
+            self.assertEqual(self.code(cl.initialize, state, policy, common, dict(self.ident)),
+                             code, state)
+            self.assertEqual(tree(*roots), before, state)
+            self.assertEqual(os.path.lexists(state), existed, state)
+            for name in (cl.BINDING_FILE, cl.LOCK_FILE):
+                self.assertFalse(os.path.lexists(os.path.join(common, name)), state)
+
+    def runtime(self, skill, home):
+        """A disposable equivalent of an installed layout: ``<home>/.claude/skills/<skill>/
+        scripts`` holding a copy of the ledger module, beside its sibling skill. Returns the
+        skills directory and the module path used as the trusted runtime location."""
+        skills = os.path.join(home, '.claude', 'skills')
+        scripts = os.path.join(skills, skill, 'scripts')
+        os.makedirs(scripts)
+        os.makedirs(os.path.join(skills, ci.RUNTIME_LAYOUTS[skill][1]))
+        module = os.path.join(scripts, 'controller_ledger.py')
+        shutil.copyfile(SCRIPTS / 'controller_ledger.py', module)
+        return skills, module
+
+    def admitted(self, policy, common):
+        for _ in range(2):  # the second call re-verifies and changes nothing
+            cl.initialize(self.state, policy, common, dict(self.ident)).close()
+        self.assertEqual(stat.S_IMODE(os.stat(self.state).st_mode), 0o700)
+        binding = json.loads(Path(common, cl.BINDING_FILE).read_text())
+        self.assertEqual(binding['state_dir'], self.state)
+        with cl.ControllerLock(common, self.state, dict(self.ident)) as led:
+            self.assertEqual((led.common_dir, led.epoch, led.identity), (common, 1, self.ident))
+
+    def test_separate_git_dir_main_worktree_is_inside_the_repository(self):
+        root, common = self.separate()
+        policy = self.policy(repository=root)
+        self.refused('inside_repository', policy, common, (root, common),
+                     os.path.join(root, 'controller-state'), os.path.join(common, 'controller-state'))
+        self.admitted(policy, common)
+
+    def test_policy_at_a_linked_worktree_covers_that_worktree_and_the_main_one(self):
+        linked = self.linked(self.repo, 'linked')
+        self.assertEqual(self.common_of(linked), self.common)
+        policy = self.policy(repository=linked)
+        self.refused('inside_repository', policy, self.common, (self.repo, linked),
+                     os.path.join(linked, 'state'), os.path.join(self.repo, 'state'),
+                     os.path.join(self.common, 'state'))
+        self.refused('inside_repository', self.policy(), self.common, (self.repo, linked),
+                     os.path.join(linked, 'state'), os.path.join(self.repo, 'state'))
+        self.state = self.repo + '-state'  # a sibling that only shares the name prefix is outside
+        self.admitted(policy, self.common)
+
+    def test_linked_policy_of_a_separate_git_dir_repository_is_an_unsupported_layout(self):
+        """From a linked worktree Git reports the Git directory, not the main work tree, so
+        the main root is unknowable: every state, even one outside, is held with no write.
+        The same repository selected at its main work tree stays supported."""
+        root, common = self.separate()
+        linked = self.linked(root, 'split-linked')
+        self.assertEqual(self.common_of(linked), common)
+        roots = (root, common, linked)
+        self.refused('repository_layout_unsupported', self.policy(repository=linked), common, roots,
+                     os.path.join(root, 'state'), os.path.join(linked, 'state'),
+                     os.path.join(common, 'state'), self.state)
+        main = self.policy(repository=root)
+        self.refused('inside_repository', main, common, roots,
+                     os.path.join(root, 'state'), os.path.join(linked, 'state'),
+                     os.path.join(common, 'state'))
+        self.admitted(main, common)
+
+    def test_a_listed_main_worktree_that_git_does_not_confirm_is_refused(self):
+        linked = self.linked(self.repo, 'linked')
+        policy, real = self.policy(repository=linked), cl._git
+        other = os.path.join(self.tmp, 'other-repo')
+        self.git('init', '-q', other)
+        plain = os.path.join(self.tmp, 'plain')
+        os.mkdir(plain)
+        tail = b'\0HEAD ' + self.base.encode() + b'\0\0'
+        for main in (other, plain, os.path.join(self.tmp, 'absent')):
+            listing = b'worktree ' + os.fsencode(main) + tail + b'worktree ' + os.fsencode(linked) + tail
+
+            def stub(cwd, *args, listing=listing):
+                return listing if args[0] == 'worktree' else real(cwd, *args)
+
+            with mock.patch.object(cl, '_git', stub):
+                self.refused('repository_layout_unsupported', policy, self.common,
+                             (self.repo, linked, other, plain), self.state)
+        self.admitted(policy, self.common)
+
+    def test_linked_policy_of_a_bare_repository_has_no_main_worktree(self):
+        bare = os.path.join(self.tmp, 'bare.git')
+        self.git('clone', '-q', '--bare', self.repo, bare)
+        linked = self.linked(bare, 'bare-linked')
+        common = self.common_of(linked)
+        self.assertEqual(common, bare)
+        policy = self.policy(repository=linked)
+        self.refused('inside_repository', policy, common, (bare, linked),
+                     os.path.join(linked, 'state'), os.path.join(bare, 'state'))
+        self.admitted(policy, common)
+
+    def test_an_unreadable_or_malformed_inventory_refuses_before_anything_is_created(self):
+        policy, real = self.policy(), cl._git
+
+        def only(kind, broken):
+            return lambda cwd, *args: broken if args[0] == kind else real(cwd, *args)
+
+        listed = b'worktree ' + os.fsencode(self.repo) + b'\0HEAD ' + self.base.encode() + b'\0'
+        stubs = [
+            mock.Mock(side_effect=ci.InputError('git', 'git could not run')),
+            only('worktree', b''), only('worktree', b'\0\0'), only('worktree', listed),
+            only('worktree', b'worktree relative/path\0\0'),
+            only('worktree', b'HEAD ' + self.base.encode() + b'\0\0'),
+            only('worktree', listed + b'\0' + b'x' * cl.MAX_INVENTORY_BYTES),
+            only('rev-parse', b''), only('rev-parse', b'/a\n/b\n'),
+            only('rev-parse', b'relative\n/b\n/c\n'), only('rev-parse', b'/a\n/b\n/c\n/d\n'),
+            only('rev-parse', os.fsencode(self.repo) + b'\n/elsewhere\n/elsewhere\n'),
+        ]
+        before = tree(self.repo)
+        for number, stub in enumerate(stubs):
+            with mock.patch.object(cl, '_git', stub):
+                self.assertEqual(self.code(cl.initialize, self.state, policy, self.common, self.ident),
+                                 'repository_inventory', number)
+        self.assertEqual(tree(self.repo), before)
+        self.assertFalse(os.path.lexists(self.state))
+        for name in (cl.BINDING_FILE, cl.LOCK_FILE):
+            self.assertFalse(os.path.lexists(os.path.join(self.common, name)))
+        self.admitted(policy, self.common)
+
+    def test_state_overlapping_the_installed_runtime_tree_is_refused_before_any_write(self):
+        """State for another target repository may not live in, beside, at or above the
+        installed skills tree of the runtime that a broad installer update replaces."""
+        policy = self.policy()
+        for skill, (_, sibling) in ci.RUNTIME_LAYOUTS.items():
+            home = os.path.join(self.tmp, 'home-' + skill)
+            skills, module = self.runtime(skill, home)
+            with self.subTest(skill=skill), mock.patch.object(cl, '_RUNTIME_FILE', module):
+                self.refused(
+                    'inside_runtime', policy, self.common, (home, self.repo),
+                    os.path.join(skills, skill, 'controller-state'),
+                    os.path.join(skills, sibling, 'controller-state'),
+                    os.path.join(skills, skill, 'scripts'),
+                    os.path.join(skills, skill, 'scripts', 'controller-state'),
+                    os.path.join(skills, 'controller-state'), skills,
+                    os.path.dirname(skills), home)
+        safe = os.path.join(home, '.local', 'state')
+        os.makedirs(safe)
+        self.state = os.path.join(safe, 'sdlc-controller')
+        with mock.patch.object(cl, '_RUNTIME_FILE', module):
+            self.admitted(policy, self.common)
+
+    def test_a_symlinked_installation_protects_the_visible_tree_and_its_target(self):
+        policy = self.policy()
+        home = os.path.join(self.tmp, 'home')
+        skills, _ = self.runtime('delivery', home)
+        visible = os.path.join(self.tmp, 'visible', '.claude', 'skills')
+        os.makedirs(visible)
+        os.symlink(os.path.join(skills, 'delivery'), os.path.join(visible, 'delivery'))
+        module = os.path.join(visible, 'delivery', 'scripts', 'controller_ledger.py')
+        with mock.patch.object(cl, '_RUNTIME_FILE', module):
+            self.refused('inside_runtime', policy, self.common, (home, visible, self.repo),
+                         os.path.join(visible, 'other-skill', 'controller-state'),
+                         os.path.join(skills, 'other-skill', 'controller-state'),
+                         os.path.dirname(visible), home)
+            self.admitted(policy, self.common)
+
+    def test_an_unknown_runtime_layout_is_refused_before_any_write(self):
+        policy = self.policy()
+        odd = os.path.join(self.tmp, 'odd', 'tools')
+        os.makedirs(odd)
+        module = os.path.join(odd, 'controller_ledger.py')
+        shutil.copyfile(SCRIPTS / 'controller_ledger.py', module)
+        with mock.patch.object(cl, '_RUNTIME_FILE', module):
+            self.refused('runtime_layout_unsupported', policy, self.common,
+                         (os.path.dirname(odd), self.repo), self.state)
+        self.admitted(policy, self.common)
 
 
 if __name__ == '__main__':

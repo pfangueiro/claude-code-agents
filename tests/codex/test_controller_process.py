@@ -87,6 +87,26 @@ os.kill(os.getpid(), signal.SIGKILL)
 '''
 
 
+ESCAPER = '''import subprocess, sys, time
+pid_file, mode, code = sys.argv[1], sys.argv[2], sys.argv[3]
+child = subprocess.Popen([sys.executable, '-I', '-c', code, *sys.argv[4:]], start_new_session=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+with open(pid_file, 'w') as handle:
+    handle.write(str(child.pid))
+if mode == 'reap':
+    child.wait()
+else:
+    time.sleep(1.0)
+'''
+
+# Exits by itself once its marker appears (or after 60 s): fixtures never signal it.
+SELF_EXITING = '''import os, sys, time
+deadline = time.monotonic() + 60
+while not os.path.exists(sys.argv[1]) and time.monotonic() < deadline:
+    time.sleep(0.05)
+'''
+
+
 def write_private(path: Path, data: bytes) -> None:
     if os.path.lexists(path):
         os.unlink(path)
@@ -275,7 +295,12 @@ class LifecycleTest(unittest.TestCase):
                          ('exited', 0, []))
         self.assertEqual((record['groupEmpty'], record['reasons']), (True, []))
         self.assertEqual(record['membersAtExit'], 0)
-        self.assertEqual(record['schema'], 'sdlc-controller/process-lifecycle/v3')
+        self.assertEqual(record['schema'], 'sdlc-controller/process-lifecycle/v4')
+        self.assertEqual((record['escapedDescendants'], record['escapedOverflow'],
+                          record['escapedSettlement']['identities']), (0, False, []))
+        self.assertIs(cp.escaped_settled(record), True)
+        raw_exit = json.loads((attempt / 'exit.json').read_bytes())
+        self.assertEqual(raw_exit['escapedSettlement'], record['escapedSettlement'])  # copied unchanged
         expected_out = b'out:payload'
         self.assertEqual(record['logs']['stdout'],
                          {'path': str(attempt / 'stdout.log'), 'size': len(expected_out),
@@ -649,6 +674,11 @@ class LifecycleTest(unittest.TestCase):
         clean = json.loads(exit_path.read_bytes())
         self.assertEqual((clean['membersAtRecord'], clean['signalsSent'], clean['forced']),
                          (0, [], False))
+        settlement = clean['escapedSettlement']
+        self.assertEqual((settlement['identities'], settlement['observationComplete']), ([], True))
+        ghost = {'pid': FAKE_PID, 'start': 'lstart:a'}
+        gone = {**ghost, 'status': 'gone', 'proof': 'esrch', 'currentStart': None}
+        one_gone = {**settlement, 'identities': [gone], 'settled': 1}
         forced = {'signalsSent': ['SIGTERM', 'SIGKILL'], 'forced': True, 'lingering': True}
         invalid = {
             'members-none-unforced': {'membersAtRecord': None},
@@ -671,6 +701,21 @@ class LifecycleTest(unittest.TestCase):
             'duration-bool': {'durationSeconds': True},
             'command-pid-huge': {'commandPid': 10 ** 400},
             'escaped-pid-huge': {'escaped': [{'pid': 10 ** 400, 'start': None}]},
+            'overflow-below-cap': {'escapedOverflow': True},
+            'overflow-not-bool': {'escapedOverflow': 0},
+            'v1-schema-with-v2-field': {'schema': cp.SCHEMA_EXIT_V1},
+            'settlement-null': {'escapedSettlement': None},
+            'settlement-count-forged': {'escapedSettlement': {**settlement, 'settled': 1}},
+            'settlement-without-history': {'escapedSettlement': one_gone},
+            'history-without-settlement': {'escaped': [ghost]},
+            'settlement-pair-mismatch': {'escaped': [ghost], 'escapedSettlement': {
+                **one_gone, 'identities': [{**gone, 'start': 'lstart:b'}]}},
+            'boot-changed-inside-supervisor': {'escaped': [ghost], 'escapedSettlement': {
+                **one_gone, 'identities': [{**gone, 'proof': 'boot-changed'}]}},
+            'duplicate-identity': {'escaped': [ghost, ghost], 'escapedSettlement': {
+                **settlement, 'identities': [gone, gone], 'settled': 2}},
+            'unobserved-claims-complete': {**forced, 'membersAtRecord': None,
+                                           'groupObservation': 'unavailable'},
         }
         for name, change in invalid.items():
             with self.subTest(case=name):
@@ -683,6 +728,9 @@ class LifecycleTest(unittest.TestCase):
                 text = json.dumps({**clean, 'durationSeconds': 'X'}).replace('"X"', literal)
                 write_private(exit_path, text.encode())
                 self.assertEqual(cp.recover(attempt).reason, 'record-malformed')
+        write_private(exit_path, json.dumps({**clean, 'escaped': [ghost],
+                                             'escapedSettlement': one_gone}).encode())
+        self.assertEqual(cp.recover(attempt).state, 'exited')  # a typed, bound capture is accepted
         write_private(exit_path, json.dumps(clean).encode())
         self.assertEqual(cp.recover(attempt).state, 'exited')  # valid zero-member control
         native = journal_path.read_bytes()
@@ -713,8 +761,9 @@ class LifecycleTest(unittest.TestCase):
         attempt, owned = self.launch('settle-2', [script, str(self.base / 'two.txt')])
         self.wait_state(owned, {'exited'})
         exit_path = attempt / 'exit.json'
-        unobserved = {**json.loads(exit_path.read_bytes()), **forced, 'membersAtRecord': None,
-                      'groupObservation': 'unavailable'}
+        raw = json.loads(exit_path.read_bytes())
+        unobserved = {**raw, **forced, 'membersAtRecord': None, 'groupObservation': 'unavailable',
+                      'escapedSettlement': {**raw['escapedSettlement'], 'observationComplete': False}}
         write_private(exit_path, json.dumps(unobserved).encode())
         self.assertEqual(cp.recover(attempt).state, 'exited')
         record = owned.finalize()
@@ -722,6 +771,9 @@ class LifecycleTest(unittest.TestCase):
         for reason in ('exit-group-not-proven-empty', 'group-observation-unavailable'):
             self.assertIn(reason, record['reasons'])
         self.assertIs(record['executionSuccess'], False)
+        # An incomplete capture is never settled, even with no identity and an empty group now.
+        self.assertIs(record['escapedSettlement']['observationComplete'], False)
+        self.assertIs(cp.escaped_settled(record), False)
 
     def test_owned_finalize_reaps_exit_published_after_first_reap(self):
         script = self.helper('marker.py', MARKER)
@@ -819,6 +871,9 @@ class LifecycleTest(unittest.TestCase):
         record = cp.finalize(pending.attempt)
         self.assertEqual((record['termination'], record['commandPid'], record['commandStart']),
                          ('not-launched', None, None))
+        self.assertEqual((record['escapedSettlement']['observationComplete'],
+                          record['escapedSettlement']['identities']), (True, []))
+        self.assertIs(cp.escaped_settled(record), True)  # proven: no command, so nothing escaped
         bootstrap = journal_line('bootstrap-started', pid=FAKE_PID)
         lost = self.fake_spawned('cmdpid-lost', [bootstrap, journal_line('launching'),
                                                  journal_line('command-started', pid=FAKE_PID + 1)])
@@ -827,6 +882,11 @@ class LifecycleTest(unittest.TestCase):
         self.assertEqual((record['termination'], record['commandPid'], record['commandStart']),
                          ('lost', None, None))
         self.assertEqual(record['identity']['pid'], FAKE_PID)  # anchor identity kept
+        self.assertEqual((record['escapedSettlement']['observationComplete'],
+                          record['escapedSettlement']['identities'], record['groupEmpty']),
+                         (False, [], True))
+        self.assertIs(cp.escaped_settled(record), False)  # lost: escape observation unknown
+        self.assertIs(record['executionSuccess'], False)
         self.assertEqual(cp.read_status(lost)['state'], 'finalized')
         write_private(lost / 'lifecycle.json', json.dumps(
             {**record, 'commandPid': FAKE_PID + 1}).encode())
@@ -864,6 +924,356 @@ class LifecycleTest(unittest.TestCase):
         status = cp.read_status(attempt)
         self.assertEqual((status['state'], status['reason']), ('corrupt', 'identity-invalid'))
         self.assert_code('identity-invalid', cp.request_stop, attempt)
+
+    # ------------------------------------------------------------ escaped-descendant settlement
+
+    def test_setsid_child_that_exits_first_is_settled_and_clean(self):
+        pid_file = self.base / 'escaped.pid'
+        attempt, owned = self.launch('escape-ok', [self.helper('escaper.py', ESCAPER), str(pid_file), 'reap',
+                                                   'import time; time.sleep(1.0)'], linger_seconds=0.2)
+        self.wait_state(owned, {'exited'})
+        record = owned.finalize()
+        settlement, child = record['escapedSettlement'], int(pid_file.read_text())
+        raw_exit = json.loads((attempt / 'exit.json').read_bytes())
+        self.assertEqual((raw_exit['schema'], raw_exit['escapedOverflow']), (cp.SCHEMA_EXIT, False))
+        self.assertEqual(record['schema'], cp.SCHEMA_RECORD)
+        self.assertGreaterEqual(record['escapedDescendants'], 1)  # the escape really was observed
+        self.assertEqual(record['escapedDescendants'], len(raw_exit['escaped']))
+        self.assertEqual(raw_exit['escapedSettlement'], settlement)  # supervisor capture, copied
+        self.assertLessEqual(settlement['observedAt'], raw_exit['endedAt'])  # before closure
+        self.assertIn(child, [entry['pid'] for entry in settlement['identities']])
+        self.assertTrue(all(entry['status'] in ('gone', 'reused') for entry in settlement['identities']))
+        self.assertEqual((settlement['observationComplete'], settlement['settled'], settlement['live'],
+                          settlement['unknown']), (True, record['escapedDescendants'], 0, 0))
+        self.assertEqual((record['reasons'], record['unresolvedDescendants']), ([], 0))
+        self.assertIs(record['executionSuccess'], True)
+        self.assertIs(cp.escaped_settled(record), True)
+        self.assertEqual(cp.read_status(attempt)['record'], record)
+        self.assert_settlement_tamper_refused(attempt, record, raw_exit)
+
+    def assert_settlement_tamper_refused(self, attempt, record, raw_exit):
+        settlement = record['escapedSettlement']
+        entry = settlement['identities'][0]
+
+        def settled_with(**changes):
+            return {**record, 'escapedSettlement': {**settlement, **changes}}
+
+        def first(**changes):
+            return settled_with(identities=[{**entry, **changes}, *settlement['identities'][1:]])
+        invalid = 'record-settlement-invalid'
+        mutations = (
+            ({key: value for key, value in record.items() if key != 'escapedSettlement'}, 'record-fields'),
+            ({**record, 'schema': cp.SCHEMA_RECORD_V3}, 'record-fields'),
+            ({**record, 'escapedOverflow': 0}, 'record-types-invalid'),
+            (first(status='live', proof='start-matches', currentStart=entry['start']), invalid),
+            (settled_with(live=1), invalid),
+            (first(status='gone', proof='esrch', currentStart='lstart:forged'), invalid),
+            (first(status='gone', proof='start-differs'), invalid),
+            (first(status='reused', proof='start-differs', currentStart=entry['start']), invalid),
+            (first(status='gone', proof='boot-changed', currentStart=None), invalid),
+            (first(proof=7), invalid),
+            (settled_with(observationComplete='yes'), invalid),
+            (settled_with(observationComplete=False), invalid),
+            (settled_with(identities=settlement['identities'][1:]), invalid),
+            ({**record, 'escapedDescendants': record['escapedDescendants'] + 1}, invalid),
+            ({**record, 'unresolvedDescendants': 1}, invalid),
+            (first(pid=entry['pid'] + 1), 'record-exit-mismatch'),
+        )
+        lifecycle = attempt / 'lifecycle.json'
+        original = lifecycle.read_bytes()
+        for idx, (value, reason) in enumerate(mutations):
+            with self.subTest(mutation=idx, reason=reason):
+                write_private(lifecycle, json.dumps(value).encode())
+                status = cp.read_status(attempt)
+                self.assertEqual((status['state'], status['reason'], status['record']),
+                                 ('corrupt', reason, None))
+                if reason == invalid:
+                    self.assertIs(cp.escaped_settled(value), False)
+        write_private(lifecycle, original)
+        exit_path = attempt / 'exit.json'
+        raw_bytes = exit_path.read_bytes()
+        forged = [{**raw_exit['escaped'][0], 'start': 'lstart:forged'}, *raw_exit['escaped'][1:]]
+        recaptured = {**raw_exit['escapedSettlement'], 'observedAt': 'later'}  # valid, but not the copy
+        for idx, change in enumerate(({'escaped': raw_exit['escaped'][1:]}, {'escaped': forged},
+                                      {'escapedOverflow': True}, {'schema': cp.SCHEMA_EXIT_V1},
+                                      {'escapedSettlement': recaptured})):
+            with self.subTest(exit_change=idx):
+                write_private(exit_path, json.dumps({**raw_exit, **change}).encode())
+                self.assertEqual(cp.read_status(attempt)['reason'], 'record-exit-mismatch')
+        write_private(exit_path, raw_bytes)
+        self.assertEqual(cp.read_status(attempt)['record'], record)
+
+    def test_known_live_escape_is_captured_before_exit_and_never_upgraded(self):
+        pid_file, release = self.base / 'live.pid', self.base / 'live.release'
+        attempt, owned = self.launch('escape-live', [self.helper('escaper.py', ESCAPER), str(pid_file), 'leave',
+                                                     SELF_EXITING, str(release)], linger_seconds=0.3)
+        try:
+            self.wait_state(owned, {'exited'})
+            child = int(pid_file.read_text())
+            self.assertTrue(alive(child))  # observed only: the supervisor never signals an escape
+            raw_exit = json.loads((attempt / 'exit.json').read_bytes())
+            captured = raw_exit['escapedSettlement']
+            mine = [entry['status'] for entry in captured['identities'] if entry['pid'] == child]
+            self.assertTrue(mine)
+            self.assertLessEqual(set(mine), {'live', 'unknown'})
+            self.assertIs(captured['observationComplete'], True)
+            self.assertLessEqual(captured['observedAt'], raw_exit['endedAt'])  # before closure
+            release.touch()
+            deadline = time.monotonic() + 10
+            while alive(child) and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertFalse(alive(child))  # it exited by itself, BEFORE finalize ran
+            record = owned.finalize()
+            self.assertEqual(record['escapedSettlement'], captured)  # late finalize: no upgrade
+            self.assertEqual((record['exitCode'], record['signalsSent']), (0, []))
+            for reason in ('escaped-descendants-unsettled', 'unresolved-descendants'):
+                self.assertIn(reason, record['reasons'])
+            self.assertGreaterEqual(record['unresolvedDescendants'], 1)
+            self.assertIs(record['executionSuccess'], False)
+            self.assertIs(cp.escaped_settled(record), False)
+            status = cp.read_status(attempt)
+            self.assertEqual((status['state'], status['relaunchSafe'], status['record']),
+                             ('finalized', False, record))
+            # A fully self-consistent forged upgrade of the record is caught by the raw exit.
+            items = [{**entry, 'status': 'gone', 'proof': 'esrch', 'currentStart': None}
+                     for entry in captured['identities']]
+            upgraded = {**record, 'unresolvedDescendants': 0, 'escapedSettlement': {
+                **captured, 'identities': items, 'settled': len(items), 'live': 0, 'unknown': 0}}
+            upgraded['reasons'] = cp._reasons(upgraded)
+            upgraded['executionSuccess'] = cp._execution_success(upgraded)
+            self.assertIs(upgraded['executionSuccess'], True)  # it would pass on its own
+            lifecycle = attempt / 'lifecycle.json'
+            original = lifecycle.read_bytes()
+            write_private(lifecycle, json.dumps(upgraded).encode())
+            status = cp.read_status(attempt)
+            self.assertEqual((status['state'], status['reason'], status['record']),
+                             ('corrupt', 'record-exit-mismatch', None))
+            write_private(lifecycle, original)
+            self.assertEqual(cp.read_status(attempt)['record'], record)
+            self.assert_code('already-finalized', cp.finalize, attempt)
+        finally:
+            release.touch()
+
+    def test_settlement_probe_requires_positive_proof(self):
+        ready = self.base / 'ready'
+        sleeper = subprocess.Popen([PY, '-I', self.helper('sleeper.py', SLEEPER), str(ready)],
+                                   start_new_session=True)
+        self.sleepers.append(sleeper)
+        self.wait_path(ready)
+        reaped = subprocess.Popen([PY, '-I', '-c', 'pass'])
+        reaped.wait()
+        boot, live = cp.boot_identity(), sleeper.pid
+        start = cp.process_start(live)
+        self.assertIsNotNone(start)
+
+        def verdict(item, anchor=boot):
+            entry = cp._escaped_settlement([item], anchor, True)['identities'][0]
+            return entry['status'], entry['proof']
+        cases = (
+            ({'pid': live, 'start': start}, boot, ('live', 'start-matches')),
+            ({'pid': live, 'start': None}, boot, ('unknown', 'original-start-missing')),
+            ({'pid': live, 'start': start + '-earlier'}, boot, ('reused', 'start-differs')),
+            ({'pid': live, 'start': start}, 'other-boot', ('gone', 'boot-changed')),
+            ({'pid': reaped.pid, 'start': None}, boot, ('gone', 'esrch')),
+        )
+        for idx, (item, anchor, expected) in enumerate(cases):
+            with self.subTest(case=idx):
+                self.assertEqual(verdict(item, anchor), expected)
+        with mock.patch.object(cp, 'boot_identity', return_value=None):
+            self.assertEqual(verdict({'pid': live, 'start': start}), ('unknown', 'boot-unknown'))
+            self.assertEqual(verdict({'pid': reaped.pid, 'start': start}), ('gone', 'esrch'))
+        own = os.getpid()
+
+        def row(pid):
+            return f'{pid} Sat Nov 14 10:43:22 2026'
+        query_failed = ('unknown', 'query-failed')
+        snapshots = ((None, query_failed),  # nonzero, timeout, permission error or empty output
+                     ('garbage', query_failed),
+                     (f'{row(own)}\n{row(own)}', query_failed),  # duplicate row
+                     (f'{row(own)}\nx Sat Nov 14 10:43:22 2026', query_failed),
+                     (row(1), query_failed),  # truncated: omits this very process
+                     (row(own), ('gone', 'absent')))  # complete typed snapshot without the pid
+        with mock.patch.object(cp, '_procfs', return_value=False):
+            for idx, (text, expected) in enumerate(snapshots):
+                with self.subTest(snapshot=idx), mock.patch.object(cp, '_system_query', return_value=text):
+                    self.assertEqual(verdict({'pid': live, 'start': start}), expected)
+            with mock.patch.object(cp.os, 'kill', side_effect=PermissionError):
+                with mock.patch.object(cp, '_system_query', return_value=None):
+                    self.assertEqual(verdict({'pid': live, 'start': start}), query_failed)
+                with mock.patch.object(cp, '_system_query', return_value=row(own)):
+                    self.assertEqual(verdict({'pid': live, 'start': start}), ('gone', 'absent'))
+        with mock.patch.object(cp, '_procfs', return_value=True):
+            for idx, (effect, expected) in enumerate(((FileNotFoundError(), ('gone', 'absent')),
+                                                      (PermissionError(), query_failed),
+                                                      (b'1 (x) S', query_failed))):
+                option = {'side_effect': effect} if isinstance(effect, BaseException) else {'return_value': effect}
+                with self.subTest(procfs=idx), mock.patch.object(cp.Path, 'read_bytes', **option):
+                    self.assertEqual(verdict({'pid': live, 'start': start}), expected)
+        started = time.monotonic()
+        settlement = cp._settle_escaped([{'pid': live, 'start': start}], boot, True, 0.3)
+        self.assertEqual((settlement['settled'], settlement['live']), (0, 1))
+        self.assertLess(time.monotonic() - started, 0.3 + 2 * cp.SYSTEM_QUERY_TIMEOUT + 1)  # bounded drain
+        self.assertIsNone(sleeper.poll())  # probed repeatedly, never signalled
+
+    def test_reused_pid_keeps_every_observed_identity(self):
+        own, child, pgid = os.getpid(), FAKE_PID, FAKE_PID + 1
+        early, later, foreign = ('Sat Nov 14 10:00:00 2026', 'Sat Nov 14 10:05:00 2026',
+                                 'Sat Nov 14 11:00:00 2026')
+
+        def rows(start):  # the observer in the owned group and one own descendant that left it
+            return [(own, 1, pgid, 'lstart:Sat Nov 14 09:00:00 2026'), (child, own, child, 'lstart:' + start)]
+        watch = cp._GroupWatch(pgid)
+        with mock.patch.object(cp, '_procfs', return_value=False), \
+                mock.patch.object(cp, '_process_table',
+                                  side_effect=[rows(early), rows(later), rows(later), rows(early)]):
+            for _ in range(4):
+                self.assertEqual(watch.snapshot(), set())
+        history = watch.identities()
+        self.assertEqual(history, [{'pid': child, 'start': 'lstart:' + early},
+                                   {'pid': child, 'start': 'lstart:' + later}])  # duplicates collapse
+        self.assertIs(watch.overflow, False)
+        boot = cp.boot_identity()
+
+        def settle(items, current):
+            table = f'{own} Sat Nov 14 09:00:00 2026\n{child} {current}'
+            with mock.patch.object(cp, '_procfs', return_value=False), \
+                    mock.patch.object(cp, '_presence', return_value='present'), \
+                    mock.patch.object(cp, '_system_query', return_value=table):
+                return cp._escaped_settlement(items, boot, True)
+
+        def v4(settlement):
+            return {'schema': cp.SCHEMA_RECORD, 'termination': 'exited', 'identity': {'bootId': boot},
+                    'groupObservation': 'ok', 'groupEmpty': True, 'escapedOverflow': False,
+                    'escapedDescendants': len(settlement['identities']), 'escapedSettlement': settlement,
+                    'unresolvedDescendants': settlement['live'] + settlement['unknown']}
+
+        def proofs(settlement):
+            return [(entry['status'], entry['proof']) for entry in settlement['identities']]
+        live_second = settle(history, later)
+        self.assertEqual(proofs(live_second), [('reused', 'start-differs'), ('live', 'start-matches')])
+        self.assertIs(cp.escaped_settled(v4(live_second)), False)
+        # What a pid-keyed history kept: the first identity alone looks settled.
+        self.assertIs(cp.escaped_settled(v4(settle(history[:1], later))), True)
+        # Positive control: a foreign process now holds the pid with a third start.
+        foreign_now = settle(history, foreign)
+        self.assertEqual((foreign_now['settled'], foreign_now['live']), (2, 0))
+        self.assertIs(cp.escaped_settled(v4(foreign_now)), True)
+
+        uncertain = cp._GroupWatch(pgid)
+        with mock.patch.object(cp, '_procfs', return_value=True), \
+                mock.patch.object(cp, 'process_start', side_effect=[None, 'ticks:5', 'ticks:5']), \
+                mock.patch.object(cp, '_process_table', return_value=rows(early)):
+            for _ in range(3):
+                uncertain.snapshot()
+        self.assertEqual(uncertain.identities(), [{'pid': child, 'start': None},
+                                                  {'pid': child, 'start': 'ticks:5'}])
+        with mock.patch.object(cp, '_procfs', return_value=True), \
+                mock.patch.object(cp, '_presence', return_value='present'), \
+                mock.patch.object(cp, '_procfs_start', return_value=('ok', 'ticks:5')):
+            probed = cp._escaped_settlement(uncertain.identities(), boot, True)
+        self.assertEqual(proofs(probed), [('unknown', 'original-start-missing'), ('live', 'start-matches')])
+        self.assertIs(cp.escaped_settled(v4(probed)), False)
+
+        capped = cp._GroupWatch(pgid)
+        with mock.patch.object(cp, 'MAX_ESCAPED', 1), mock.patch.object(cp, '_procfs', return_value=False), \
+                mock.patch.object(cp, '_process_table', side_effect=[rows(early), rows(later)]):
+            capped.snapshot()
+            capped.snapshot()
+        self.assertEqual((len(capped.identities()), capped.overflow), (1, True))
+
+        # Both identities survive the raw exit/v2 and the copied v4 settlement.
+        attempt, owned = self.launch('reuse-1', [self.helper('marker.py', MARKER),
+                                                 str(self.base / 'reuse.txt')])
+        self.wait_state(owned, {'exited'})
+        exit_path = attempt / 'exit.json'
+        raw = json.loads(exit_path.read_bytes())
+        reused_exit = {**raw, 'escaped': history, 'escapedSettlement': live_second}
+        self.assertIs(cp._exit_ok(reused_exit, 'reuse-1'), True)
+        duplicate = {**raw, 'escaped': [history[1], history[1]], 'escapedSettlement': {
+            **live_second, 'identities': [live_second['identities'][1]] * 2, 'settled': 0, 'live': 2}}
+        self.assertIs(cp._exit_ok(duplicate, 'reuse-1'), False)
+        write_private(exit_path, json.dumps(reused_exit).encode())
+        record = owned.finalize()
+        self.assertEqual((record['escapedDescendants'], record['escapedSettlement']), (2, live_second))
+        for reason in ('escaped-descendants-unsettled', 'unresolved-descendants'):
+            self.assertIn(reason, record['reasons'])
+        self.assertIs(record['executionSuccess'], False)
+        self.assertEqual(cp.read_status(attempt)['record'], record)
+
+    def test_process_table_is_complete_or_unavailable(self):
+        own, ps_pid = os.getpid(), FAKE_PID
+        date = 'Sat Nov 14 10:43:22 2026'
+
+        class FakePs:
+            pid = ps_pid
+
+            def __init__(self, output, returncode=0):
+                self.output, self.returncode = output, returncode
+
+            def communicate(self, timeout=None):
+                return self.output, b''
+        good = f'{own} 1 {own} {date}\n{ps_pid} {own} {own} {date}\n'
+        cases = {'complete': (good, 0), 'empty': ('', 0), 'nonzero': (good, 1),
+                 'malformed': (good + 'x y z\n', 0), 'truncated-row': (f'{own} 1 {own} Sat Nov 14\n', 0),
+                 'duplicate': (good + f'{own} 1 {own} {date}\n', 0),
+                 'observer-missing': (f'{FAKE_PID + 5} 1 1 {date}\n', 0),
+                 'pid-over-bound': (good + f'{cp.MAX_PID + 1} 1 1 {date}\n', 0)}
+        for name, (text, code) in cases.items():
+            with self.subTest(case=name), \
+                    mock.patch.object(cp.subprocess, 'Popen', return_value=FakePs(text.encode(), code)):
+                rows = cp._process_table()
+                if name == 'complete':
+                    self.assertEqual(rows, [(own, 1, own, 'lstart:' + date)])  # ps itself left out
+                else:
+                    self.assertIsNone(rows)
+        with mock.patch.object(cp.subprocess, 'Popen', return_value=FakePs(b'\xff\n')):
+            self.assertIsNone(cp._process_table())
+        watch = cp._GroupWatch(own)
+        with mock.patch.object(cp, '_process_table', return_value=None):
+            self.assertIsNone(watch.snapshot())
+        self.assertIs(watch.available, False)
+
+    def test_legacy_exit_v1_keeps_exact_v3_meaning(self):
+        script = self.helper('marker.py', MARKER)
+        historical = [{'pid': FAKE_PID + idx, 'start': None} for idx in range(27)]
+        results = {}
+        for name, escaped in (('legacy-0', []), ('legacy-27', historical)):
+            attempt, owned = self.launch(name, [script, str(self.base / f'{name}.txt')])
+            self.wait_state(owned, {'exited'})
+            exit_path = attempt / 'exit.json'
+            raw = json.loads(exit_path.read_bytes())
+            legacy = {key: value for key, value in raw.items()
+                      if key not in ('escapedOverflow', 'escapedSettlement')}
+            write_private(exit_path, json.dumps(
+                {**legacy, 'schema': cp.SCHEMA_EXIT_V1, 'escaped': escaped}).encode())
+            results[name] = (attempt, owned.finalize())
+        _attempt, clean = results['legacy-0']
+        self.assertEqual((clean['schema'], set(clean)), (cp.SCHEMA_RECORD_V3, set(cp.RECORD_KEYS_V3)))
+        self.assertIs(clean['executionSuccess'], True)
+        self.assertIs(cp.escaped_settled(clean), True)
+        attempt, old = results['legacy-27']
+        self.assertEqual(old['schema'], cp.SCHEMA_RECORD_V3)
+        self.assertEqual((old['escapedDescendants'], old['unresolvedDescendants'], old['reasons']),
+                         (27, 0, ['escaped-descendants']))
+        self.assertIs(old['executionSuccess'], False)
+        self.assertIs(cp.escaped_settled(old), False)
+        self.assertEqual(cp.read_status(attempt)['record'], old)
+        lifecycle = attempt / 'lifecycle.json'
+        original = lifecycle.read_bytes()
+        boot = old['identity']['bootId']
+        forged = {**old, 'schema': cp.SCHEMA_RECORD, 'escapedOverflow': False, 'reasons': [],
+                  'executionSuccess': True, 'escapedSettlement': {
+                      'observationComplete': True, 'bootId': boot, 'observedAt': 'x',
+                      'identities': [{**item, 'status': 'gone', 'proof': 'esrch', 'currentStart': None}
+                                     for item in historical],
+                      'settled': 27, 'live': 0, 'unknown': 0}}
+        for value, reason in (({**old, 'schema': cp.SCHEMA_RECORD}, 'record-fields'),
+                              (forged, 'record-exit-mismatch')):  # never relabelled as success
+            with self.subTest(reason=reason):
+                write_private(lifecycle, json.dumps(value).encode())
+                self.assertEqual(cp.read_status(attempt)['reason'], reason)
+        write_private(lifecycle, original)
+        self.assertEqual(cp.read_status(attempt)['record'], old)
 
 
 if __name__ == '__main__':

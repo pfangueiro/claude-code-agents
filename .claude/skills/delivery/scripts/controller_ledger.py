@@ -96,7 +96,6 @@ from __future__ import annotations
 import contextlib
 import datetime as _dt
 import fcntl
-import glob
 import hashlib
 import json
 import math
@@ -110,12 +109,15 @@ import time
 import uuid
 from urllib.parse import quote
 
-from controller_inputs import (BRANCH, DIGEST, EFFECT_CATALOG, EXTERNAL_EFFECTS, SAFE_ID, SHA,
-                               WORKSPACE_EFFECTS, InputError, canonical_json, canonical_repo,
-                               check_delivery_spec, validate_authority, validate_plan,
-                               validate_policy)
+from controller_inputs import (BRANCH, DIGEST, EFFECT_CATALOG, EXTERNAL_EFFECTS,
+                               RUNTIME_LAYOUTS, SAFE_ID, SHA, WORKSPACE_EFFECTS, InputError,
+                               canonical_json, canonical_repo, check_delivery_spec,
+                               validate_authority, validate_plan, validate_policy)
+from controller_inputs import _git  # the boundary's sanitized, time-limited Git runner
 
 SCHEMA_VERSION = 6
+MAX_INVENTORY_BYTES = 1 << 20  # a larger Git layout or worktree inventory is refused
+_RUNTIME_FILE = __file__  # trusted location of the executing runtime (see _runtime_roots)
 POLICY_FILE = 'policy.json'
 LEDGER_FILE = 'ledger.sqlite3'
 BINDING_FILE = 'sdlc-controller.binding'
@@ -521,14 +523,117 @@ def _common(common_dir):
     return real
 
 
-def _inside_repo(state, common):
-    roots = [common]
-    if os.path.basename(common) == '.git':
-        roots.append(os.path.dirname(common))
-    for link in glob.glob(os.path.join(glob.escape(common), 'worktrees', '*', 'gitdir')):
-        with open(link, encoding='utf-8') as handle:
-            roots.append(os.path.realpath(os.path.dirname(handle.read().strip())))
-    return any(state == root or state.startswith(root + os.sep) for root in roots)
+def _inventory(cwd, *args):
+    """One read-only Git query through the sanitized input-boundary helper (inherited GIT_*
+    dropped, no system or global configuration, 60 second limit). A query that cannot run,
+    fails or returns more than MAX_INVENTORY_BYTES is refused: a root is never guessed."""
+    try:
+        raw = _git(cwd, *args)
+    except InputError as err:
+        raise LedgerError('repository_inventory', str(err)) from err
+    if len(raw) > MAX_INVENTORY_BYTES:
+        raise LedgerError('repository_inventory', f'git {args[0]} inventory is too large')
+    return raw
+
+
+def _layout(path):
+    """(work tree root, Git directory, common directory) exactly as Git resolves them at
+    ``path``, canonical. One read-only ``git rev-parse``: three absolute lines or a refusal."""
+    raw = _inventory(path, 'rev-parse', '--path-format=absolute', '--show-toplevel',
+                     '--absolute-git-dir', '--git-common-dir')
+    lines = raw.split(b'\n')
+    if len(lines) != 4 or lines[3] or not all(line.startswith(b'/') for line in lines[:3]):
+        raise LedgerError('repository_inventory', 'git rev-parse layout is malformed')
+    return tuple(os.path.realpath(os.fsdecode(line)) for line in lines[:3])
+
+
+def _worktrees(repository):
+    """(canonical root, bare) of every worktree Git registers for this repository, main
+    entry first: the exact NUL-terminated records of ``git worktree list --porcelain -z``
+    (Git 2.36 or newer), each of which must start with an absolute ``worktree`` path.
+    ``bare`` is Git's own ``bare`` attribute of that record."""
+    raw = _inventory(repository, 'worktree', 'list', '--porcelain', '-z')
+    if not raw.endswith(b'\0\0'):
+        raise LedgerError('repository_inventory', 'git worktree inventory is incomplete')
+    records = []
+    for record in raw[:-2].split(b'\0\0'):
+        fields = record.split(b'\0')
+        label, _, path = fields[0].partition(b' ')
+        if label != b'worktree' or not path.startswith(b'/'):
+            raise LedgerError('repository_inventory', 'git worktree inventory is malformed')
+        records.append((os.path.realpath(os.fsdecode(path)), b'bare' in fields[1:]))
+    return records
+
+
+def _unknown_main(detail):
+    return LedgerError('repository_layout_unsupported',
+                       'INCOMPLETE: the main work tree of this repository cannot be established '
+                       f'from the selected linked worktree ({detail}); nothing was written. '
+                       'Select the main work tree as policy.repository')
+
+
+def _repository_roots(repository, common):
+    """Every root the state directory must stay outside: the validated policy work tree,
+    the Git common directory, every worktree Git registers and the main work tree.
+
+    The main work tree is established only by Git's own discovery, never from a directory
+    name, a missing configuration value or the parent of the common directory:
+
+    - the selected work tree is the main one when its Git directory IS the common
+      directory (this also covers ``git init --separate-git-dir``);
+    - otherwise the selected work tree is a linked one. The main entry of the worktree
+      list is accepted only when Git, queried at that path, resolves it as a work tree
+      whose root is that path and whose Git directory is this common directory, or when
+      Git marks the entry ``bare`` (the repository has no main work tree).
+
+    A linked selection whose main work tree Git does not confirm (for example a Git
+    directory separated from its work tree, which the list reports as the Git directory)
+    is refused as ``repository_layout_unsupported``: the full boundary is unknown."""
+    selected, git_dir, shared = _layout(repository)
+    if shared != common:
+        raise LedgerError('repository_inventory', 'git resolves another common directory')
+    records = _worktrees(repository)
+    roots = [repository, selected, common, *(root for root, _ in records)]
+    listed, bare = records[0]
+    if git_dir == common or bare:
+        return roots
+    try:
+        proved = _layout(listed)
+    except LedgerError as err:
+        raise _unknown_main('Git resolves no work tree at the listed main entry') from err
+    if proved != (listed, common, common):
+        raise _unknown_main('the listed main entry is not the main work tree of this repository')
+    return roots
+
+
+def _runtime_roots():
+    """Skills trees the installer manages around the executing runtime, derived only from
+    this module's own location (``<skills>/delivery/scripts`` or
+    ``<skills>/sdlc-delivery/scripts``): the ``<skills>`` parent, which a broad update
+    replaces together with every sibling skill. Both the location as loaded and its
+    symlink-free form are covered, so a linked installation protects the visible tree and
+    its target. Nothing is searched or read; an unknown layout is refused, not guessed."""
+    roots = []
+    for path in (os.path.abspath(_RUNTIME_FILE), os.path.realpath(_RUNTIME_FILE)):
+        scripts = os.path.dirname(path)
+        skill = os.path.dirname(scripts)
+        if os.path.basename(scripts) != 'scripts' or os.path.basename(skill) not in RUNTIME_LAYOUTS:
+            raise LedgerError('runtime_layout_unsupported',
+                              'INCOMPLETE: the controller runtime is not in the scripts/ directory '
+                              'of a known delivery skill layout, so the installer-managed tree is '
+                              'unknown; nothing was written')
+        managed = os.path.dirname(skill)
+        roots += [managed, os.path.realpath(managed)]
+    return list(dict.fromkeys(roots))
+
+
+def _within(path, roots):
+    return any(path == root or path.startswith(root.rstrip(os.sep) + os.sep) for root in roots)
+
+
+def _overlaps(path, roots):
+    """True when ``path`` is a root, lies below one or is an ancestor that contains one."""
+    return _within(path, roots) or any(_within(root, [path]) for root in roots)
 
 
 def _acquire(common):
@@ -775,12 +880,28 @@ def initialize(state_dir, policy, common_dir, identity):
     Strict and idempotent: it never reconfigures, migrates, resets or relabels. A policy
     or identity that differs from the current context epoch is refused and everything
     recorded is preserved; the state stays usable through ControllerLock (held for
-    cleanup) and only Ledger.reconcile_context appends a new context."""
+    cleanup) and only Ledger.reconcile_context appends a new context.
+
+    Both location checks run before the lock is taken and before any state, binding or
+    lock file exists, so every refusal below writes nothing:
+
+    - ``inside_runtime``: the state directory overlaps the installer-managed skills tree
+      of the executing runtime (inside it, a sibling skill or the runtime itself, or an
+      ancestor that contains it; see _runtime_roots). A broad installer update replaces
+      that tree. ``runtime_layout_unsupported`` when that tree cannot be determined.
+    - ``inside_repository``: the state directory is inside the validated policy work
+      tree, the Git common directory, a registered worktree or the main work tree (see
+      _repository_roots). ``repository_layout_unsupported`` when the main work tree
+      cannot be established from a linked selection, and ``repository_inventory`` when
+      the Git layout or worktree inventory cannot be read or parsed."""
     common = _common(common_dir)
     _check_identity(identity)
     frozen = _frozen_policy(policy, common)
     state = _state_path(state_dir)
-    if _inside_repo(state, common):
+    if _overlaps(state, _runtime_roots()):
+        raise LedgerError('inside_runtime', 'state directory must not overlap the installed skills '
+                                            'tree of the controller runtime')
+    if _within(state, _repository_roots(frozen['repository'], common)):
         raise LedgerError('inside_repository', 'state directory must be outside the repository')
     proposed = _policy_bytes(frozen)
     proposed_digest = hashlib.sha256(proposed).hexdigest()
