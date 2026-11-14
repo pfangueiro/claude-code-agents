@@ -67,13 +67,21 @@ Each reviewer adds findings in this format:
 ```
 ### Review: [reviewer-agent]
 
-**Status**: PASS | PASS_WITH_NOTES | FAIL
-**Findings**:
-  - [Critical] Description (must fix before merge)
-  - [Suggestion] Description (recommended improvement)
-  - [Nit] Description (minor style/preference)
-**Blocking**: Yes/No
+**Scope**: base <exact SHA> .. head <exact SHA>; paths covered
+**Status**: PASS | FAIL | INCOMPLETE
+**Findings** (each names its evidence class: runtime-reproduced | source-proven | unverified hypothesis | nonblocking suggestion):
+  - [Blocking] Description, with evidence (file:line, command and its output)
+  - [Suggestion] Description (nonblocking)
+**Checks**: each required check, its input SHA and its observed result
+**Missing**: required checks or reviews that did not run, each named
 ```
+
+Status rules:
+- **FAIL**: at least one confirmed blocking defect in the declared scope.
+- **INCOMPLETE**: no confirmed blocking defect, but a required check or review is missing or could not run. Name each gap under **Missing**. Unknown is not zero.
+- **PASS**: every required check and review for the declared scope ran and none found a blocking defect. Nonblocking suggestions may go with a PASS. PASS covers only the declared scope. It is not a "safe to commit" statement or an overall quality grade.
+- A review and its check receipts apply only to the exact head SHA they name. Any new commit invalidates them.
+- A process exiting 0 is not the same as a required check passing. Record what the check actually asserted, not only its exit code.
 
 ## Error Recovery
 

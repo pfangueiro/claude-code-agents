@@ -11,6 +11,9 @@ reporting. Create/update the schedule through the actual tool, inspect the retur
 schedule and report its identifier and next run. A task definition must not imply
 approval for deployment, messages, or live-data changes on future runs.
 
+The optional `$sdlc-delivery` controller is not a scheduler. Installing or loading it
+creates no schedule, and its `run` command is a foreground process the owner starts.
+
 If this session cannot create schedules, state that no schedule was created. Provide
 a concrete proposed automation or host scheduler command only if requested; do not
 silently install launchd/cron entries or replace a recurring job with a polling loop.

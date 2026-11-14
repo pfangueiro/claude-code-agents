@@ -88,9 +88,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   title only the current task `SDLC | <short task>` when a native rename capability
   exists, without replacing owner titles. The marker means guidance loaded, not checks
   passed; Claude's renderer, health, duration and cost output remain unported.
+- Optional local persistent delivery controller (unpublished; first modules on input
+  `f343c57`): `delivery/scripts/controller.py` and its `controller_*.py` modules. These
+  cover the operator CLI, closed-schema policy/plan/authority boundary, SQLite ledger with
+  context epochs and durable STOP, private request inbox, routing, shared owned-process
+  lifecycle, native Claude/Codex adapters, v1-receipt check runner, fixed-catalogue
+  Git/GitHub effects and the engine (`controller_engine.py`, `controller_engine_io.py`)
+  that `run`, `recover` and `cleanup-workspaces` load. Both installers export them inside
+  the existing skill; the 30/12/13 inventory and the 55 Codex bundles are unchanged.
+  `docs/PERSISTENT-DELIVERY.md` is the operator guide. `install.sh` prints a short note
+  after install and `--update` that the controller is off and that nothing was configured
+  or started; it adds no prompt, config write or service. Black-box engine scenarios:
+  `tests/codex/test_controller_engine.py`. No runtime, CI, review or native-smoke outcome
+  is claimed here.
+  - Recovery: an effect whose journalled evidence root or token is missing, empty,
+    unsafe, unrecognized or incomplete is held `unknown`, never observed as fresh or
+    retried. A durable STOP is polled while a synchronous effect settles. Routing
+    observations use the validated lifecycle `endedAt`, kept separate from harvest time.
+  - A no-change investigation is integrated as a confirmed already-contained contribution
+    without a command or empty commit; the whole candidate still needs fresh union checks
+    and review.
+  - Readmitted preserved results are rebound at their Git-proven original base and
+    dependencies, with checks and review rerun; nothing is re-implemented, rebased or
+    reset. Integration and candidate effects are reused only for the current plan
+    workspace.
+  - `cleanup-workspaces --state ABS --plan-id ID --actor TEXT`: explicit, needs durable
+    STOP; removes only confirmed clean, journal-bound managed worktrees of one plan through
+    a strict journalled effect; keeps branches, commits, receipts and history; retains
+    dirty, untracked, unknown or review-bundle worktrees with a named reason. `recover`,
+    STOP and idle never remove a worktree.
 
 ### Changed
 
+- `remote-triggers` (input `f343c57`) is now a procedure. It discovers the live tool schema
+  and account scope, requires explicit authority for each create, update, run or send,
+  and reports the tool's own receipt. It links the official routines and scheduled-tasks
+  docs instead of restating limits. README, `CLAUDE.md`, `AGENTS.md`, `MEMORY.md`,
+  `INSTALL.md`, `codex/README.md`, `codex/FEATURES.md`, the `delivery` skill and the Codex
+  `remote-triggers`/`scheduled-tasks` overrides now describe the optional controller
+  consistently. They qualify the "no auto-merge" wording as GitHub auto-merge, because the
+  controller has an owner-authorized, gated merge effect.
+- `remote-triggers`, the Codex `remote-triggers`/`scheduled-tasks` overrides, README and
+  `CLAUDE.md` follow the current official docs: routines are now cloud scheduled tasks and
+  may run in an Anthropic-managed or an organization self-hosted environment. The
+  procedure discovers the actual environment, checkout, connectors, credentials and access
+  boundary instead of claiming no task can reach local files; the default cloud
+  environment works on a fresh clone without this machine's files. Session cron, Desktop
+  and cloud scheduled tasks are distinct, and no interval, expiry or session lifetime is
+  hardcoded.
 - Documentation and obsolete-comment cleanup on input `3d501c8`. No executable logic, test,
   inventory, model, permission, hook-trust or version change.
   - Root `AGENTS.md`, `CLAUDE.md`, `MEMORY.md`, `CONTRIBUTING.md` and `README.md` now state
@@ -250,6 +295,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `remote-triggers` no longer prescribes an unverified `RemoteTrigger` payload, a
+  hardcoded model, or fixed interval, timezone and lifetime claims (input `f343c57`).
+- `scheduled-tasks` (input `f343c57`): session cron jobs are restored on `--resume` or
+  `--continue`, except expired recurring jobs, one-shots whose time has passed, and a
+  self-paced `/loop`. Restored jobs do not catch up on missed fires. Native background
+  sessions are not an unattended dispatcher. Jitter bounds are no longer hardcoded.
 - Stale comments that described the retired self-heal loop as current behavior (input
   `3d501c8`):
   - `install.sh`: the `--upgrade` self-verify note; the watchdog plist deferral; the

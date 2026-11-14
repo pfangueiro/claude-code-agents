@@ -1,11 +1,17 @@
 ---
 name: scheduled-tasks
-description: Schedule recurring or one-shot tasks using CronCreate/CronDelete/CronList. Auto-activates on schedule, recurring, cron, periodic, poll, remind, every N minutes, timer, interval, check every.
+description: Schedule recurring or one-shot prompts with Claude Code's native cron tools (CronCreate/CronDelete/CronList) where the session exposes them, and choose a better instrument for one-event waits or work that must run without an open session. Relevant to schedules, recurring or periodic checks, polling, reminders, and intervals. Selection is model judgment, not keyword activation.
 ---
 
 # Scheduled Tasks
 
-Schedule recurring or one-shot prompts using Claude Code's built-in cron tools.
+Schedule recurring or one-shot prompts using Claude Code's native cron tools.
+
+**Authoritative reference:** the official [scheduled tasks documentation](https://code.claude.com/docs/en/scheduled-tasks). Behavior summarized here was checked against it on 2026-11-14 and can change between Claude Code versions. Where this skill and the live docs or live tool schema disagree, the live source wins.
+
+**Tool availability is not guaranteed.** The tool names below (`CronCreate`, `Monitor`, `RemoteTrigger`, and so on) reflect particular Claude Code versions, settings and permissions. Check which tools the current session actually offers before relying on one, and never describe a tool the session does not expose as if it exists.
+
+**Never schedule silently.** Creating a cron job, a cloud/Desktop schedule, a CI workflow or any background service is an action the user must approve. Before creating one, tell the user the cadence, the expiry, what each run will do, and how to cancel it. This skill implements no scheduler, daemon or service of its own.
 
 ## When to Use
 
@@ -17,28 +23,28 @@ Schedule recurring or one-shot prompts using Claude Code's built-in cron tools.
 
 ## When NOT to Use a Cron
 
-`CronCreate` re-runs a prompt at fixed wall-clock intervals. It is the wrong instrument for short waits and live watching — cron polls on a schedule and cannot fire mid-query, so it will not notice an event until its next tick. Reach for these instead:
+`CronCreate` re-runs a prompt at wall-clock times. It is the wrong instrument for short waits and live watching: cron fires on a schedule and not mid-turn, so it will not notice an event until a later fire. If the session exposes them, reach for these instead:
 
 | Need | Instrument |
 |------|-----------|
 | **One** notification when a condition becomes true ("tell me when the build finishes", "when the server is ready") | `Bash` with `run_in_background`, running a command that exits once the condition holds: `until grep -q "Ready in" dev.log; do sleep 0.5; done` |
-| **One per occurrence**, as it happens ("tell me every time an ERROR line appears") | `Monitor` — each stdout line of a long-running script becomes an event, streamed in real time |
-| **One per occurrence until a known end** (emit each CI step, stop when the run completes) | `Monitor` with a command that emits lines and then exits |
-| Waiting a few seconds or minutes inside a task | `Monitor` with an until-loop — foreground `sleep` is blocked in `Bash` |
-| Anything that must outlive the session | `RemoteTrigger` (`remote-triggers` skill) |
+| **One per occurrence**, as it happens ("tell me every time an ERROR line appears") | `Monitor`, where available: each stdout line of a long-running script becomes an event |
+| **One per occurrence until a known end** (emit each CI step, stop when the run completes) | `Monitor`, where available, with a command that emits lines and then exits |
+| Waiting a few seconds or minutes inside a task | A background until-loop (`Monitor` or `Bash` + `run_in_background`), not a foreground `sleep` |
+| Work that must run without an open session | A cloud, Desktop or GitHub Actions schedule. See [Work that must outlive the session](#work-that-must-outlive-the-session) |
 
-Use a cron only for genuinely periodic work on a wall-clock cadence. Note that an unbounded `Monitor` command (`tail -f`, `while true`) stays armed until its timeout, so use `Bash` + `run_in_background` when one notification is all that is wanted.
+Use a cron only for genuinely periodic work on a wall-clock cadence. An unbounded `Monitor` command (`tail -f`, `while true`) stays armed until its timeout, so use `Bash` + `run_in_background` when one notification is all that is wanted. Background `Bash` commands and monitors are **not** restarted when a session is resumed.
 
 ## Tools
 
 ### CronCreate
 Schedule a recurring or one-shot prompt.
 
-**Parameters:**
-- `cron` (required) — Standard 5-field cron expression: `minute hour day-of-month month day-of-week`
-- `prompt` (required) — The prompt to execute at each fire time
-- `recurring` (optional, default: true) — `false` for one-shot reminders
-- `durable` — **accepted but inert.** The tool schema states it "has no effect — durable persistence is not available. All jobs are session-only (in-memory, gone when this Claude session ends)." Do not pass it and do not treat it as persistence.
+**Parameters** (read the live tool schema; parameters and their descriptions vary by version):
+- `cron` (required): standard 5-field cron expression `minute hour day-of-month month day-of-week`
+- `prompt` (required): the prompt to run at each fire time
+- `recurring` (optional, default: true): `false` for one-shot reminders
+- `durable` (if present): older observed schemas described this parameter as having no effect. Do not assume either way. Read its description in the live schema, and check the docs for what persistence the current version actually provides.
 
 **Returns:** Job ID for managing the schedule.
 
@@ -46,7 +52,7 @@ Schedule a recurring or one-shot prompt.
 Cancel a scheduled job by its ID.
 
 ### CronList
-List all active scheduled jobs in the current session.
+List the scheduled jobs in the current session.
 
 ## Cron Expression Syntax
 
@@ -61,22 +67,27 @@ List all active scheduled jobs in the current session.
 ```
 
 **Common patterns:**
-- `*/5 * * * *` — Every 5 minutes
-- `7 * * * *` — Every hour at :07
-- `3 9 * * 1-5` — Weekdays at 9:03am
-- `57 8 * * *` — Daily at ~9am (avoid :00 for load distribution)
+- `*/5 * * * *`: every 5 minutes
+- `7 * * * *`: every hour at :07
+- `3 9 * * 1-5`: weekdays at 9:03am
+- `57 8 * * *`: daily at ~9am (avoid :00 for load distribution)
 
 **One-shot (pinned):**
-- `30 14 15 4 *` — Once at 2:30pm on April 15
+- `30 14 15 4 *`: once at 2:30pm on April 15
 
 ## Constraints
 
-- **Session-only — treat persistence as unavailable**: as the live `CronCreate` schema reports it, jobs live only in this Claude session, nothing is written to disk, and every job is gone when Claude exits. Durable persistence is **feature-gated**: the `durable` parameter is real and the CLI ships an implementation behind it, but when the gate is off the schema states plainly that it "has no effect". **Read the `durable` description in the live schema before relying on it** — if it says "has no effect", it does. For scheduling that must survive session exit, use `RemoteTrigger` (see the `remote-triggers` skill) rather than betting on a gate.
-- **Idle-only firing**: Jobs only fire while the REPL is idle (not mid-query)
-- **7-day max**: Recurring tasks auto-expire after 7 days — they fire one final time, then are deleted. Tell the user about the 7-day limit when scheduling a recurring job.
-- **Jitter**: Recurring tasks may fire up to 10% of their period late (max 15 min); one-shot tasks landing on `:00` or `:30` may fire up to 90s *early*
+All of these come from the [official docs](https://code.claude.com/docs/en/scheduled-tasks) as checked on 2026-11-14. Re-check before you promise anything to the user.
+
+- **Fires only while Claude is running and idle**: jobs fire between turns, not mid-turn, and only while the Claude Code process is running.
+- **Resume restores cron jobs, with limits**: jobs created with `CronCreate` are restored when the session is resumed with `--resume` or `--continue`. Recurring jobs that have expired and one-shots whose time has passed are not restored. A restored recurring job does **not** catch up on fires it missed while the session was closed. A self-paced `/loop` is not restored.
+- **Closing the session stops firing**: nothing fires while no session is running. Native background sessions can keep a session alive without a terminal, but supervisor, crash and machine-restart limits still apply, so this is not a guarantee of continuous execution.
+- **7-day max**: recurring tasks expire after 7 days. They fire one final time and are then deleted. Tell the user about this limit when you schedule a recurring job.
+- **Jitter**: fire times are deliberately offset from the nominal cron time. Recurring jobs can run late, and one-shots pinned to `:00` or `:30` can run slightly early. The bounds have changed between versions, so do not hardcode a formula. Link the user to the [current jitter rules](https://code.claude.com/docs/en/scheduled-tasks) and report the next-run time the tool actually gives you.
 
 ## Patterns
+
+Each pattern below needs the user's approval before you create it (see **Never schedule silently** above).
 
 ### Poll CI Status
 ```
@@ -84,7 +95,7 @@ CronCreate:
   cron: "*/3 * * * *"
   prompt: "Check the CI status of the current branch with `gh run list --branch $(git branch --show-current) --limit 1` and notify me if it completed or failed"
 ```
-For a *single* CI run that is already in flight, prefer `Monitor` with a poll loop that exits when the run reaches a terminal state — it reports each check as it lands instead of waking the agent every 3 minutes indefinitely.
+For a *single* CI run that is already in progress, prefer a background poll loop (`Monitor` if available) that exits when the run reaches a terminal state. It reports each check as it finishes instead of waking the agent every 3 minutes indefinitely.
 
 ### Periodic Quality Check
 ```
@@ -101,32 +112,31 @@ CronCreate:
   recurring: false
 ```
 
-## Sleep/Resume for Autonomous Monitoring
+## Periodic Wake-Check While the Session Runs
 
-Agents can self-suspend and resume without user prompts using combinations of cron and sleep patterns:
+While the session is running, a recurring job lets the agent check something periodically without the user prompting it:
 
-### Periodic Wake-Check-Sleep
 ```
 CronCreate:
   cron: "*/10 * * * *"
   prompt: "Check CI status for the current branch. If build failed, alert the user. Otherwise, do nothing."
 ```
-The agent wakes every 10 minutes, checks status, and goes back to idle. Each wake-up costs one API call.
+The agent wakes about every 10 minutes (subject to jitter), checks status, and goes idle again. Each wake-up costs one model call.
 
-### Surviving a Restart
+### Work that must outlive the session
 
-Not possible with a cron under the current schema — a job is gone the moment Claude exits, and `durable` reports "has no effect" while its gate is off. Do not promise the user persistence on the strength of that parameter; check the live schema text if it matters. Anything that must outlive the session belongs in `RemoteTrigger` (`remote-triggers` skill).
+A session cron can be restored on resume (see Constraints), but it does not fire while no session runs, and it does not catch up on fires it missed. For work that must run regardless of an open session, the [official docs](https://code.claude.com/docs/en/scheduled-tasks) describe cloud, Desktop and GitHub Actions options. Before you propose one, find out whether it is available in the user's environment, what authentication it needs, and whether the owner has authorized it. Do not assume a `RemoteTrigger` or similar tool exists. Do not claim a schedule exists until you have actually created it and seen it confirmed.
 
 ## Best Practices
 
-- Avoid `:00` and `:30` minute marks — pick off-minutes to reduce API load spikes
-- Keep prompts focused and actionable — the scheduled prompt runs with full agent context
-- Use `CronList` to audit active jobs before creating new ones
+- Avoid `:00` and `:30` minute marks. Pick off-minutes to reduce load spikes
+- Keep prompts focused and actionable. The scheduled prompt runs with full agent context
+- Run `CronList` to check existing jobs before creating new ones
 - Clean up with `CronDelete` when a monitoring task is no longer needed
 - For one-shot reminders, always set `recurring: false`
 
 ## Related
 
-- `/loop` skill — Higher-level recurring task wrapper
-- `/schedule` skill — Remote agent triggers (survives session exit)
-- `experiment-loop` skill — Metric-driven optimization with iteration
+- `/loop` skill (where available): higher-level recurring wrapper. A self-paced loop is not restored on resume
+- `/schedule` skill (where available and authorized): cloud-scheduled agents that do not depend on an open session
+- `experiment-loop` skill: metric-driven optimization with iteration

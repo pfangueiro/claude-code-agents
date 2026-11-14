@@ -27,9 +27,10 @@ until a real tool call or process does it and its receipt is collected.
 - An unavailable provider or reviewer stays a named gap, for example
   `independent review: not performed (verifier provider unavailable)`. Same-provider
   self-review is never reported as cross-provider review.
-- An existing configured controller owns dispatch and STOP. Without one, a direct
-  CLI invocation is a fallback: it preserves identity (provider, profile, session)
-  and every gate, and is not reported as managed delivery.
+- An existing configured controller owns dispatch and STOP (see *Optional persistent
+  controller*). Without one, a direct CLI invocation is a fallback. It preserves
+  identity (provider, profile, session) and every gate, and is not reported as managed
+  delivery.
 
 ## Workflow
 
@@ -94,6 +95,36 @@ until a real tool call or process does it and its receipt is collected.
 - Revalidate drift (head SHA, base, dirty state) before resuming.
 - Every blocker names the gate, its owner and the next executable step.
 
+## Optional persistent controller
+
+`scripts/controller.py` in this skill directory is an optional operator CLI for local
+persistent delivery, for one repository on one host. It stays off until an owner runs
+`setup` for one repository, or `init` from an owner-private policy. It never installs,
+schedules or starts itself. Installing or loading this skill runs nothing.
+
+- State lives in a private directory outside the repository. Policy, plans and
+  authority declarations are owner files, never worker text. Do not edit policy
+  snapshots, the ledger or request files in place. A policy, runtime or rules change
+  is recorded only by an explicit `reconcile` under STOP.
+- `submit` only queues a request. A running controller admits it. Queued, admitted,
+  executed, verified, integrated, published and merged are distinct states.
+- `run` is a foreground process. `stop` records a durable STOP that only `resume`
+  clears.
+- External publication needs an actual approving review of the current integrated
+  candidate from an owner-configured Codex profile. Without one, local work is kept and
+  publication is INCOMPLETE with an attended handoff.
+- One Claude account is enough: every attempt is a fresh session. Extra owner-configured
+  profiles are used only when observed availability, dependencies and review capacity
+  make them eligible.
+- `recover` settles owned work and never removes a worktree. Only the explicit
+  `cleanup-workspaces --plan-id <id> --actor <name>` under STOP removes confirmed clean,
+  journal-bound worktrees of one plan; branches, commits and history are kept.
+- Lost or unproven effect evidence stays `unknown` and is never retried. Nothing claims
+  exactly-once delivery or process containment.
+
+Before setup, run `python3 <this skill directory>/scripts/controller.py --help` and read
+the repository's `docs/PERSISTENT-DELIVERY.md` operator guide.
+
 ## Project adapters
 
 Repository-specific policy (base branch, release, issue tracking, required checks)
@@ -110,3 +141,5 @@ the receipts, not assumed.
 
 - `references/acceptance-by-task.md` — proportional behavioral acceptance profiles.
 - `references/repository-measurements.md` — optional measurement and task-grounding limits.
+- `scripts/controller.py` — optional local persistent-delivery operator CLI (off until
+  set up).

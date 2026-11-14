@@ -494,7 +494,9 @@ def create_out_dir(raw: str) -> Path:
     return out_dir.resolve()
 
 
-def run_check(args: argparse.Namespace) -> int:
+def run_check(args: argparse.Namespace, *, supervisor=None) -> int:
+    """Record one check. `supervisor` is an optional trusted in-process callable with
+    supervise()'s parameters and return shape; None (the only CLI path) uses supervise."""
     if not LABEL_RE.match(args.label):
         return usage('invalid-label')
     if args.source_only is not None and not 0 < len(args.source_only) <= MAX_DESCRIPTION:
@@ -532,7 +534,8 @@ def run_check(args: argparse.Namespace) -> int:
         receipt['command']['resolvedExecutable'] = str(executable)
         receipt['command']['executableSha256'] = sha256_file(executable)
         started = time.monotonic()
-        child = supervise(argv, executable, cwd, out_dir, args.timeout)
+        run = supervise if supervisor is None else supervisor
+        child = run(argv, executable, cwd, out_dir, args.timeout)
     except Refusal as refusal:
         receipt.update(endedAt=utc_now(), child={'launched': False},
                        gate={'outcome': 'refused', 'reasons': [refusal.code]})
