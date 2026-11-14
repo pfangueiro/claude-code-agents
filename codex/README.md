@@ -22,6 +22,10 @@ source .venv/bin/activate
 python3 -m pip install -r codex/requirements.txt
 ```
 
+On another laptop, a clone or pull gets the source only. Install, check and log in to
+Codex there, following
+[Setting up another laptop](../INSTALL.md#setting-up-another-laptop).
+
 Native custom-agent support depends on the installed Codex version. Schema guidance
 was checked against current official documentation; local CLI inspected: 0.162.1.
 
