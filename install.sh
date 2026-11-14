@@ -1653,6 +1653,9 @@ update_installation() {
     write_framework_path_marker
     write_framework_version_marker
     install_watchdog || true
+    # Only reached after the lock was acquired and every reconcile step above completed
+    # (set -e); a run that backs off on a held lock returns earlier and prints no note.
+    print_controller_note update
 }
 
 # ============================================================================
@@ -1694,6 +1697,25 @@ verify_installation() {
     fi
 }
 
+# Printed guidance only, and only from a completed install, upgrade or update. The installer
+# never configures, starts or schedules the optional delivery controller and asks no
+# controller questions; controller state lives outside ~/.claude, so an install or update
+# leaves it untouched.
+print_controller_note() {
+    echo ""
+    echo "Optional and off by default: a local persistent delivery controller ships in"
+    echo "~/.claude/skills/delivery/scripts/controller.py. This run configured, started and"
+    echo "scheduled nothing."
+    if [ "${1:-}" = update ]; then
+        echo "Existing controller state, policy and STOP are untouched. If you use it, run"
+        echo "'controller.py status --state <dir>': a changed runtime holds new work until an"
+        echo "explicit reconcile under STOP."
+    else
+        echo "To set it up for one repository: 'controller.py setup --repo <repo> --state <dir>'."
+    fi
+    echo "Operator guide: docs/PERSISTENT-DELIVERY.md in this checkout."
+}
+
 print_summary() {
     echo -e "\n${BOLD}=== Installation Summary ===${NC}"
     echo "┌─────────────────────────────┐"
@@ -1712,6 +1734,7 @@ print_summary() {
     echo '  🚀 "Deploy this to AWS"'
     echo ""
     echo -e "${CYAN}No per-project setup — describe what you need in any project!${NC}"
+    print_controller_note
 }
 
 # ============================================================================

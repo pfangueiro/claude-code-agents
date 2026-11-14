@@ -46,6 +46,15 @@ delivery manifest first, broad `./install.sh --update` second, Codex separately.
 installer replaces same-name customizations; the hash-owned installers refuse them.
 Never claim complete runtime parity; consult the feature matrix and global test record.
 
+The optional persistent delivery controller (`delivery/scripts/controller*.py`, guide
+`docs/PERSISTENT-DELIVERY.md`) is a foreground, owner-started local process. Installers,
+setup and updates must never start it, schedule it, install a service, discover accounts,
+or ask the policy questions again. Never edit its state, policy snapshots or ledger in
+place. Worktrees are removed only by the explicit `cleanup-workspaces` under STOP. Its
+automatic publication requires an actual Codex review decision, not Python checks.
+Describe it from the source; its tests, native smoke run and independent review are
+publication gates, so report only acceptance that actually ran.
+
 Before publishing, fetch and reconcile remote changes without rebasing published SHAs.
 Stage explicit task paths, inspect the staged diff for private data, run applicable
 checks, and obtain independent review at the exact commit. Verify GitHub's branch head

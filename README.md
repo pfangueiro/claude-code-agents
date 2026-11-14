@@ -78,9 +78,17 @@ invalidates the earlier verdict.
 - **Project policy.** Base branch, required checks, review, release and attribution
   come from the project's own instructions. Project rules and owner instructions act as
   the policy adapter; the workflows do not assume a default branch, CI gate or ticket key.
-- **Nothing runs in the background.** No watcher, daemon, scheduler, auto-merge, hook or
-  hook trust is added. Gates are instructions plus receipts the session collects, not an
-  enforced sandbox.
+- **Nothing runs in the background.** No watcher, daemon, scheduler, GitHub auto-merge,
+  hook or hook trust is added. Gates are instructions plus receipts the session collects,
+  not an enforced sandbox.
+- **Optional local persistent controller.** `delivery` also ships
+  `scripts/controller.py` and its engine, an operator CLI for one repository on one host.
+  It stays off until you run `setup` for a repository. It keeps private state outside the
+  repository, queues owner-approved plans, and runs only as a foreground process you
+  start, with a durable STOP. One Claude account is enough. Publication needs an actual
+  Codex review of the integrated candidate. Worktrees are removed only by an explicit
+  `cleanup-workspaces` under STOP. No skill, command or agent count changes. See
+  [docs/PERSISTENT-DELIVERY.md](docs/PERSISTENT-DELIVERY.md).
 - **Optional references.** `delivery` ships task-specific acceptance guidance and
   optional repository-measurement limits; `verified-handoff` ships an opt-in
   agent-guidance evaluation that compares baseline and candidate instruction files on a
@@ -176,9 +184,10 @@ $sdlc-agent-code-quality         # apply the code-quality role guide inline
   explicitly when you want a specific one.
 - **Availability is not execution.** Installing or loading a workflow only makes it
   selectable; nothing is implemented, reviewed, merged or deployed until a real tool call
-  or process does it. No scheduler or auto-merge drives that SDLC work in the background,
-  and the portable delivery workflows and the Codex adapter add no background watcher or
-  daemon at all. (The Claude install can add one **opt-in** launchd watchdog with
+  or process does it. No scheduler or GitHub auto-merge drives that SDLC work in the
+  background, and the portable delivery workflows and the Codex adapter add no background
+  watcher or daemon at all. The optional delivery controller runs only as a foreground
+  process an owner starts, and merges only through its owner-authorized, gated effect. (The Claude install can add one **opt-in** launchd watchdog with
   `--with-watchdog` — documented below — but it is observe-only: it reports drift and keeps
   backups, and never installs, repairs, implements, reviews, merges or deploys anything.)
 - **Global by default, overridable per project.** Both editions install user-global and
@@ -357,7 +366,10 @@ Written **outside** `~/.claude`:
 
 Created later at runtime, not by the installer: `~/.claude/analytics/*.jsonl` and `claude-obs.db`
 (hooks and the collector), `~/.claude/snapshots/` (the daemon), `~/.claude/sessions/`
-(pre-compact auto-snapshots, 10 kept per project).
+(pre-compact auto-snapshots, 10 kept per project). The optional delivery controller writes
+nothing until you run its `setup` or `init`. It then writes only the private state directory you
+name and a binding and lock file in that repository's Git directory. No installer touches
+them ([guide](docs/PERSISTENT-DELIVERY.md)).
 
 **In `settings.json`, only these keys are framework-owned:** `.hooks` (framework hook events
 replaced per event on drift, matched by exact command path so **foreign bindings are preserved**;
@@ -509,11 +521,11 @@ Skills provide domain knowledge that agents apply. 30 included:
 | **experiment-loop** | Autonomous experimentation pattern: modify → measure → keep/discard (autoresearch-inspired) |
 | **scheduled-tasks** | CronCreate/CronDelete/CronList for recurring prompts, polling, reminders |
 | **worktree-workflow** | Git worktree isolation via EnterWorktree/ExitWorktree — explicit-request-only, session-scoped, single-instance (not a parallelism mechanism) |
-| **remote-triggers** | RemoteTrigger API for cross-session automation, scheduled agents |
+| **remote-triggers** | Cloud scheduled tasks (formerly routines) and remote triggers where exposed: live-schema and execution-environment discovery, account scope, owner-authorized create/update/run and tool receipts |
 | **browser-testing** | E2E testing with Playwright MCP — visual regression, responsive design, codegen |
 | **multi-agent-orchestration** | Coordinator pattern, teams, background agents, worker restrictions, SendMessage |
 | **skill-creator** | Create your own custom skills |
-| **delivery** | Provider-neutral delivery: outcome contract, implementer/verifier roles, receipts, separately authorized review/publish/merge/deploy states |
+| **delivery** | Provider-neutral delivery: outcome contract, implementer/verifier roles, receipts, separately authorized review/publish/merge/deploy states; optional local persistent controller (off until set up) |
 | **repo-context** | Read-only repository discovery: Git root, HEAD, dirty state, instructions, manifests and command candidates as data |
 | **verified-handoff** | Run checks into receipts bound to an exact commit and verify a declared check manifest before claiming results |
 

@@ -91,6 +91,17 @@ These are workflow procedures: loading one runs nothing, and no watcher, daemon,
 auto-merge, scheduler or hook trust is added. Project instructions supply the base
 branch, required checks and release policy.
 
+Optional local persistent delivery: the exported bundle includes
+`~/.agents/skills/sdlc-delivery/scripts/controller.py`, the same operator CLI as the
+Claude edition. It stays off until an owner runs `setup` for one repository. It runs only
+as a foreground process the owner starts. It launches fresh `codex exec --json` sessions
+that inherit the native model, approval and sandbox policy unchanged. A Codex review
+profile uses your existing Codex authentication, and its approving review of the
+integrated candidate is what gates external publication. Codex quota is not captured
+(no parity with Claude's rate-limit observations). Without a configured, eligible Codex
+review profile, publication is held as an attended handoff. See
+`docs/PERSISTENT-DELIVERY.md` in the repository.
+
 The command adaptation fixes unsafe product assumptions: use the configured default
 branch/Jira project, preserve the owner's attribution and authentication choice, and
 verify required CI at the exact PR head before an authorized merge/release. Loading

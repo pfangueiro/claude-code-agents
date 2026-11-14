@@ -18,10 +18,22 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Create clean Python environment and install declared dependencies
-        run: |
-          python3 -m venv .ci-codex-env
-          .ci-codex-env/bin/python -m pip install -r codex/requirements.txt
+      - name: Observe interpreter binding before the clean environment exists
+        # Diagnostic only: records the tool-cache interpreter's uid/mode and the binding
+        # refusal code as data; exits 0 whatever it finds.
+        run: python3 -I -B tests/controller/runtime_preflight.py --observe
+      - name: Create clean Python environment with a copied interpreter
+        # --copies: the venv interpreter is a regular file created by this job's user
+        # (venv sets 0755), instead of a symlink into the shared tool cache whose owner and
+        # mode this job does not control. The controller's executable gate is unchanged.
+        run: python3 -m venv --copies .ci-codex-env
+      - name: Enforce controller runtime preflight
+        # Fails closed unless the venv interpreter binds through the committed
+        # _executable_binding gate and a host boot identity is available, so the
+        # lifecycle test class cannot be skipped silently for either reason.
+        run: .ci-codex-env/bin/python -I -B tests/controller/runtime_preflight.py
+      - name: Install declared dependencies
+        run: .ci-codex-env/bin/python -m pip install -r codex/requirements.txt
       - name: Test isolated project and user installs
         run: .ci-codex-env/bin/python -m unittest discover -s tests/codex -v
       - name: Prove ownership, rollback, patch and privacy guards

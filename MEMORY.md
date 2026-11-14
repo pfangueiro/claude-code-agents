@@ -34,7 +34,18 @@ AGENTS.md and relevant source before relying on these notes.
   takes no backup, and replaces `.permissions`, `.attribution`, `.statusLine` and framework
   hook bindings on drift. `.env` is add-only and `CLAUDE.md` is seed-only.
 - Availability of a workflow is not an execution or an enforced gate. Report delivery
-  states only from receipts; no watcher, daemon, auto-merge or hook trust exists.
+  states only from receipts; no watcher, daemon, GitHub auto-merge or hook trust exists.
+- Optional local persistent delivery: `delivery/scripts/controller*.py` including the
+  engine (`controller_engine.py`), exported by both installers inside the existing skill
+  (counts unchanged). Single host, single repository, foreground `run` only; private 0700
+  state outside Git plus a binding and lock in the Git common dir; policy and per-plan
+  authority are separate owner files; a policy, runtime or rules change holds work until
+  `reconcile` under STOP, then `cleanup-workspaces` and `readmit` with a new authority.
+  Lost effect evidence stays `unknown`, never retried; preserved results are readmitted at
+  their Git-proven original base with fresh checks and review. External publication needs
+  an actual Codex profile review of the integrated candidate. Operator guide:
+  `docs/PERSISTENT-DELIVERY.md`. Never edit state files in place; earlier ledger schemas
+  are refused, with no migration.
 - Native custom routing is host-dependent. Guide discovery is verified; guide prose
   does not enforce a native sandbox. Models and approval policy are inherited.
 - Code-quality guidance is right-sized and reuse-first: the `code-quality` rule, the

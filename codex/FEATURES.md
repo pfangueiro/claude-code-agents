@@ -14,7 +14,8 @@ Do not describe this as complete runtime parity.
 | Specialist fallback | 13 additional role-guide skills | Apply inline or give procedure to generic worker when native roles are unavailable; no native sandbox enforcement claim |
 | Agent auto-selection | Descriptions guide Codex | Model judgment; not deterministic keyword routing |
 | Seven rules | Managed AGENTS guidance + rules resource | Instruction hierarchy respected; not enforced sandbox policy |
-| Delivery workflow | Exported delivery, repo-context and verified-handoff skills; AGENTS routing | Exported scripts executed in tests; procedures and receipts, not an enforced gate; no watcher, daemon or auto-merge; opt-in agent-guidance evaluation resource shared with Claude, run only explicitly with a caller-supplied adapter (no provider call in CI, not an OS sandbox, no parity or effectiveness claim) |
+| Delivery workflow | Exported delivery, repo-context and verified-handoff skills; AGENTS routing | Exported scripts executed in tests; procedures and receipts, not an enforced gate; no watcher, daemon or GitHub auto-merge; opt-in agent-guidance evaluation resource shared with Claude, run only explicitly with a caller-supplied adapter (no provider call in CI, not an OS sandbox, no parity or effectiveness claim) |
+| Optional persistent delivery | Same controller scripts and engine in `sdlc-delivery/scripts/`; fresh `codex exec --json` sessions per attempt | Off until owner setup; foreground `run` only, no service; native policy inherited; Codex review profile gates external publication; Codex quota not captured; worktree removal only by explicit `cleanup-workspaces` under STOP; state refused inside the repository or installed skills tree; candidate policy-file changes hold INCOMPLETE for attended review |
 | Task DAG / teams | Plan/ledger and actual collaboration APIs | Claude Task/implicit-team persistence not assumed |
 | Background/fork behavior | Host schema discovery | No automatic context fork or Claude background defaults |
 | Parallel coding | Separate Git worktrees | Coupled steps sequential; no fake launcher isolation parameter |
@@ -22,8 +23,8 @@ Do not describe this as complete runtime parity.
 | Four MCPs | Disabled TOML examples | Availability/schema/account checked at use; nothing auto-connected |
 | Deep analysis | Optional Sequential Thinking workflow | Actual tool discovery, local evidence fallback disclosed |
 | Browser testing / Context7 | Preserved MCP-specific domain procedures | Example schema depends on installed server; no MCP assumed available |
-| Scheduling | Available host scheduler or honest unsupported result | No Claude Cron/session-limit emulation; no schedule created merely by installing |
-| Remote triggers | Available remote tool / requested codex exec | No Claude cloud routine API or credentials assumption |
+| Scheduling | Available host scheduler or honest unsupported result | No Claude Cron/session-limit emulation; no schedule created merely by installing; the optional delivery controller is not a scheduler |
+| Remote triggers | Available remote tool / requested codex exec | No Claude cloud scheduled task (routine) API or credentials assumption; the optional local controller is not a remote task |
 | Handoff / save / resume | Markdown notes with SHA/state verification | Native transcript/compaction managed by Codex |
 | Install/update/check/uninstall | Hash ownership, preflight, lock, atomic files, rollback | No overwrite of customized files; process-kill rollback not guaranteed |
 | Hook events | Nine opt-in native command events | Definitions require native trust; cloud orchestration differs |

@@ -50,6 +50,15 @@ code-quality rules, the `code-quality` agent, `code-review-checklist`, `/review-
   still apply, with no extra confirmation step. Implement, review, merge, deploy and
   release are separately authorized states, and each is reported from evidence.
 
+**Optional persistent delivery controller.** The `delivery` skill ships
+`scripts/controller.py` and its engine, an operator CLI for one repository on one host. It
+stays off until an owner runs `setup`. It runs only as a foreground `run` process with
+durable STOP (`--background` does not daemonize), and it keeps private state outside the
+repository. One Claude account is enough; roles are fresh sessions. External publication
+needs an actual Codex profile review of the integrated candidate. Worktrees are removed
+only by an explicit `cleanup-workspaces` under STOP. Loading the skill or installing it
+runs nothing. See [docs/PERSISTENT-DELIVERY.md](docs/PERSISTENT-DELIVERY.md).
+
 ## Agents
 
 | Agent | Typical cues (not triggers) | Model |
@@ -97,9 +106,9 @@ framework neither installs nor guarantees them:
 | Tool | Use When |
 |------|----------|
 | **TaskCreate/TaskUpdate/TaskList** | Multi-step work — structured task tracking with dependencies and progress |
-| **CronCreate/CronDelete/CronList** | Recurring prompts, polling, reminders (session-scoped, 7-day max) |
+| **CronCreate/CronDelete/CronList** | Recurring prompts, polling, reminders while a session runs (session-scoped; expiry and restore limits follow the current docs) |
 | **EnterWorktree/ExitWorktree** | ONLY when the user (or CLAUDE.md/memory) explicitly says "worktree" — "fix this bug"/"build this feature" is not a trigger. Session-scoped and single-instance, so **not** a parallel-development or per-task mechanism; for per-agent repo isolation use the `Agent` tool's `isolation: "worktree"` parameter instead |
-| **RemoteTrigger** | Cross-session automation — create/run scheduled remote agents |
+| **RemoteTrigger** | Cloud scheduled tasks (formerly routines) where exposed. Read the live schema and discover the execution environment (Anthropic-managed or organization self-hosted) and its access; act within the owner's existing authorization and report the tool receipt |
 | **LSP** | Code intelligence — go-to-definition, find-references, hover, document symbols |
 | **AskUserQuestion** | Structured user input with labeled options and previews |
 

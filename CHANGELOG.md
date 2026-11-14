@@ -88,9 +88,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   title only the current task `SDLC | <short task>` when a native rename capability
   exists, without replacing owner titles. The marker means guidance loaded, not checks
   passed; Claude's renderer, health, duration and cost output remain unported.
+- Optional local persistent delivery controller (unpublished; first modules on input
+  `f343c57`): `delivery/scripts/controller.py` and its `controller_*.py` modules. These
+  cover the operator CLI, closed-schema policy/plan/authority boundary, SQLite ledger with
+  context epochs and durable STOP, private request inbox, routing, shared owned-process
+  lifecycle, native Claude/Codex adapters, v1-receipt check runner, fixed-catalogue
+  Git/GitHub effects and the engine (`controller_engine.py`, `controller_engine_io.py`)
+  that `run`, `recover` and `cleanup-workspaces` load. Both installers export them inside
+  the existing skill; the 30/12/13 inventory and the 55 Codex bundles are unchanged.
+  `docs/PERSISTENT-DELIVERY.md` is the operator guide. `install.sh` prints a short note
+  after install and `--update` that the controller is off and that nothing was configured
+  or started; it adds no prompt, config write or service. Black-box engine scenarios:
+  `tests/codex/test_controller_engine.py`. No runtime, CI, review or native-smoke outcome
+  is claimed here.
+  - Recovery: an effect whose journalled evidence root or token is missing, empty,
+    unsafe, unrecognized or incomplete is held `unknown`, never observed as fresh or
+    retried. A durable STOP is polled while a synchronous effect settles. Routing
+    observations use the validated lifecycle `endedAt`, kept separate from harvest time.
+  - A no-change investigation is integrated as a confirmed already-contained contribution
+    without a command or empty commit; the whole candidate still needs fresh union checks
+    and review.
+  - Readmitted preserved results are rebound at their Git-proven original base and
+    dependencies, with checks and review rerun; nothing is re-implemented, rebased or
+    reset. Integration and candidate effects are reused only for the current plan
+    workspace.
+  - `cleanup-workspaces --state ABS --plan-id ID --actor TEXT`: explicit, needs durable
+    STOP; removes only confirmed clean, journal-bound managed worktrees of one plan through
+    a strict journalled effect; keeps branches, commits, receipts and history; retains
+    dirty, untracked, unknown or review-bundle worktrees with a named reason. `recover`,
+    STOP and idle never remove a worktree.
+  - State placement: `init`/`setup` refuse a state directory equal to or inside the
+    selected work tree, Git common directory, any registered worktree or the main work tree
+    (`inside_repository`), or overlapping the installer-managed skills tree of the executing
+    `delivery`/`sdlc-delivery` bundle (`inside_runtime`), before any lock, binding or state
+    write. An unknown runtime layout (`runtime_layout_unsupported`), a main work tree that
+    cannot be proven from a linked selection (`repository_layout_unsupported`) and
+    unobtainable read-only boundary evidence (`repository_inventory`) are INCOMPLETE (exit
+    2). There is no Git configuration fallback, and existing state is not relocated or
+    migrated.
+  - Policy invariance: before claims and again after a reviewer's turn, instruction and
+    native policy entries are compared with the trusted committed policy. A difference holds
+    INCOMPLETE (`base_policy_changed`, `review_policy_changed`,
+    `review_policy_changed_after_review`) with an attended Codex handoff, keeping results,
+    checks and history. Automated policy-editing tasks are unsupported.
+  - Process evidence `process-exit/v2` and `process-lifecycle/v4` keep historical escapes
+    separate from a typed settlement proof. Demonstrably settled escapes can pass; live,
+    unknown, incompletely observed or overflowed ones do not. v3 records keep their meaning,
+    and the v1 receipt schema is unchanged.
 
 ### Changed
 
+- `remote-triggers` (input `f343c57`) is now a procedure. It discovers the live tool schema
+  and account scope, requires explicit authority for each create, update, run or send,
+  and reports the tool's own receipt. It links the official routines and scheduled-tasks
+  docs instead of restating limits. README, `CLAUDE.md`, `AGENTS.md`, `MEMORY.md`,
+  `INSTALL.md`, `codex/README.md`, `codex/FEATURES.md`, the `delivery` skill and the Codex
+  `remote-triggers`/`scheduled-tasks` overrides now describe the optional controller
+  consistently. They qualify the "no auto-merge" wording as GitHub auto-merge, because the
+  controller has an owner-authorized, gated merge effect.
+- `remote-triggers`, the Codex `remote-triggers`/`scheduled-tasks` overrides, README and
+  `CLAUDE.md` follow the current official docs: routines are now cloud scheduled tasks and
+  may run in an Anthropic-managed or an organization self-hosted environment. The
+  procedure discovers the actual environment, checkout, connectors, credentials and access
+  boundary instead of claiming no task can reach local files; the default cloud
+  environment works on a fresh clone without this machine's files. Session cron, Desktop
+  and cloud scheduled tasks are distinct, and no interval, expiry or session lifetime is
+  hardcoded.
 - Documentation and obsolete-comment cleanup on input `3d501c8`. No executable logic, test,
   inventory, model, permission, hook-trust or version change.
   - Root `AGENTS.md`, `CLAUDE.md`, `MEMORY.md`, `CONTRIBUTING.md` and `README.md` now state
@@ -250,6 +313,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `tests/codex/test_controller_engine.py` harness: the controller CLI and `start_run` environment
+  (`self.env`) now carries the same `GIT_CONFIG_NOSYSTEM=1` / `GIT_CONFIG_GLOBAL=/dev/null`
+  isolation the fixture Git setup already used. Without it, host system Git configuration
+  reached the disposable engine run, and the unchanged merge-prediction guard rightly refused it
+  (`merge-prediction-driver-unsupported`). The exact hosted configuration key is unknown. The
+  production guard, engine behaviour, assertions and budgets are unchanged.
+- CI (`codex-adapter` job): the clean environment is now created with
+  `python3 -m venv --copies`, so its interpreter is a job-owned regular file rather than a
+  symlink into the shared tool cache. Before that step, a new read-only
+  `tests/controller/runtime_preflight.py --observe` records the tool-cache interpreter's
+  uid/mode and `_executable_binding` result. After it, the same preflight runs in enforce
+  mode and fails the job before dependency install and tests unless the interpreter binds
+  and a boot identity is available. The controller's executable ownership/mode gate is
+  unchanged.
+- Controller `spawn` bootstrap identity: Popen can return before Linux exposes the new
+  argv (`/proc/<pid>/cmdline` can read empty during exec), so one capture could miss the
+  token of a healthy bootstrap. `_acquire_identity` now repeats the same full capture (boot,
+  process start, group, token in argv) within `IDENTITY_ACQUIRE_SECONDS`. Before and after
+  each capture it checks that the deadline has not passed and that this process's own
+  unreaped child is still running. A capture that completes late or after the child exits
+  is discarded. Nothing is persisted or released unless a full identity is admitted within
+  the window; otherwise `spawn` refuses with `identity-unavailable`, closes the release
+  channel and launches nothing. The bound governs admission and retries only. Each OS query
+  keeps its existing `SYSTEM_QUERY_TIMEOUT`, so the call has no hard wall-clock guarantee.
+  Owner, mode, start, token and group checks, record schemas, legacy handling and captured
+  settlement meaning are unchanged.
+- Controller provider tests: the lost-supervisor negative control now waits, within a
+  bounded deadline, for its own bootstrap to be reaped. `finalize_lost` retries only the
+  `bootstrap-unreaped` refusal, and the guard itself is retained. A deterministic
+  delayed-reap control shows a refusal records nothing. Fixture failures now report the
+  observed recovery state, and cleanup keeps the evidence directory and lists unresolved
+  attempts, with no change to acceptance criteria or time budgets. Hosted-runner results
+  are not claimed here; the exact runner interpreter UID and mode are unknown until the CI
+  preflight records them.
+- `remote-triggers` no longer prescribes an unverified `RemoteTrigger` payload, a
+  hardcoded model, or fixed interval, timezone and lifetime claims (input `f343c57`).
+- `scheduled-tasks` (input `f343c57`): session cron jobs are restored on `--resume` or
+  `--continue`, except expired recurring jobs, one-shots whose time has passed, and a
+  self-paced `/loop`. Restored jobs do not catch up on missed fires. Native background
+  sessions are not an unattended dispatcher. Jitter bounds are no longer hardcoded.
 - Stale comments that described the retired self-heal loop as current behavior (input
   `3d501c8`):
   - `install.sh`: the `--upgrade` self-verify note; the watchdog plist deferral; the

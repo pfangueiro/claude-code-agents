@@ -373,6 +373,16 @@ python3 scripts/framework-status.py --claude-home "$CLAUDE_HOME"
 
 These checks are read-only. Investigate any nonzero exit before trusting the install. Then start new Claude Code and Codex sessions so the updated instructions, skills and hooks load. If the Codex hook definitions changed, review and trust them again in native `/hooks`.
 
+### 8. Persistent delivery controller (only if you set one up)
+
+No installer reads, rewrites or deletes controller state placed outside the repository and the installed skills tree (for example under `~/.local/state`), its Git-directory binding, your private policy or authority files, or STOP. No installer asks the setup questions again or discovers accounts. An update does not move or re-check existing state: a state directory left inside the skills tree by an earlier prototype can be replaced with that tree, so back it up and review it before touching it. New `setup`/`init` refuses such placements. After updating, check each state directory you use:
+
+```bash
+python3 "$CLAUDE_HOME/skills/delivery/scripts/controller.py" status --state /absolute/state/dir
+```
+
+If it reports `HOLD`, the updated runtime or rules differ from the recorded context, and new execution stays held until you reconcile explicitly under STOP. Unfinished plans then need an explicit `cleanup-workspaces`, a new authority and `readmit`; no installer removes a worktree. See [Updates](docs/PERSISTENT-DELIVERY.md#5-updates) in the operator guide. Never edit files inside the state directory.
+
 ### Recovering from an ownership conflict
 
 A refusal writes nothing. Never delete or edit `.sdlc-delivery/manifest.json` or the Codex ownership metadata, and never bypass the refusal. First, prove what the conflicting bytes are. `<rel>` is the path in the message, relative to the Claude home:
