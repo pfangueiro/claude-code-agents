@@ -1293,9 +1293,27 @@ class LifecycleTests(unittest.TestCase):
         owned = self.launch(attempt, env)
         self.assertEqual(run_to_settled(owned).state, 'exited')
         outcome = providers.finalize(attempt, owned)
-        escaped = [item['pid'] for item in self.exit_record(attempt)['escaped']]
-        self.assertIn(int(escape_file.read_text()), escaped)
-        self.assertIn('escaped-descendants', outcome.reasons)
+        escaped_pid = int(escape_file.read_text())
+        exit_record = self.exit_record(attempt)
+        self.assertIn(escaped_pid, [item['pid'] for item in exit_record['escaped']])
+        # The owned group drained on its own: nothing was signalled, inside or outside it.
+        self.assertEqual((exit_record['termination'], exit_record['signalsSent'], exit_record['forced']),
+                         ('exited', [], False))
+        os.kill(escaped_pid, 0)  # still running: the escaped daemon was observed, never signalled
+        record = cp.read_status(providers.process_attempt(attempt))['record']
+        settlement = record['escapedSettlement']
+        captured = {item['pid']: item['status'] for item in settlement['identities']}
+        self.assertIn(captured[escaped_pid], ('live', 'unknown'))
+        self.assertGreaterEqual(settlement['live'] + settlement['unknown'], 1)
+        self.assertEqual(len(settlement['identities']), record['escapedDescendants'])
+        self.assertGreaterEqual(record['escapedDescendants'], 1)
+        self.assertGreaterEqual(record['unresolvedDescendants'], 1)
+        self.assertTrue(record['groupEmpty'])
+        self.assertFalse(record['executionSuccess'])
+        # v4: a still-unsettled escape, not the v3 'any historical escape' reason.
+        self.assertEqual(outcome.reasons, ('escaped-descendants-unsettled', 'unresolved-descendants',
+                                           'lifecycle-not-clean'))
+        self.assertEqual((outcome.stream_category, outcome.category), ('success', 'incomplete'))
         self.assertFalse(outcome.execution_admitted)
 
     def run_crashing_controller(self, attempt, mode):
