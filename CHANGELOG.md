@@ -313,6 +313,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `tests/codex/test_controller_engine.py` harness: the controller CLI and `start_run` environment
+  (`self.env`) now carries the same `GIT_CONFIG_NOSYSTEM=1` / `GIT_CONFIG_GLOBAL=/dev/null`
+  isolation the fixture Git setup already used. Without it, host system Git configuration
+  reached the disposable engine run, and the unchanged merge-prediction guard rightly refused it
+  (`merge-prediction-driver-unsupported`). The exact hosted configuration key is unknown. The
+  production guard, engine behaviour, assertions and budgets are unchanged.
 - CI (`codex-adapter` job): the clean environment is now created with
   `python3 -m venv --copies`, so its interpreter is a job-owned regular file rather than a
   symlink into the shared tool cache. Before that step, a new read-only

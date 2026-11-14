@@ -161,8 +161,9 @@ class ControllerHarness(unittest.TestCase):
         self.assertIsNotNone(git, 'git is required')
         (self.root / 'pathbin' / 'git').symlink_to(os.path.realpath(git))
         self.env = {'PATH': f"{self.root / 'pathbin'}:/usr/bin:/bin", 'HOME': str(self.root / 'home'),
-                    'TMPDIR': str(self.root / 'tmp'), 'LANG': 'C.UTF-8', 'LC_ALL': 'C'}
-        self.git_env = dict(self.env, GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull)
+                    'TMPDIR': str(self.root / 'tmp'), 'LANG': 'C.UTF-8', 'LC_ALL': 'C',
+                    'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': os.devnull}
+        self.git_env = dict(self.env)
         self.runtime = self._copy_runtime()
         self.repo, self.origin = self.root / 'repo', self.root / 'origin.git'
         self._make_repo()
@@ -602,6 +603,34 @@ class ControllerHarness(unittest.TestCase):
 
 
 class ControllerEngineAcceptance(ControllerHarness):
+    # ---- execution-environment isolation -------------------------------------------------
+
+    def test_controller_execution_env_isolates_system_and_global_git_config(self):
+        """The env handed to the controller CLI and `run` must give Git the same isolated config
+        scopes as the fixture env; otherwise a host's system or global filter reaches the
+        engine's unchanged fail-closed merge-prediction driver guard. Real Git reads private
+        sentinel files: a fake system file selected via GIT_CONFIG_SYSTEM and a global file in
+        the disposable HOME. The positive control proves both are read once those scopes are
+        enabled, so the isolation assertion cannot pass by never reading them."""
+        system = self.root / 'fake-system.gitconfig'
+        system.write_text('[filter "ci-isolation-system"]\n\tclean = cat\n')
+        (self.root / 'home' / '.gitconfig').write_text('[filter "ci-isolation-global"]\n\tclean = cat\n')
+
+        def visible(env):
+            done = subprocess.run(['git', '-C', str(self.repo), 'config', '--show-scope', '--get-regexp',
+                                   r'^filter\.ci-isolation-'], env=dict(env, GIT_CONFIG_SYSTEM=str(system)),
+                                  capture_output=True, text=True, timeout=60, check=False)
+            self.assertIn(done.returncode, (0, 1), f'git config failed: {done.stderr.strip()}')
+            return sorted(tuple(line.split()[:2]) for line in done.stdout.splitlines() if line.strip())
+
+        enabled = {k: v for k, v in self.env.items() if k != 'GIT_CONFIG_GLOBAL'}
+        enabled['GIT_CONFIG_NOSYSTEM'] = '0'
+        self.assertEqual(visible(enabled), [('global', 'filter.ci-isolation-global.clean'),
+                                            ('system', 'filter.ci-isolation-system.clean')],
+                         'positive control: sentinel config files were not read with scopes enabled')
+        self.assertEqual(visible(self.env), [],
+                         'controller execution env exposes system/global Git config to the engine')
+
     # ---- scenario 1 ----------------------------------------------------------------------
 
     def test_parallel_disjoint_tasks_dependency_and_whole_result_gate(self):
