@@ -8,7 +8,7 @@ to every change, not a guaranteed enforcement mechanism or a tool sandbox.
 - ALWAYS read a file with the Read tool before editing it — never guess at file contents
 - Use Grep to search for patterns instead of assuming where code lives
 - Use LSP findReferences before renaming or refactoring to understand the blast radius
-- Maintain a high read:edit ratio — more reading means fewer mistakes
+- Read enough relevant, current source to act correctly — the code you change, its callers, contracts and tests — rather than maximizing a read count or read:edit ratio. A read you already hold stays valid while the file is unchanged; re-read whatever may have changed since (your own edits, other writers, a new head)
 
 ## Right-Sized Change & Reuse
 

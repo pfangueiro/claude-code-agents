@@ -107,5 +107,8 @@ public source when they may contain private output.
 
 Comparing two instruction files on a synthetic corpus is a separate, opt-in activity
 with its own outcome verdicts; see
-[references/agent-evaluation.md](references/agent-evaluation.md). Ordinary delivery
-and handoff never run it, and it does not change the v1 receipt schema.
+[references/agent-evaluation.md](references/agent-evaluation.md). Its read-only
+verification case grades proposed reuse/run/blocked decisions against a synthetic
+receipt table under the exact-input rules above; it executes no check and measures no
+execution efficiency. Ordinary delivery and handoff never run it, and it does not
+change the v1 receipt schema.

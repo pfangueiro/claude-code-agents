@@ -76,8 +76,10 @@ either integration: `delivery` (task contract, roles, separately authorized stat
 bound to an exact commit). The `delivery` rule routes implementation work through them,
 and the provider-neutral `commit-pr` command is the single publication contract for both
 editions: commit, then required checks and an independent verdict on that exact
-candidate, then confirmation that the pushed head is the reviewed one. Any new commit
-invalidates the earlier verdict.
+candidate, then confirmation that the pushed head is the reviewed one. A new commit is
+not covered by the earlier verdict or receipts: they stay history for their original
+input, and the new head needs current evidence and a verdict covering its delta
+([acceptance by task](.claude/skills/delivery/references/acceptance-by-task.md)).
 
 - **Availability is not execution.** Installing or loading these workflows changes what
   a session can follow; nothing is implemented, reviewed, merged or deployed until a real
@@ -210,8 +212,9 @@ $sdlc-agent-code-quality         # apply the code-quality role guide inline
   identical runtime behavior. Codex ports are listed with their limits in
   [codex/FEATURES.md](codex/FEATURES.md); several Claude-only runtime features (dashboard,
   watchdog, notifications, the custom statusline renderer and snapshots) are unported, and
-  automatic lint *rewriting* is unported too — opt-in post-edit lint *checks* are available
-  instead. Codex hooks are opt-in and user-trusted.
+  Claude's file-scoped ESLint feedback hook is unported too — opt-in post-edit lint *checks*
+  are available instead, and neither edition rewrites files on edit. Codex hooks are opt-in
+  and user-trusted.
 
 Codex examples include `$sdlc-execute`, `$sdlc-review-pr` and `$sdlc-agent-code-quality`.
 Native profile routing depends on the host; guides provide a fallback.
@@ -233,7 +236,7 @@ confirmed global discovery and reviewer use for both integrations as of 2026-10-
 | **Command templates** | 12 | `/commit-pr`, `/review-pr`, `/compact`, `/new-feature`, `/create-jira`, `/build-fix`, `/tdd`, `/quality-gate`, `/checkpoint`, `/save-session`, `/resume-session`, `/optimize`; `/security-scan` comes from a skill |
 | **MCP Servers** | 4 | context7, sequential-thinking, playwright, github |
 | **Rules** | 7 | Instructions for security, code quality, fix quality, verification, framework integrity, anti-anchoring and delivery routing; native permissions/sandbox enforce access boundaries |
-| **Hooks** | 10 | Agent tracking, session lifecycle, permission auditing, file protection, auto-lint, debug detection, pre-compact snapshots, notifications |
+| **Hooks** | 10 | Agent tracking, session lifecycle, permission auditing, file protection, edit-time lint feedback, debug detection, pre-compact snapshots, notifications |
 
 ---
 
@@ -577,9 +580,9 @@ claude mcp add github -- npx -y @modelcontextprotocol/server-github
 The installer places seven rule files in `~/.claude/rules/`, which Claude Code loads as user-level instructions in every session. The rules guide the model. Native permissions and sandboxing enforce access boundaries:
 
 - **security.md** — No secrets in commits, parameterized queries, input validation, security headers, least privilege
-- **code-quality.md** — No dead code, single responsibility, early returns, explicit error handling, descriptive naming
+- **code-quality.md** — Sufficient relevant current source before edits (no read-count quota), no dead code, single responsibility, early returns, explicit error handling, descriptive naming
 - **fix-quality.md** — Root cause analysis before fixing, never suppress errors, minimal changes, test-driven fixing
-- **verification.md** — Verify after every implementation, run tests, build to catch errors, test-driven bug fixes; PASS/FAIL/INCOMPLETE from evidence, with unknown never counted as zero
+- **verification.md** — Verify every implementation with the smallest complete set of checks for the affected behavior plus the project's required gates (no blanket build or full suite per edit), one owner per check with receipt reuse at the same exact input, test-driven bug fixes; PASS/FAIL/INCOMPLETE from evidence, with unknown never counted as zero
 - **framework-integrity.md** — Hooks must enforce invariants or produce evidence; read-only checkers detect drift, and only an explicit installer run repairs it; snapshots have documented restore paths
 - **anti-anchoring.md** — Name the obvious pick + a non-obvious alternative + a trap on open-ended judgment calls; escalate consequential open decisions to `/diverge`
 - **delivery.md** — Route implementation outcomes through `/delivery` with a default role pair that owner or project instructions override; report states only from receipts
@@ -598,7 +601,7 @@ with `--with-notifications`. Installed to `~/.claude/hooks/`:
 |------|-------|-------------|
 | **session-start-healthcheck.sh** | SessionStart | Fast-path framework drift check; on drift it logs a finding and reports that an explicit `install.sh --update` is needed — it never forks the installer or repairs |
 | **file-protection.sh** | PreToolUse | Blocks edits to sensitive files (.env, *.key, *.pem, secrets/) |
-| **post-edit-lint.sh** | PostToolUse | Auto-lints TS/JS after Write/Edit, warns on debug statements |
+| **post-edit-lint.sh** | PostToolUse | File-scoped, check-only ESLint feedback on an edited TS/JS file from the nearest project-local install, run from the session's working directory so config discovery is unchanged (never `--fix`, no PATH/`npx` fallback, bounded output, never blocks); warns on debug statements. Feedback only, not an acceptance gate |
 | **notify.sh** | Notification | Desktop alert when Claude needs attention |
 | **agent-tracker.sh** | SubagentStart/Stop | Real-time agent lifecycle tracking to analytics |
 | **session-end.sh** | SessionEnd | Logs session completion for observability |

@@ -32,7 +32,11 @@ def command_frontmatter(name: str) -> tuple[dict, str]:
 
 
 class ExecuteProportionality(unittest.TestCase):
-    """AR-004: proportional decomposition, no fixed quotas; AR-002: regression-first bug fixes."""
+    """AR-004: proportional decomposition, no fixed quotas; AR-002: regression-first bug fixes.
+
+    These assertions check the exported guidance text, not agent behavior: they catch a
+    regressed instruction, not whether an agent actually follows it.
+    """
 
     def setUp(self):
         self.skill = source('.claude/skills/execute/SKILL.md')
@@ -45,6 +49,19 @@ class ExecuteProportionality(unittest.TestCase):
         self.assertNotRegex(self.skill, r'three files per task|at most three files')
         self.assertNotIn('if a task has "and" in it, split it', self.skill)
         self.assertNotIn('File creation is separate from file modification', self.skill)
+
+    def test_no_numeric_activation_minimum_or_forced_ceremony(self):
+        # Activation follows dependency/parallelism/acceptance needs, never a task count
+        # (frontmatter included); phases are lightweight concerns, not a strict protocol.
+        for pattern in (r'(?:≥|>=|=>)\s*(?:3|three)\b',
+                        r'(?i)\b(?:3|three)\s+or\s+more\b',
+                        r'(?i)\bat\s+least\s+(?:3|three)\b',
+                        r'(?i)\broughly\s+(?:3|three)\b',
+                        r'(?i)\bminimum\s+(?:of\s+)?(?:3|three)\b'):
+            self.assertNotRegex(self.skill, pattern)
+        self.assertNotRegex(self.skill, r'(?i)never skip a phase|in strict order')
+        self.assertNotIn('Research is its own task', self.skill)
+        self.assertNotRegex(self.skill, r'(?i)run the `?code-quality`? agent on modified files')
 
     def test_decomposition_is_sized_by_responsibility_and_duration(self):
         # Proportional criteria replace the quotas, and the <30 min + independent-check
@@ -356,6 +373,24 @@ class NewFeatureBranchSequence(unittest.TestCase):
         frozen = self._git(repo, 'rev-parse', '--verify',
                            'FETCH_HEAD^{commit}').stdout.strip()
         self.assertEqual(frozen, upstream_main)
+
+
+class NewHeadEvidenceWording(unittest.TestCase):
+    """Current guidance agrees with acceptance-by-task: earlier evidence stays history for its own
+    input and a new head needs current evidence; nothing says it is 'invalidated'."""
+
+    CURRENT = ('CLAUDE.md', 'AGENTS.md', 'README.md', '.claude/commands/README.md',
+               '.claude/lib/agent-coordination.md')
+
+    def test_new_commit_needs_current_evidence_and_points_to_shared_policy(self):
+        policy = source('.claude/skills/delivery/references/acceptance-by-task.md')
+        self.assertRegex(policy, r'(?s)truthful\s+history')
+        for rel in self.CURRENT:
+            text = source(rel)
+            with self.subTest(rel=rel):
+                self.assertNotRegex(text, r'(?i)new commit\s+invalidates|invalidates\s+(?:it|them|both)\b'
+                                          r'|invalidates\s+the\s+earlier')
+                self.assertIn('acceptance-by-task', text)
 
 
 class RulesAreGuidanceNotInviolable(unittest.TestCase):

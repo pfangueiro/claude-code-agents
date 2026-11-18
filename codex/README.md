@@ -89,7 +89,8 @@ validated, evidence-classified findings, and required-check outcomes where missi
 evidence is INCOMPLETE rather than PASS. `$sdlc-delivery` also ships
 `references/acceptance-by-task.md` and the optional `references/repository-measurements.md`;
 `$sdlc-verified-handoff` ships the opt-in `references/agent-evaluation.md` (baseline vs
-candidate instruction comparison through a local adapter you supply; provider runs are
+candidate instruction comparison through a local adapter you supply, including a read-only
+verification case that grades proposed reuse/run/blocked decisions; provider runs are
 opt-in and never automatic in ordinary delivery or CI, and it is not an OS sandbox).
 These are workflow procedures: loading one runs nothing, and no watcher, daemon,
 auto-merge, scheduler or hook trust is added. Project instructions supply the base
@@ -149,7 +150,9 @@ Optional hooks:
 This adds `.codex/hooks.json` only if foreign configuration does not occupy that path.
 Nine supported events produce an allowlisted metadata log in
 `.codex/framework/events.jsonl`. SessionStart checks owned file hashes; direct patches
-to protected credential paths are denied; PostToolUse emits a quality-gate reminder or,
+to protected credential paths are denied; PostToolUse emits a verification reminder (on the
+final input, run the shared plan's affected checks and the quality gate or cite valid evidence
+for that input — not a full suite per edit) or,
 when a project has opted in, runs an approved post-edit lint (below). The
 hook adapter handles add/update/delete/move destinations and symlink aliases. It is
 **not a shell/MCP sandbox** and does not scan arbitrary command writes. Use native
@@ -168,11 +171,11 @@ Opt-in post-edit lint (disabled until you create the registry):
   project-local registry is never consulted, so a repository cannot carry its own
   execution approval. Until the owner-global registry exists, a recognized-successful
   supported PostToolUse edit (`apply_patch`, `Write`, `Edit`) only produces the
-  quality-gate reminder; non-edit events never run a command.
+  verification reminder; non-edit events never run a command.
 - A command runs only on a recognized positive edit result — the canonical apply_patch
   success text or a structured `{"success": true}`. An explicitly failed edit runs
   nothing and emits no feedback at all (no lint, no reminder). An unknown, missing or
-  unrecognized result also runs nothing, but falls back to a manual quality-gate reminder
+  unrecognized result also runs nothing, but falls back to the verification reminder
   that states no lint ran and does not assert the edit succeeded.
 - Format: a JSON object with `version` `1` and a `projects` array; each project has an
   absolute canonical `root`, a `command` argv whose first element is an absolute

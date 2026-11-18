@@ -38,12 +38,46 @@ python3 scripts/agent_eval.py run \
 
 ## Corpus
 
-The default corpus is six synthetic cases: a feature, a bug repair, a refactor, a
-review with a real defect, a clean safe-counterexample review, and a support
-interpretation of captured environment-limited evidence. A new or edited corpus needs
-human and behavioural calibration (known-good solutions pass, plausible wrong ones
-fail, valid alternatives stay accepted) before its results mean anything; passing the
-JSON schema is not calibration.
+The default corpus is seven synthetic cases: a feature, a bug repair, a refactor, a
+review with a real defect, a clean safe-counterexample review, a support
+interpretation of captured environment-limited evidence, and a read-only verification
+case that decides which required checks to reuse, run or report blocked. A new or
+edited corpus needs human and behavioural calibration (known-good solutions pass,
+plausible wrong ones fail, valid alternatives stay accepted) before its results mean
+anything; passing the JSON schema is not calibration.
+
+### Verification decision case
+
+`verification-receipt-reuse` measures verification *decisions*, not execution: no check
+runs. Its synthetic table lists scenarios, each a frozen candidate (exact SHA and scope)
+with its current required checks (command, dependencies, config, toolchain, environment,
+runnable), plus original receipt facts (the same identities, freshness
+`current`/`stale`/`unknown`, status `PASS`/`FAIL`/`UNAVAILABLE`). No real repository,
+account, filesystem or environment is read.
+
+- The response keeps `files`, `findings` and `diagnosis`. For this kind only, `diagnosis`
+  is exactly `{outcome, decisions, remaining_unknown}` with one
+  `{scenario_id, check_id, action, receipt_id}` per required check (`reuse` names a
+  receipt; `run` and `blocked` use `null`). The other six cases' response contracts,
+  graders and prompts are unchanged.
+- The trusted grader derives each expected decision from the table. A receipt covers a
+  check only when every identity equals the current value (null is unknown and matches
+  nothing), its freshness is current and it records an executed PASS or FAIL. There is no
+  cross-SHA equivalence, even for identical trees, and component receipts do not cover an
+  integrated candidate. A covering receipt is reused (a covering FAIL stays FAIL and is
+  not rerun for a green result); otherwise the check is `run` when runnable and `blocked`
+  when not. The aggregate outcome is FAIL when a reused receipt failed, else INCOMPLETE
+  when any check lacks evidence, else PASS; a planned run is never an executed PASS.
+- Decision order is free and any covering receipt is accepted. A trial passes when the
+  outcome and every decision are right, so a correctly reported FAIL or INCOMPLETE is a
+  passing trial. Nonexistent or mismatched receipts, cross-SHA reuse, unnecessary reruns,
+  stale, unknown or unavailable evidence treated as PASS, missing integrated checks,
+  omitted or extra decisions and failure laundering fail. Grading reads only the closed
+  fields, never prose keywords.
+- Per trial and per arm the result records decision counts: required, correct, missing,
+  unknown, proposed runs, redundant proposed runs (a run where reuse was valid) and
+  unsupported reuses. They describe proposed work in a synthetic table, not actual
+  execution efficiency, speed or production benefit.
 
 ## Adapter
 
@@ -121,6 +155,15 @@ normalizes the native output into ONE JSON envelope on stdout with exactly these
 
 ## What to record and compare
 
+The result artifact is `verified-handoff/agent-eval-result/v2`. Beside the v1 fields it
+adds per-trial and per-arm verification decision counts and each arm's
+`execution_efficiency` block, whose unmeasured fields are `null` (unknown). The
+identifier changed so a consumer that validated v1's field set does not silently misread
+the added fields: consumers check `schema` and treat v1 and v2 as distinct. Only the
+result artifact moved — the corpus stays `verified-handoff/agent-eval-corpus/v1`, the
+adapter envelope and the original six response contracts are unchanged, and it is
+unrelated to the v1 execution receipt.
+
 The result records source identity as digests of what actually ran: harness script,
 evidence helpers, corpus, both instruction files, adapter config, the resolved `argv[0]`
 executable, declared `input_files` and the Python interpreter. It has no Git commit
@@ -131,6 +174,14 @@ duration and reported cost or unknown. Compare only runs with the same corpus, g
 and adapter; changed definitions are not pooled. Repeated trials are descriptive counts;
 a small pilot calibrates the harness and is not statistical or production evidence that
 a candidate is better.
+
+Adapter and trial durations are measured; cost is what the adapter reported, or unknown.
+Actual tool and check executions, reread volume and saved work have no trusted trace, so
+each arm's `execution_efficiency` records them as `null` (unknown); a model's
+self-reported counts are never accepted as measurements. One paired trial of a single
+case (`--task verification-receipt-reuse --trials 1`) is a pilot observation, not
+efficacy or speed evidence. The offline fake-adapter tests establish harness
+correctness only, not provider efficacy.
 
 ## Isolation limits
 

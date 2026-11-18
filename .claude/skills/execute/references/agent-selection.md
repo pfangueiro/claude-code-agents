@@ -88,15 +88,15 @@ Is the task a simple, directed action?
 ### code-quality (subagent_type: code-quality)
 **Use for:** Code review, refactoring suggestions, code smell detection, best practices
 **Model:** Sonnet
-**When:** After implementation — as a verification step in Phase 5
+**When:** After implementation, it can serve as the Phase 5 qualified fresh independent verifier, covering acceptance and code quality in one review. Keep it a separate actual provider/role from every author of the work it verifies. Do not add a second code-quality review just because another specialist is also required.
 
 ### security-auditor (subagent_type: security-auditor)
 **Use for:** Security review, vulnerability assessment, authn/authz validation, OWASP compliance, threat modeling, secrets handling
 **Model:** Opus
-**When:** MANDATORY for any task touching auth, sessions, crypto, input handling, SQL, file upload, or user data — schedule it in the review batch alongside code-quality
+**When:** MANDATORY for any task touching auth, sessions, crypto, input handling, SQL, file upload, or user data. Security-relevant work needs this qualified security review, plus any security checks the project requires. Add it because the security capability and risk require it, not as an automatic pairing with a code-quality review. It must be a separate actual provider/role from the author.
 **Do NOT substitute the `security-scan` skill for this agent.** That skill is a pattern/dependency
-scanner producing a severity-ranked report; it cannot reason about a design. Run the scanner *and*
-the agent — the agent is the reviewer.
+scanner producing a severity-ranked report; it cannot reason about a design. A scan is evidence,
+not a review. Run the scanner where the project requires it *and* the agent, because the agent is the reviewer.
 
 ### database-architect (subagent_type: database-architect)
 **Use for:** Schema design, migrations, query optimization, indexing, data modeling

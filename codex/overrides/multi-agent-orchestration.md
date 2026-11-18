@@ -20,7 +20,9 @@ This fallback does not enforce a native profile's sandbox or tool policy.
 - Wait using the native completion mechanism; handle user steering and report progress.
 - Maintain dependencies using a plan tool or an explicit task ledger. Claude's shared
   task-list persistence and implicit team lifecycle are not assumed.
-- Reconcile changes sequentially, then run integration checks at the resulting SHA.
+- Reconcile changes sequentially, then run integration checks once at the resulting SHA;
+  other workers cite those receipts instead of rerunning them (delivery
+  `references/acceptance-by-task.md`).
 
 Inherit the selected model by default. Security and incident work needs careful
 verification and suitable capabilities, not an untranslated `opus` setting.

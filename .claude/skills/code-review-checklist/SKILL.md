@@ -326,8 +326,8 @@ early returns to reduce complexity:
 Before submitting your PR, review your own code:
 
 - [ ] Re-read your changes with fresh eyes
-- [ ] Run tests locally
-- [ ] Check test coverage
+- [ ] Run or cite the checks the change needs at this exact input (a valid existing receipt counts; name the reason before rerunning)
+- [ ] Check that tests exercise the changed behavior (coverage is context, not a target)
 - [ ] Remove debug statements
 - [ ] Update documentation
 - [ ] Add descriptive commit messages

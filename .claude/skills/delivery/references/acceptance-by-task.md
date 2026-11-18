@@ -35,3 +35,66 @@ acceptance verdict; see [repository-measurements.md](repository-measurements.md)
 An opt-in baseline/candidate comparison is described in verified-handoff's
 `references/agent-evaluation.md`; it supplements, never replaces, the task-specific
 acceptance above.
+
+## Selecting checks
+
+Select checks by what the change can affect and by the project's actual gates, not a
+blanket build or full suite for every edit:
+
+- Behavior: tests that exercise the changed behavior, its affected callers,
+  integration/consumer contracts and security boundaries. A bug-fix regression test
+  is RED before the fix and GREEN after.
+- Build, type check or wider suite: when project policy or CI requires it, or when
+  the change can affect what it covers (shared code, types, build configuration,
+  dependencies, generated output).
+- Prose: a trivial, reversible, nonbehavioral wording change needs no new test. Text
+  that a checker, installer, exporter or consumer reads is behavior for that reader
+  and keeps its check.
+- Required gates: project-required CI and a repository's own maintenance checks stay
+  required; a faster delivery never drops or weakens them.
+- Edit-time feedback, such as a post-edit lint hook, is not an acceptance check.
+
+## One plan, one owner per check
+
+The delivery's predeclared plan lists each check once with the role that runs it.
+Other roles cite that receipt instead of running the same command. A receipt is
+reusable only when every one of these matches the current need: scope and exact
+input identity (the commit SHA; for source-only work, the recorded content fingerprint
+or snapshot of the relevant bytes plus a description, compared with the current
+relevant bytes and context — a label or description alone never establishes identity,
+and no other SHA's receipt stands in), argv and cwd, the check's
+configuration, dependencies and toolchain, and any environment or freshness the
+result depends on (live health, authentication, services, time-sensitive data). A
+failed, unavailable, pending, unknown or stale result is never reused as PASS. One
+valid receipt can feed several stages at the same input (task acceptance, quality
+gate, review, pre-push) without repeating the command.
+
+Verifying a receipt checks its structure and recorded input; it executes nothing and
+does not show that the current source or environment still match. That verification
+checks history and logs, not current applicability: whoever reuses a receipt compares
+its recorded identity with the current input. Reviewers
+independently assess requirement coverage, the diff and the raw logs. Rerun a check
+only for a concrete unresolved risk — a missing or contradictory log, suspected
+flakiness, an input or environment the receipt does not cover, or a check that does
+not exercise the change — and state that reason first. A changed role or session is
+not a reason.
+
+Declared repetition is not a rerun. When the check design itself requires repeats —
+benchmark samples (see Performance above), sampling, a reliability or flakiness
+investigation, or a freshness probe of live state — predeclare the reason and the
+required trials, record each trial's identity and keep every actual receipt, failures
+included. Never rerun until a failure happens to turn green, and never report one
+sample in place of the agreed set. This adds no receipt field, form or service.
+
+## Freezing and new heads
+
+Freeze a coherent slice, and later the final candidate, before running its expensive
+checks. A receipt or verdict covers only the exact input it names. After a new head,
+the original receipts, logs and verdicts stay unmodified as truthful history for
+their original input. A v1 receipt cannot be relabelled to another SHA, even when the
+trees match, and no cross-SHA equivalence reuse is defined, so the new head needs a
+current receipt for every applicable check and a new independent verdict covering its
+delta. That includes checks whose result depends on Git metadata (for example an
+installer that embeds the source SHA) and live health, authentication or environment
+probes. A delta review may use prior findings and evidence, but it is an explicit
+decision at the current head, never automatic approval or a CI bypass.

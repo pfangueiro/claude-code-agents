@@ -15,13 +15,15 @@ One per delivery, amended in place.
   assignment came from (default, explicit owner instruction, project instruction).
 - **Authorization:** effects allowed (commit, push, PR, merge, release, deploy)
   and who granted them. Unlisted effects are not authorized.
-- **Checks:** predeclared commands and the gate each one feeds.
+- **Checks:** predeclared commands, the gate each one feeds and the one role that
+  runs it; other roles cite its receipt (reuse rules in `acceptance-by-task.md`).
 - **Manifest:** expected changed paths.
 - **Gaps:** unavailable providers, reviewers or checks, by name.
 
 ## Task card
 
-- **ID** and one-line goal; expected duration under about 30 minutes.
+- **ID** and one-line goal: one coherent slice by dependency, responsibility and
+  acceptance; about 30 minutes is a planning heuristic, not a limit.
 - **Depends on:** task IDs that must be terminal first.
 - **Write scope:** paths this task may change; scopes of parallel tasks are disjoint.
 - **Worktree** and base SHA.
@@ -31,6 +33,8 @@ One per delivery, amended in place.
 ## Receipt
 
 Recorded by the process that ran the check, never reconstructed from memory.
+Another role cites an existing valid receipt by location instead of rerunning the
+check; a receipt is never copied, edited or relabelled to another input.
 
 - Task ID, provider, profile, session, worktree, base SHA.
 - Command, start and end time, child exit code or signal.
@@ -49,8 +53,10 @@ Recorded by the process that ran the check, never reconstructed from memory.
 - Reviewer, provider and session.
 - Input revision, base identity and result identity the review covered.
 - Verdict and findings, each bound to that result identity.
-- Invalidated by remediation, a new head or input drift; record the superseded
-  verdict and re-review the new result.
+- Covers only that result identity. After remediation, a new head or input drift,
+  keep the superseded verdict and its receipts unmodified as history and obtain a
+  new verdict covering the delta at the new identity; prior findings may inform it,
+  never approve it automatically.
 
 ## Final report
 

@@ -1,6 +1,6 @@
 ---
 name: execute
-description: Orchestrated task execution engine. Decomposes a large goal into atomic tasks, plans their dependencies, selects an agent, tool, or MCP server per task, runs them in parallel batches, tracks progress, and reports what changed. Warranted only for genuinely multi-step work — roughly three or more atomic tasks spanning multiple files, agents, or tools that benefit from dependency planning and parallelism, such as execute this, orchestrate this, decompose this goal, or build a feature end to end. Because it plans and batches before acting, it is not for a single edit, a one-file change, a question, a lookup, or anything one or two tool calls already resolve — do those directly.
+description: Orchestrated task execution engine. Decomposes a large goal into atomic tasks, plans their dependencies, selects an agent, tool, or MCP server per task, runs them in parallel batches, tracks progress, and reports what changed. Warranted only for genuinely multi-step work whose real task dependencies, parallelism across files, agents, or tools, or separately verifiable acceptance criteria benefit from planning, not a fixed task count — such as execute this, orchestrate this, decompose this goal, or build a feature end to end. Because it plans and batches before acting, it is not for a single edit, a one-file change, a question, a lookup, or anything one or two tool calls already resolve — do those directly.
 argument-hint: "<goal description>"
 ---
 
@@ -19,12 +19,12 @@ fired, and just do the task.** Being invoked — including a literal `/execute` 
 — does NOT override an ABORT: the phrasing that selected this skill is not evidence the goal is
 multi-step.
 
-- Run the 6-phase protocol only when the goal is genuinely multi-step — ≥3 atomic tasks, spans multiple files/tools, or benefits from parallel batches.
+- Run the workflow only when the goal genuinely needs orchestration — real dependencies between tasks, parallel work across disjoint write scopes, or separate acceptance checks that benefit from planning. No task count decides this.
 - ABORT (do it directly): a single edit, a one-file change, a question, or anything one tool call resolves.
 
 ## Protocol
 
-Process every `/execute` invocation through these 6 phases in strict order. Never skip a phase. Gate each phase: do not advance until the current phase is complete.
+The phases below name the concerns an orchestrated goal works through: understand, decompose, plan, execute, verify, report. They are lightweight workflow, not administrative artifacts — scale each to the goal, and do not write a phase document or force a split to satisfy a heading. What stays mandatory: explicit acceptance criteria, the required checks and CI, any authorization gate, and the independent acceptance check in VERIFY before REPORT.
 
 ### Phase 1: ANALYZE
 
@@ -40,7 +40,7 @@ Understand the goal before decomposing it.
 
 ### Phase 2: DECOMPOSE
 
-Break the goal into small, atomic tasks. Each task must be completable in a single focused action (< 30 minutes of work). If a task feels too large, split it further.
+Break the goal into coherent, atomic tasks — each one cohesive responsibility that can be completed and verified on its own. Split a task that carries unrelated jobs; do not split it into administrative fragments.
 
 For each task, create it with `TaskCreate` using this specification:
 
@@ -59,9 +59,9 @@ ActiveForm: <present continuous — "Adding retry logic to Bedrock calls">
 ```
 
 **Decomposition rules:**
-- Size each task by one cohesive responsibility, its dependencies, its acceptance criteria, and whether it fits in a single focused session (< 30 minutes) — not by a fixed task count or a file cap. A cohesive change that happens to span several files is still one task; do not fragment it to hit a number, and do not split file creation from the modification it belongs with.
-- Keep genuinely independent concerns in separate tasks so each can be verified — and, where write scopes are disjoint, parallelized — on its own. Research is its own task from the implementation it informs.
-- Bug fixes are regression-first: schedule the task that reproduces the defect with a failing (RED) test BEFORE the task that implements the fix, so the fix is proven against a real reproduction. Additional coverage and the independent acceptance check come after the fix lands. This is the one case where a test task precedes its code; general coverage still follows the implementation it exercises.
+- Size each task by one cohesive responsibility, its dependencies, its acceptance criteria, and whether it fits in a single focused session (about 30 minutes is a planning heuristic, not a hard rule) — not by a fixed task count or a file cap. A cohesive change that happens to span several files is still one task; do not fragment it to hit a number, and do not split file creation from the modification it belongs with.
+- Keep genuinely independent concerns in separate tasks so each can be verified — and, where write scopes are disjoint, parallelized — on its own. Research stays inside the cohesive slice it informs; make it a separate task only when it has its own deliverable or other tasks depend on its result.
+- Bug fixes are regression-first within their slice: reproduce the defect with a failing (RED) regression test BEFORE changing the code, then show it GREEN after the fix, so the fix is proven against a real reproduction. The RED test and the fix belong to one task; split them only for a real dependency or ownership reason (for example, a different owner authors the oracle). Additional coverage and the independent acceptance check come after the fix lands; general coverage still follows the implementation it exercises.
 - For monitoring/polling tasks, use CronCreate instead of manual loops
 - For risky or experimental tasks, record the isolation mechanism in the **Tool:** field as the `Agent` tool's `isolation: "worktree"` parameter. Do NOT plan an `EnterWorktree` step: that tool is explicit-instruction-only and switches the whole session's working directory, so it cannot isolate one task among many
 
@@ -118,20 +118,20 @@ Process batches in order. Within each batch, maximize parallelism.
 - For risky/experimental implementation tasks, pass the `Agent` tool's own `isolation: "worktree"` parameter — it gives that agent a temporary git worktree so it works on an isolated copy of the repo. This is a parameter of the `Agent` launcher, **not** `EnterWorktree`: `EnterWorktree` is explicit-instruction-only, session-scoped, and cannot be entered twice, so it is never the isolation mechanism for a batch
 - For long-running monitoring, use CronCreate instead of manual polling loops
 - Always read a file before editing it
-- After code changes, run relevant tests if a test suite exists
+- After code changes, run the checks the plan assigns to the task for its affected behavior; do not repeat a check another task already ran at the same input — cite its receipt
 
 ### Phase 5: VERIFY
 
 After all batches complete, verify the overall goal with an INDEPENDENT check — not just self-assessment.
 
 1. Call `TaskList` to confirm all tasks are `completed`
-2. For code changes: run the build or test command if applicable
-3. **Independent acceptance check (blocking):** spawn ONE isolated verifier sub-agent via `Agent` with an explicit `subagent_type` — NOT a fork (a fork shares this context and would merely re-confirm your own reasoning). Give it ONLY: (a) the original goal + each task's Phase-2 `Success:` criteria, and (b) the produced diff/artifacts (`git diff`, new files, command output). It must NOT see your TaskList self-assessment or reasoning. It returns PASS/FAIL per criterion, anchored on objective oracles (build/test output) where one exists.
+2. For code changes: freeze the candidate, then run the plan's selected checks at it — build/tests where the project or the change requires them; run counts, declared repeats and reruns follow the delivery skill's `references/acceptance-by-task.md`. Cite valid receipts already recorded at that input instead of repeating them
+3. **Independent acceptance check (blocking):** spawn ONE isolated verifier sub-agent via `Agent` with an explicit `subagent_type` — NOT a fork (a fork shares this context and would merely re-confirm your own reasoning). Give it ONLY: (a) the original goal + each task's Phase-2 `Success:` criteria, and (b) the produced diff/artifacts (`git diff`, new files, command output). It must NOT see your TaskList self-assessment or reasoning. It returns PASS/FAIL per criterion, anchored on objective oracles (build/test output) where one exists, read from the existing receipts and logs; it reruns a check only for a named unresolved risk.
 4. For research: verify all questions in the original goal are answered
 5. If any criterion is FAIL (or build/tests fail): create remediation tasks and loop back to Phase 4. Do NOT advance to Phase 6 REPORT while any acceptance criterion is unmet.
-6. Run the `code-quality` agent on modified files if substantial code was written
+6. The one qualified independent verifier covers code quality as well as acceptance: include the code-review criteria (`code-review-checklist`) in its brief rather than launching a second `code-quality` pass. Add another specialist reviewer (for example security-auditor for auth, input handling or data exposure) only when the change's risk or a capability the verifier lacks requires it
 
-**Gate:** All tasks completed, build/tests pass (if applicable), AND the independent verifier returns PASS on every Phase-2 `Success:` criterion. Only then proceed to REPORT.
+**Gate:** All tasks completed, build/tests pass (if applicable), AND the independent verifier returns PASS on every Phase-2 `Success:` criterion. Only then proceed to REPORT — and once these hold, proceed without inventing further work.
 
 ### Phase 6: REPORT
 

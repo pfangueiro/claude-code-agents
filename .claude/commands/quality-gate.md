@@ -19,7 +19,12 @@ mode. `--strict` treats warnings as failures only within this requested gate.
    skill's `references/acceptance-by-task.md`. An absent suite is a gap to address for
    consequential behavior; code coverage is not a correctness verdict or a universal
    percentage requirement.
-4. Run configured checks and collect exact-input receipts with `/verified-handoff`.
+4. Execute the predeclared check design, including any repeats it declares with a
+   reason (benchmark samples, sampling, reliability or freshness). Collect exact-input
+   receipts with `/verified-handoff`, or cite an applicable valid receipt for the same
+   input (reuse conditions in `references/acceptance-by-task.md`). Do not rerun until
+   a check turns green. A receipt for a different input is stale for this gate: keep it
+   as history for its original input and never relabel it to cover this one.
    Keep failure logs. Run independent behavioral checks even if formatting fails;
    skip only a dependent check that cannot execute, report it UNAVAILABLE and name
    the check it depends on. A missing runtime, credential, registry or time budget is

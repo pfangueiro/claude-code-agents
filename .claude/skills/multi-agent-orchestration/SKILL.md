@@ -29,7 +29,7 @@ its ability to read.
 1. **Research** — Launch parallel workers to explore and gather information
 2. **Synthesis** — Coordinator reads all findings, forms a unified understanding
 3. **Implementation** — Launch workers with specific, synthesized instructions
-4. **Verification** — Launch verification workers to test the implementation
+4. **Verification** — Launch independent verification workers to assess the frozen result against acceptance; they cite existing valid receipts and rerun a check only for a named unresolved risk (see the delivery skill's `references/acceptance-by-task.md`)
 
 **Critical rule:** The coordinator MUST synthesize findings before delegating implementation. Never pass raw research output to an implementation worker — always digest it first.
 
@@ -133,8 +133,9 @@ Phase 2: Coordinator reads all 3 results, synthesizes:
 Phase 3: Launch implementation agent with synthesized spec:
   Agent: "Implement auth endpoints per this spec: [detailed spec from synthesis]"
 
-Phase 4: Launch verification agent:
-  Agent: "Run tests, verify auth endpoints work. Expected: [specific assertions]"
+Phase 4: Launch verification agent on the frozen result:
+  Agent: "Verify the auth endpoints at <SHA> against [acceptance criteria]. Cite the
+          implementer's receipts at that SHA; rerun a check only for a named risk."
 ```
 
 ### Background Agent with Notification
@@ -194,7 +195,8 @@ Agent:
 - Passing raw research output without synthesis
 - Passing `run_in_background: false` for long tasks (it blocks the coordinator — background is the default for a reason)
 - Writing `run_in_background: true` and believing it made the agent asynchronous (it is a no-op)
-- Spawning too many agents (diminishing returns past 5-7 parallel)
+- Spawning more agents than there is independent work (no fixed count — each one costs context, coordination and review)
+- Having several workers rerun the same check at the same input — one owner runs it; the others cite its receipt
 - Workers asking user questions (they can't — no AskUserQuestion tool)
 
 ## Related

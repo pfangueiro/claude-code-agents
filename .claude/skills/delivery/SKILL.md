@@ -40,15 +40,21 @@ until a real tool call or process does it and its receipt is collected.
 2. **Contract.** Write one live outcome contract
    ([task contract](references/task-contract.md)). Amend it in place when scope
    changes; do not keep parallel copies.
-3. **Decompose.** Tasks under about 30 minutes, each with dependencies, a write
+3. **Decompose.** Split by dependency, responsibility and acceptance into coherent
+   logical slices, not administrative fragments; about 30 minutes per task is a
+   planning heuristic, never a hard slicing rule. Each task has dependencies, a write
    scope and capability routing. Disjoint write scopes may run in parallel in
    separate worktrees; coupled work runs sequentially.
-4. **Predeclare.** Name the checks and the expected changed-path manifest before
-   execution starts. Map requirements to discriminating evidence using
+4. **Predeclare.** Name the checks, the one role that owns running each, and the
+   expected changed-path manifest before execution starts. Select checks and map
+   requirements to discriminating evidence using
    [acceptance by task](references/acceptance-by-task.md); unavailable required
-   evidence means incomplete acceptance, not a successful zero.
-5. **Execute and collect.** Gather actual terminal receipts (command, exit status,
-   log location) with /verified-handoff. A pending, killed or timed-out run is not
+   evidence means incomplete acceptance, not a successful zero. Other roles cite an
+   owned check's valid receipt rather than running the same command again.
+5. **Execute and collect.** Freeze a coherent slice before running its expensive
+   checks, so one run (or one predeclared set of repeated trials; see acceptance by
+   task) serves every stage at that input. Gather actual terminal
+   receipts (command, exit status, log location) with /verified-handoff. A pending, killed or timed-out run is not
    a pass. See *Provider lifecycle* for when a provider run counts as complete.
 6. **Freeze and reconcile.** Freeze the result identity: the result commit SHA, or
    a digest of the exact dirty bytes when uncommitted. Worktree diff, task result,
@@ -58,18 +64,24 @@ until a real tool call or process does it and its receipt is collected.
    artifacts before any producer conclusions. Findings and the verdict are bound
    to the input revision, base identity and frozen result identity. A blocker
    states the violated requirement and a reproduction; low-impact suggestions are
-   labelled as such.
+   labelled as such. The reviewer assesses coverage, the diff and raw evidence
+   independently, cites valid receipts at that identity and reruns a check only for
+   a named unresolved risk.
 8. **Remediate.** Preserve failure evidence; do not overwrite logs. Remediation,
-   a new head or input drift invalidates the bound verdict: freeze the new result
-   and review it again. After repeated failure through the same mechanism, change
+   a new head or input drift ends the bound verdict's coverage. Earlier receipts and
+   verdicts stay unmodified as history for their original input; freeze the new
+   result, run the checks applicable to it and obtain a verdict covering its delta
+   (see *Freezing and new heads* in acceptance by task). After repeated failure through the same mechanism, change
    strategy instead of retrying.
 9. **Publish.** Required local checks pass and an independent verdict without
    unresolved blockers covers the exact result before push or PR; otherwise hold.
    Merge requires the configured CI and approval at the exact head SHA, verified
    ancestry and existing authorization. Report implemented, reviewed, merged and
    deployed as distinct states.
-10. **Continue.** Proceed through remaining authorized slices while attended. Do not
-    create watchers, schedules or operational authority that was not granted.
+10. **Continue.** Proceed through remaining authorized slices while attended. Once
+    acceptance and required gates are satisfied, proceed to authorized delivery or the
+    report; do not invent work to fill time. Do not create watchers, schedules or
+    operational authority that was not granted.
 
 ## Provider lifecycle
 
@@ -143,7 +155,8 @@ the receipts, not assumed.
 - `references/task-contract.md` — outcome contract, task card, receipt, review
   and final report fields.
 
-- `references/acceptance-by-task.md` — proportional behavioral acceptance profiles.
+- `references/acceptance-by-task.md` — proportional behavioral acceptance profiles,
+  check selection and ownership, receipt reuse and new-head evidence.
 - `references/repository-measurements.md` — optional measurement and task-grounding limits.
 - `scripts/controller.py` — optional local persistent-delivery operator CLI (off until
   set up).
