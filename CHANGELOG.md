@@ -69,6 +69,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reported-or-unknown cost. Provider runs are opt-in and never automatic in ordinary
   delivery, quality gates or CI; process separation is not an OS sandbox; a pilot is not efficacy
   proof. The v1 receipt schema and the 30/12/13 inventory are unchanged.
+- Agent evaluation: a seventh, read-only `verification` case (`verification-receipt-reuse`)
+  grades proposed verification decisions, not execution. Its synthetic table lists current
+  required checks (exact SHA, scope, command, dependencies, config, toolchain, environment,
+  runnable) and original receipt facts (freshness, PASS/FAIL/UNAVAILABLE). The trusted grader
+  derives each expected decision — reuse a covering current PASS or FAIL receipt, otherwise
+  run when runnable and blocked when not (no cross-SHA equivalence even for identical trees;
+  null context, stale or unknown freshness, UNAVAILABLE results and component receipts never
+  cover) — and the aggregate outcome (FAIL dominates, then INCOMPLETE, else PASS). Any
+  decision order and any covering receipt are accepted. The response keeps
+  `{files, findings, diagnosis}`; only this kind specializes `diagnosis` to a closed
+  `{outcome, decisions, remaining_unknown}`, and the original six cases, graders and prompts
+  are unchanged. Results add per-trial and per-arm decision counts (including proposed and
+  redundant proposed runs) and an `execution_efficiency` block whose tool/check executions,
+  reread volume and saved work stay `null` without a trusted trace. No provider call in CI,
+  no efficacy or speed claim. The result artifact identifier is now
+  `verified-handoff/agent-eval-result/v2` because rows and arms gained fields (consumers
+  check `schema`); the corpus stays `agent-eval-corpus/v1`, and the adapter envelope, the
+  original six response contracts and the v1 execution receipt are unchanged. Covered by `tests/codex/test_agent_eval.py` (known-good and alternative
+  decisions, plausible wrong counterexamples, outcome precedence on corpus copies,
+  closed-schema corpus rejections, unavailable provider) and the installed-export runs.
 - `delivery/references/repository-measurements.md` now requires source-only readers to
   finish before install/build probes mutate the measured tree (or a separate disposable
   probe copy), with as-found and repaired inputs attributed separately.
@@ -138,6 +158,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Proportional verification and edit-time feedback. `delivery/references/acceptance-by-task.md`
+  now holds the canonical rules for selecting checks (affected behavior, callers, contracts
+  and dependencies plus the project's required gates — no blanket build or full suite per
+  edit and no new test for trivial nonbehavioral prose; bug regressions stay RED before the
+  fix and GREEN after), one owner per check with receipt reuse only when input identity,
+  argv/cwd, configuration/dependencies/toolchain and environment freshness match, freezing
+  slices before expensive checks, and new-head evidence (original receipts and verdicts stay
+  truthful history; a v1 receipt is never relabelled to another SHA and no cross-SHA reuse is
+  added; a delta review is an explicit current-head decision). The verification and
+  code-quality rules (the read:edit ratio becomes sufficient relevant current source),
+  `/quality-gate`, `/commit-pr`, `/review-pr`, the delivery skill and task contract,
+  `execute`, `multi-agent-orchestration`, `code-review-checklist`, the `code-quality` and
+  `test-automation` agents (the 80% coverage target is gone) and the Codex `execute` and
+  `multi-agent-orchestration` overrides point to it rather than copying it; about 30
+  minutes stays a planning heuristic. The Claude `post-edit-lint.sh` hook is now file-scoped,
+  check-only feedback: the nearest project-local `node_modules/.bin/eslint`, run from the
+  session's working directory as before (so config discovery does not move to a hoisted
+  binary's directory) without `--fix` (it no longer rewrites edited files; run fixes explicitly,
+  for example `/quality-gate --fix`), no PATH or `npx` fallback, relative payload paths
+  resolved (the former upward search could fail to terminate on one), missing files
+  skipped, ESLint output bounded to 20 lines, exit always 0; the debug-statement warning is
+  kept. Covered by `tests/codex/test_post_edit_lint.py` (disposable home, local fake
+  ESLint). Required CI and framework-maintenance checks, the v1 receipt schema, installers,
+  settings, the Codex lint registry and inventory counts are unchanged; no efficacy is
+  claimed. Follow-up consistency: `execute` drops its numeric activation minimum, the
+  strict never-skip phase protocol, forced separate research and RED-test tasks, and the
+  extra `code-quality` pass after its independent verifier (one qualified verifier covers
+  acceptance and code quality; a specialist is added for risk). Source-only receipt
+  identity needs a recorded content fingerprint or snapshot plus description compared with
+  current bytes; predeclared repeated trials (benchmarks, sampling, flakiness or freshness
+  probes) keep every receipt and never rerun until green; `/checkpoint` cites current
+  applicable evidence and can report SAME without another command.
+- Codex PostToolUse reminders (`codex/hook.py`) now point to the shared verification plan:
+  on the final input, run the affected checks and the project quality gate, or cite valid
+  evidence for that exact input — no full suite after each edit. Edit success/failure
+  handling, the opt-in lint registry and behavior, and the credential guard are unchanged.
+  Current guidance (`CLAUDE.md`, `README.md`, `.claude/commands/README.md`,
+  `.claude/lib/agent-coordination.md`) no longer says a new commit "invalidates" receipts or
+  verdicts: they stay history for their original input and the new head needs current
+  evidence, per `acceptance-by-task.md`; `CLAUDE.md` no longer describes the Claude edit hook
+  as auto-linting.
 - Documentation for setting up another laptop (input `889658e`). INSTALL.md gains one
   canonical *Setting up another laptop* checklist, and README, `codex/README.md` and
   `MEMORY.md` link to it. A clone or pull is source only. Each host installs the editions

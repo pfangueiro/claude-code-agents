@@ -21,9 +21,12 @@ SUPPORTED_EDITS = {'apply_patch', 'Write', 'Edit'}
 # Canonical model-facing success text emitted by the native apply_patch tool (and its
 # Write/Edit matcher aliases). Source: openai/codex apply-patch/tests/suite/tool.rs.
 APPLY_PATCH_SUCCESS = 'Success. Updated the following files:'
-QUALITY_GATE_REMINDER = 'Edit completed. Run the project quality gate before claiming the change is verified.'
+VERIFICATION_PLAN = ('Before claiming the change is verified, follow the shared verification plan: on the '
+                     'final input, run the affected checks and the project quality gate, or cite valid '
+                     'evidence already recorded for that exact input; no full suite is needed after each edit.')
+QUALITY_GATE_REMINDER = 'Edit completed. ' + VERIFICATION_PLAN
 UNCONFIRMED_EDIT_REMINDER = ('Edit result was not reported as a confirmed success, so no post-edit lint ran. '
-                             'Run the project quality gate before claiming the change is verified.')
+                             + VERIFICATION_PLAN)
 
 
 def patch_paths(command: str) -> list[str]:
@@ -85,7 +88,7 @@ def post_edit_output(event: dict) -> dict:
     """Feedback for a supported PostToolUse edit.
 
     Only a recognized successful edit may run the opt-in lint (or, without opt-in, emit the
-    quality-gate reminder). An explicitly failed edit yields no feedback; an unknown, missing
+    verification-plan reminder). An explicitly failed edit yields no feedback; an unknown, missing
     or unrecognized result falls back to a reminder that does not assert the edit succeeded.
     A missing/broken lint runner never affects the credential guard; it falls back here.
     """

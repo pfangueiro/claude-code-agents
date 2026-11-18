@@ -44,7 +44,7 @@ hardcoded default branch, version file or ticket prefix.
 **Features:**
 - Stages only the intended paths, writes a convention-following message, and records the candidate SHA (never skips hooks, amends or force-pushes unless asked)
 - Runs the project's required local checks and holds push/PR on a failed or missing check
-- Requires an independent verdict covering the exact candidate SHA; any new commit invalidates it
+- Requires an independent verdict covering the exact candidate SHA; a new commit needs current checks and a verdict covering its delta, while earlier ones stay history for their own SHA (delivery's `references/acceptance-by-task.md`)
 - Confirms the pushed head equals the reviewed candidate and uses the environment's already-selected credentials; the PR body records the summary, validation run, reviewed SHA and material gaps
 - Updates an issue tracker, merges, releases or deletes branches only when the project configures it and the effect is authorized — reporting each effect as done, held (with gate), skipped (with reason) or failed
 

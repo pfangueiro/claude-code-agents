@@ -49,8 +49,10 @@ When invoked, you must follow these steps:
    - Validate that tests actually test the intended behavior
 
 6. **Execute and Validate**
-   - Use `Bash` to run the test suite
-   - Verify all tests pass
+   - Use `Bash` to run the tests selected for the affected behavior, callers and contracts, plus any suite the project or CI requires — not a blanket full suite per edit (see the delivery skill's `references/acceptance-by-task.md`)
+   - For a bug fix, show the regression test failing before the fix and passing after
+   - Cite an existing valid receipt for the same input instead of rerunning an unchanged check
+   - Verify the selected tests pass
    - Check coverage reports if available
    - Identify any remaining coverage gaps
 
@@ -61,7 +63,7 @@ When invoked, you must follow these steps:
 - **Fast Execution**: Unit tests should run quickly; mock external dependencies
 - **Meaningful Assertions**: Use specific assertions that clearly indicate failure reasons
 - **Test Data**: Use realistic test data and consider data factories/fixtures
-- **Coverage Goals**: Aim for 80%+ code coverage, 100% for critical paths
+- **Coverage**: Use coverage to find untested behavior, not as a target; critical paths need behavioral tests
 - **Error Scenarios**: Always test error handling and edge cases
 - **Documentation**: Include comments for complex test scenarios
 - **BDD Style**: Use Given-When-Then structure for behavior tests when appropriate

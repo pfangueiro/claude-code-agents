@@ -45,8 +45,10 @@ Parse `$ARGUMENTS` for:
 
 ### Create checkpoint (default): `/checkpoint <name>`
 
-1. **Record context** (optional but useful): run project tests if they are quick (under
-   30 seconds) and note pass/fail counts to compare later.
+1. **Record context** (optional but useful): note the current applicable check evidence
+   for this exact working state — valid receipts and their pass/fail counts (reuse rules
+   in the delivery skill's `references/acceptance-by-task.md`). When none exists and a
+   later comparison needs it, run the affected checks and record their receipts.
 2. **Create the snapshot**:
    ```bash
    python3 <resolved>/checkpoint.py save <name> --repo <repo>
@@ -66,8 +68,11 @@ Parse `$ARGUMENTS` for:
    ```bash
    python3 <resolved>/checkpoint.py diff <name> --repo <repo>
    ```
-2. Re-run tests if they are quick and compare pass/fail counts against what you recorded
-   at checkpoint time.
+2. Compare against the evidence recorded at checkpoint time. When the diff is empty and
+   that evidence is still valid for the same input, report SAME without running another
+   command. Run the affected checks only when the input changed, a named risk, declared
+   repeats or freshness, or required policy warrants it; otherwise cite current
+   applicable receipts. Missing evidence is unknown, never SAME or BETTER.
 3. Report a verdict — BETTER | SAME | WORSE | MIXED — grounded in the diff and the test
    delta, naming what improved or regressed.
 

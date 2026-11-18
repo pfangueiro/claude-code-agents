@@ -382,6 +382,50 @@ SUPPORT_B = {'outcome': 'INCOMPLETE', 'cause': 'environment',
              'remaining_unknown': 'No Python 3.12 interpreter was available, so behavior on the required '
                                   'runtime is unverified.'}
 
+VERIFY_TASK = 'verification-receipt-reuse'
+VERIFY_SERVICE = 'pkg/service.py'
+ORIGINAL_TASK_IDS = ['feature-clamp', 'bug-page-count', 'refactor-report', 'review-defective-floor',
+                     'review-clean-floor', 'support-missing-runtime']
+# Independent oracle: decisions derived by hand from the bundled table, never from the grader.
+VERIFY_DECISIONS = (
+    ('slice-unchanged', 'unit-tests', 'reuse', 'r-unit-a'),
+    ('slice-unchanged', 'lint', 'reuse', 'r-lint-a1'),                # r-lint-a2 is equally valid
+    ('slice-inputs-changed', 'unit-tests', 'run', None),              # dependencies changed
+    ('slice-inputs-changed', 'lint', 'run', None),                    # config changed
+    ('slice-inputs-changed', 'typecheck', 'run', None),               # toolchain changed
+    ('slice-inputs-changed', 'build', 'run', None),                   # command changed
+    ('slice-inputs-changed', 'e2e-tests', 'blocked', None),           # environment changed, cannot run
+    ('new-head', 'unit-tests', 'run', None),                          # identical tree, other SHA
+    ('stale-or-unknown', 'health-probe', 'run', None),                # stale
+    ('stale-or-unknown', 'auth-probe', 'blocked', None),              # unknown freshness, cannot run
+    ('stale-or-unknown', 'unit-tests', 'run', None),                  # unknown environment
+    ('stale-or-unknown', 'e2e-tests', 'blocked', None),               # UNAVAILABLE is not a result
+    ('integrated-candidate', 'unit-tests', 'reuse', 'r-unit-e'),      # exact final-candidate receipt
+    ('integrated-candidate', 'integration-tests', 'run', None),       # component receipts only
+    ('failed-evidence', 'unit-tests', 'reuse', 'r-unit-h'),           # current FAIL stays FAIL
+    ('failed-evidence', 'lint', 'reuse', 'r-lint-h'),
+)
+UNKNOWN_EFFICIENCY = ('tool_executions', 'check_executions', 'reread_volume', 'saved_work')
+
+
+def amend(changes=None, drop=(), extra=()) -> list[tuple]:
+    """The oracle decisions with some (scenario, check) pairs changed, dropped or added."""
+    changes = changes or {}
+    rows = [(scenario, check, *changes.get((scenario, check), (action, receipt)))
+            for scenario, check, action, receipt in VERIFY_DECISIONS if (scenario, check) not in drop]
+    return rows + list(extra)
+
+
+def verify_reply(rows, outcome='FAIL', remaining='The blocked checks have no current evidence.') -> dict:
+    decisions = [{'scenario_id': scenario, 'check_id': check, 'action': action, 'receipt_id': receipt}
+                 for scenario, check, action, receipt in rows]
+    return response(diagnosis={'outcome': outcome, 'decisions': decisions, 'remaining_unknown': remaining})
+
+
+VERIFY_A = verify_reply(VERIFY_DECISIONS, remaining='Whether the blocked e2e and auth checks pass is unknown.')
+VERIFY_B = verify_reply(list(reversed(amend({('slice-unchanged', 'lint'): ('reuse', 'r-lint-a2')}))),
+                        remaining='Eight planned runs have not executed and three checks cannot run here.')
+
 RESPONSES_A = {
     'feature-clamp': response(files=[edit(NUMBERS_PATH, NUMBERS_A)]),
     'bug-page-count': response(files=[edit(PAGING_PATH, PAGING_A)]),
@@ -389,6 +433,7 @@ RESPONSES_A = {
     'review-defective-floor': response(findings=[finding([-7, 2], -4, -3)]),
     'review-clean-floor': response(),
     'support-missing-runtime': response(diagnosis=SUPPORT_A),
+    VERIFY_TASK: VERIFY_A,
 }
 RESPONSES_B = {
     'feature-clamp': response(files=[edit(NUMBERS_PATH, NUMBERS_B)]),
@@ -398,8 +443,13 @@ RESPONSES_B = {
         [7, -2], -4, -3, description='Truncation differs from floor division whenever the operand signs differ.')]),
     'review-clean-floor': response(),
     'support-missing-runtime': response(diagnosis=SUPPORT_B),
+    VERIFY_TASK: VERIFY_B,
 }
-WRONG_CANDIDATE = dict(RESPONSES_B, **{'feature-clamp': response(files=[edit(NUMBERS_PATH, NUMBERS_NO_RAISE)])})
+WRONG_CANDIDATE = dict(RESPONSES_B, **{
+    'feature-clamp': response(files=[edit(NUMBERS_PATH, NUMBERS_NO_RAISE)]),
+    # Cross-SHA laundering: an identical-tree receipt at another commit is reused.
+    VERIFY_TASK: verify_reply(amend({('new-head', 'unit-tests'): ('reuse', 'r-unit-a')})),
+})
 
 
 # ---------------------------------------------------------------- running
@@ -539,7 +589,7 @@ def wait_until(predicate, seconds: float = 5.0) -> bool:
 
 # ---------------------------------------------------------------- installed-resource helpers
 
-INSTALLED_TASKS = ('feature-clamp', 'review-defective-floor', 'support-missing-runtime')
+INSTALLED_TASKS = ('feature-clamp', 'review-defective-floor', 'support-missing-runtime', VERIFY_TASK)
 
 
 def run_installed_evaluator(script: Path, directory: Path, candidate: dict, env=None):
@@ -573,7 +623,7 @@ def check_installed_evaluator(case: unittest.TestCase, script: Path, directory: 
     case.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
     case.assertEqual(result['outcome'], 'FAIL')
     case.assertEqual({(row['arm'], row['task']) for row in result['results'] if row['outcome'] != 'PASS'},
-                     {('candidate', 'feature-clamp')})
+                     {('candidate', 'feature-clamp'), ('candidate', VERIFY_TASK)})
     case.assertEqual(tree_hashes(skill), before)
 
 
@@ -615,14 +665,19 @@ class EvalCase(unittest.TestCase):
                 self.assertIn(f'fake-arm={arm}', prompt)
                 self.assertNotIn(f'fake-arm={other}', prompt)
                 self.assertIn(TASKS[task]['statement'], prompt)
+                # Only verification prompts carry the specialized protocol; the others are unchanged.
+                self.assertEqual(agent_eval.VERIFICATION_PROTOCOL.strip() in prompt,
+                                 TASKS[task]['kind'] == 'verification')
                 for secret in forbidden:
                     self.assertNotIn(secret, prompt)
 
 
 class CorpusEndToEnd(EvalCase):
-    def test_two_distinct_correct_arms_pass_all_six_cases(self):
+    def test_two_distinct_correct_arms_pass_every_case(self):
+        # The original six cases stay explicit positive controls beside the verification case.
         self.assertEqual(sorted(task['kind'] for task in CORPUS['tasks']),
-                         ['bug-repair', 'feature', 'refactor', 'review', 'review', 'support'])
+                         ['bug-repair', 'feature', 'refactor', 'review', 'review', 'support', 'verification'])
+        self.assertEqual(TASK_IDS, ORIGINAL_TASK_IDS + [VERIFY_TASK])
         lab = Lab(self)
         files = lab.prepare(build_plan(steps(RESPONSES_A, observed_model='fake-observed-a'),
                                        steps(RESPONSES_B, observed_model='fake-observed-b', cost_usd=0.25)))
@@ -634,6 +689,9 @@ class CorpusEndToEnd(EvalCase):
         result = run.result
         self.assertEqual((result['outcome'], result['reasons']), ('PASS', []))
         self.assertEqual(json.loads(run.stdout)['outcome'], 'PASS')
+        # Only the result artifact is versioned forward; the corpus identifier stays v1.
+        self.assertEqual(result['schema'], 'verified-handoff/agent-eval-result/v2')
+        self.assertEqual(CORPUS['schema'], 'verified-handoff/agent-eval-corpus/v1')
         self.assertEqual(result['config']['tasks'], TASK_IDS)
         self.assertEqual({(row['arm'], row['task']): row['outcome'] for row in result['results']},
                          {(arm, task): 'PASS' for arm in ARMS for task in TASK_IDS})
@@ -660,17 +718,19 @@ class CorpusEndToEnd(EvalCase):
 
         summaries = result['aggregate']
         for arm in ARMS:
-            self.assertEqual(summaries[arm]['counts'], {'PASS': 6, 'FAIL': 0, 'UNAVAILABLE': 0})
+            self.assertEqual(summaries[arm]['counts'], {'PASS': 7, 'FAIL': 0, 'UNAVAILABLE': 0})
+            self.assertEqual([summaries[arm]['execution_efficiency'][key] for key in UNKNOWN_EFFICIENCY],
+                             [None] * len(UNKNOWN_EFFICIENCY), 'unmeasured work must stay unknown')
             review = summaries[arm]['review']
             self.assertEqual((review['true_positives'], review['false_positives'], review['false_negatives']), (1, 0, 0))
             self.assertEqual((review['precision']['value'], review['recall']['value']), (1.0, 1.0))
         # Unreported cost stays unknown (null, status none-reported), never a zero total.
         self.assertEqual(summaries['baseline']['cost_usd'],
                          {'reported_total': None, 'reported_total_status': 'none-reported',
-                          'reported_trials': 0, 'trials': 6})
+                          'reported_trials': 0, 'trials': 7})
         self.assertEqual(summaries['candidate']['cost_usd'],
-                         {'reported_total': 1.5, 'reported_total_status': 'reported',
-                          'reported_trials': 6, 'trials': 6})
+                         {'reported_total': 1.75, 'reported_total_status': 'reported',
+                          'reported_trials': 7, 'trials': 7})
         self.assertEqual((result['regressions'], result['regressions_undetermined'], result['source_changes']),
                          ([], [], []))
         self.assertEqual({name: sha256(path) for name, path in inputs.items()}, before)
@@ -923,6 +983,146 @@ class SupportDiagnosis(EvalCase):
         run = self.against_baseline('support-missing-runtime', [answer(RESPONSES_B['support-missing-runtime'])] + wrong)
         self.assertEqual(run.outcomes('candidate'), ['PASS'] + ['FAIL'] * len(wrong))
         self.assertEqual((run.code, run.result['outcome']), (1, 'FAIL'))
+
+
+class VerificationDecisions(EvalCase):
+    ALL_RIGHT = {'required_decisions': 16, 'correct_decisions': 16, 'missing_decisions': 0,
+                 'unknown_decisions': 0, 'proposed_runs': 8, 'redundant_proposed_runs': 0,
+                 'unsupported_reuses': 0}
+    GRADED_WRONG = [
+        ('nonexistent receipt', verify_reply(amend({('slice-unchanged', 'unit-tests'): ('reuse', 'r-unit-missing')}))),
+        ('receipt of another check', verify_reply(amend({('slice-unchanged', 'unit-tests'): ('reuse', 'r-lint-a1')}))),
+        ('changed dependencies reused', verify_reply(amend({('slice-inputs-changed', 'unit-tests'): ('reuse', 'r-unit-b')}))),
+        ('changed environment reused', verify_reply(amend({('slice-inputs-changed', 'e2e-tests'): ('reuse', 'r-e2e-b')}))),
+        ('cross-SHA laundering', verify_reply(amend({('new-head', 'unit-tests'): ('reuse', 'r-unit-a')}))),
+        ('unnecessary rerun of unchanged PASS', verify_reply(amend({('slice-unchanged', 'unit-tests'): ('run', None)}))),
+        ('stale as PASS', verify_reply(amend({('stale-or-unknown', 'health-probe'): ('reuse', 'r-health-d')}))),
+        ('unknown freshness as PASS', verify_reply(amend({('stale-or-unknown', 'auth-probe'): ('reuse', 'r-auth-d')}))),
+        ('unknown context as PASS', verify_reply(amend({('stale-or-unknown', 'unit-tests'): ('reuse', 'r-unit-d')}))),
+        ('unavailable result reused', verify_reply(amend({('stale-or-unknown', 'e2e-tests'): ('reuse', 'r-e2e-d')}))),
+        ('unrunnable check planned as run', verify_reply(amend({('stale-or-unknown', 'e2e-tests'): ('run', None)}))),
+        ('runnable check held as blocked', verify_reply(amend({('new-head', 'unit-tests'): ('blocked', None)}))),
+        ('component receipt for integrated check',
+         verify_reply(amend({('integrated-candidate', 'integration-tests'): ('reuse', 'r-int-f')}))),
+        ('failure rerun to obtain green',
+         verify_reply(amend({('failed-evidence', 'unit-tests'): ('run', None)}), 'INCOMPLETE')),
+        ('failure laundered as PASS', verify_reply(VERIFY_DECISIONS, 'PASS')),
+        ('known failure reported as INCOMPLETE', verify_reply(VERIFY_DECISIONS, 'INCOMPLETE')),
+        ('omitted required decision', verify_reply(amend(drop={('integrated-candidate', 'integration-tests')}))),
+        ('decision for a check that is not required',
+         verify_reply(amend(extra=[('slice-unchanged', 'typecheck', 'run', None)]))),
+        ('no decisions', verify_reply([])),
+        ('remaining unknown blank', verify_reply(VERIFY_DECISIONS, remaining='   ')),
+    ]
+
+    def test_known_good_and_alternative_decisions_pass(self):
+        # Any order and either current receipt of the doubly recorded lint check are valid.
+        alternative = verify_reply(amend({('slice-unchanged', 'lint'): ('reuse', 'r-lint-a2')}))
+        run = self.against_baseline(VERIFY_TASK, [answer(RESPONSES_B[VERIFY_TASK]), answer(alternative)])
+        self.assertEqual((run.code, run.result['outcome']), (0, 'PASS'), run.result['reasons'])
+        for row in run.result['results']:
+            with self.subTest(arm=row['arm'], trial=row['trial']):
+                self.assertEqual(row['outcome'], 'PASS', row['reasons'])
+                self.assertEqual(row['verification'], self.ALL_RIGHT)
+                self.assertEqual(row['behavior']['passed'], row['behavior']['total'])
+                # A correctly identified FAIL is a passing decision trial.
+                self.assertEqual(row['diagnosis']['outcome'], 'FAIL')
+        summary = run.result['aggregate']['candidate']
+        self.assertEqual((summary['verification']['trials'], summary['verification']['assessed_trials']), (2, 2))
+        self.assertEqual(summary['verification']['assessed_counts'],
+                         {key: 2 * value for key, value in self.ALL_RIGHT.items()})
+        self.assertEqual([summary['execution_efficiency'][key] for key in UNKNOWN_EFFICIENCY],
+                         [None] * len(UNKNOWN_EFFICIENCY))
+        self.assertSolverInputsPublic(run)
+
+    def test_plausible_wrong_decisions_fail(self):
+        run = self.against_baseline(VERIFY_TASK, [answer(reply) for _, reply in self.GRADED_WRONG])
+        self.assertEqual((run.code, run.result['outcome']), (1, 'FAIL'))
+        rows = dict(zip([label for label, _ in self.GRADED_WRONG], run.rows('candidate')))
+        for label, row in rows.items():
+            with self.subTest(variant=label):
+                self.assertEqual((row['outcome'], row['reasons']), ('FAIL', ['verification-decision-mismatch']))
+                self.assertIsNotNone(row['verification'])
+                self.assertLess(row['behavior']['passed'], row['behavior']['total'])
+        # (proposed runs, redundant proposed runs, unsupported reuses), counted by hand.
+        expected_work = {'nonexistent receipt': (8, 0, 1), 'cross-SHA laundering': (7, 0, 1),
+                         'unnecessary rerun of unchanged PASS': (9, 1, 0),
+                         'failure rerun to obtain green': (9, 1, 0)}
+        for label, work in expected_work.items():
+            counts = rows[label]['verification']
+            self.assertEqual((counts['proposed_runs'], counts['redundant_proposed_runs'],
+                              counts['unsupported_reuses']), work, label)
+        omitted = rows['omitted required decision']['verification']
+        self.assertEqual((omitted['missing_decisions'], omitted['correct_decisions']), (1, 15))
+        self.assertEqual(rows['decision for a check that is not required']['verification']['unknown_decisions'], 1)
+        self.assertEqual(rows['failure laundered as PASS']['verification']['correct_decisions'], 16)
+
+    def test_protocol_violations_fail_without_grading(self):
+        good = VERIFY_A['diagnosis']
+
+        def changed(key, **fields):
+            decisions = [dict(item, **fields) if (item['scenario_id'], item['check_id']) == key else dict(item)
+                         for item in good['decisions']]
+            return response(diagnosis=dict(good, decisions=decisions))
+        first = ('slice-unchanged', 'unit-tests')
+        variants = [
+            ('duplicate decision', response(diagnosis=dict(good, decisions=good['decisions'] + good['decisions'][:1]))),
+            ('reuse without a receipt', changed(first, receipt_id=None)),
+            ('run naming a receipt', changed(('new-head', 'unit-tests'), receipt_id='r-unit-a')),
+            ('unknown action', changed(first, action='skip')),
+            ('boolean receipt id', changed(first, receipt_id=True)),
+            ('extra decision field', changed(first, reason='inputs unchanged')),
+            ('extra diagnosis field', response(diagnosis=dict(good, cause='repository'))),
+            ('support-shaped diagnosis', response(diagnosis=SUPPORT_A)),
+            ('lowercase outcome', response(diagnosis=dict(good, outcome='fail'))),
+            ('decisions not a list', response(diagnosis=dict(good, decisions={}))),
+            ('identifier with a trailing newline', changed(first, scenario_id='slice-unchanged\n')),
+            ('file on a read-only task',
+             response(files=[edit(VERIFY_SERVICE, fixture(VERIFY_TASK, VERIFY_SERVICE))], diagnosis=good)),
+            ('findings on a verification task', response(findings=[finding([-7, 2], -4, -3)], diagnosis=good)),
+            ('missing diagnosis', response()),
+        ]
+        run = self.against_baseline(VERIFY_TASK, [answer(reply) for _, reply in variants])
+        for (label, _), row in zip(variants, run.rows('candidate')):
+            with self.subTest(variant=label):
+                self.assertEqual(row['outcome'], 'FAIL', row['reasons'])
+                self.assertIsNone(row['verification'])
+                self.assertEqual(row['behavior']['total'], 0, 'an invalid response must not be graded')
+        self.assertEqual((run.code, run.result['outcome']), (1, 'FAIL'))
+
+    def test_aggregate_outcome_precedence_on_corpus_copies(self):
+        # A known FAIL dominates; otherwise missing evidence is INCOMPLETE; otherwise PASS.
+        everything = {row[0] for row in VERIFY_DECISIONS}
+        cases = [('no failed evidence', everything - {'failed-evidence'}, 'INCOMPLETE', 'PASS'),
+                 ('every check covered by a current PASS', {'slice-unchanged'}, 'PASS', 'INCOMPLETE'),
+                 ('covered checks including a FAIL', {'slice-unchanged', 'failed-evidence'}, 'FAIL', 'PASS')]
+        for label, kept, outcome, wrong in cases:
+            with self.subTest(case=label):
+                data = copy.deepcopy(CORPUS)
+                table = task_named(data, VERIFY_TASK)['evidence']
+                table['scenarios'] = [item for item in table['scenarios'] if item['id'] in kept]
+                lab = Lab(self)
+                corpus = write_corpus(lab.root / 'corpus', data)
+                rows = [row for row in VERIFY_DECISIONS if row[0] in kept]
+                right = answer(verify_reply(rows, outcome))
+                plan = build_plan({VERIFY_TASK: right}, {VERIFY_TASK: [right, answer(verify_reply(rows, wrong))]})
+                run = evaluate(lab.prepare(plan), tasks=[VERIFY_TASK], trials=2, corpus=corpus)
+                self.assertIsNotNone(run.result, run.stderr)
+                self.assertEqual(run.outcomes('baseline'), ['PASS', 'PASS'], 'positive control')
+                self.assertEqual(run.outcomes('candidate'), ['PASS', 'FAIL'])
+
+    def test_unavailable_provider_is_not_a_decision_score(self):
+        unavailable = {'status': 'unavailable', 'observed_model': None, 'cost_usd': None, 'response': {}}
+        run = self.against_baseline(VERIFY_TASK, [{'envelope': unavailable},
+                                                  answer(RESPONSES_B[VERIFY_TASK], exit=3)])
+        self.assertEqual(run.outcomes('candidate'), ['UNAVAILABLE', 'UNAVAILABLE'])
+        for row in run.rows('candidate'):
+            self.assertIsNone(row['verification'])
+        self.assertEqual((run.code, run.result['outcome']), (3, 'INCOMPLETE'))
+        self.assertNotIn('candidate-failed-acceptance', run.result['reasons'])
+        self.assertEqual(run.result['aggregate']['candidate']['verification'],
+                         {'trials': 2, 'assessed_trials': 0, 'assessed_counts': None})
+        self.assertEqual(run.result['regressions_undetermined'], [VERIFY_TASK])
 
 
 class Aggregation(EvalCase):
@@ -1280,6 +1480,15 @@ class EvaluationInputs(EvalCase):
 
         def probe(**fields):
             return lambda data: task_named(data, 'support-missing-runtime')['evidence']['probes'][1].update(fields)
+
+        def table(mutate):
+            return lambda data: mutate(task_named(data, VERIFY_TASK)['evidence'])
+
+        def receipt(evidence, receipt_id):
+            return next(item for item in evidence['receipts'] if item['receipt_id'] == receipt_id)
+
+        def first_check(evidence):
+            return evidence['scenarios'][0]['required_checks'][0]
         cases = [
             ('kind does not match grader', change('bug-page-count', kind='feature'), 'corpus-task-grader'),
             ('unknown kind', change('feature-clamp', kind='benchmark'), 'corpus-task-grader'),
@@ -1303,6 +1512,23 @@ class EvaluationInputs(EvalCase):
             ('evidence exit altered', probe(exit_code=0), 'corpus-evidence-mismatch'),
             ('evidence unknown field', probe(note='x'), 'corpus-evidence-schema'),
             ('evidence on code task', change('feature-clamp', evidence={}), 'corpus-evidence-unexpected'),
+            ('verification runnable not bool', table(lambda e: first_check(e).update(runnable=1)),
+             'corpus-evidence-schema'),
+            ('verification null required identity', table(lambda e: first_check(e).update(environment=None)),
+             'corpus-evidence-schema'),
+            ('verification receipt unknown field', table(lambda e: receipt(e, 'r-unit-a').update(note='x')),
+             'corpus-evidence-schema'),
+            ('verification unknown freshness value',
+             table(lambda e: receipt(e, 'r-unit-a').update(freshness='fresh')), 'corpus-evidence-schema'),
+            ('verification duplicate receipt id', table(lambda e: e['receipts'].append(dict(receipt(e, 'r-unit-a')))),
+             'corpus-evidence-schema'),
+            ('verification short sha', table(lambda e: e['scenarios'][0]['candidate'].update(sha='a1b2c3d')),
+             'corpus-evidence-schema'),
+            ('verification conflicting covering receipts',
+             table(lambda e: e['receipts'].append(dict(receipt(e, 'r-unit-a'), receipt_id='r-unit-a-rerun',
+                                                       status='FAIL'))),
+             'corpus-evidence-ambiguous'),
+            ('verification evidence missing', change(VERIFY_TASK, evidence=None), 'corpus-evidence-schema'),
             ('duplicate task id', change('review-clean-floor', id='review-defective-floor'), 'corpus-duplicate-task'),
             ('wrong schema', lambda data: data.update(schema='verified-handoff/agent-eval-corpus/v0'), 'corpus-schema'),
             ('extra top-level key', lambda data: data.update(graders={}), 'corpus-schema'),

@@ -285,6 +285,18 @@ class HookIntegration(LintBase):
         out = hook.inspect_event(event)
         self.assertFalse(marker.exists(), 'lint ran on an unrecognized edit result')
         self.assertIn('quality gate', self.context(out).lower())
+        self.assertEqual(self.context(out), hook.UNCONFIRMED_EDIT_REMINDER)
+
+    def test_reminders_point_to_the_shared_plan_not_a_per_edit_suite(self):
+        # Both fallbacks defer verification to the plan's checks or evidence on the final input;
+        # only the confirmed-success reminder says the edit completed.
+        for message in (hook.QUALITY_GATE_REMINDER, hook.UNCONFIRMED_EDIT_REMINDER):
+            lowered = message.lower()
+            self.assertIn('verification plan', lowered)
+            self.assertIn('final input', lowered)
+            self.assertIn('quality gate', lowered)
+        self.assertTrue(hook.QUALITY_GATE_REMINDER.startswith('Edit completed.'))
+        self.assertNotIn('completed', hook.UNCONFIRMED_EDIT_REMINDER.lower())
 
 
 class RegistryLocation(unittest.TestCase):

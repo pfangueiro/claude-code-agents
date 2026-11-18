@@ -4,7 +4,8 @@ Turn the requested goal into dependency-safe tasks and carry it through verifica
 
 1. Record the exact input SHA, working-tree changes, acceptance criteria and existing
    authorization. Read the relevant source before designing a change.
-2. Decompose substantial work into tasks under 30 minutes. For each record inputs,
+2. Decompose substantial work into coherent slices by dependency, responsibility and
+   acceptance; about 30 minutes is a planning heuristic, not a limit. For each record inputs,
    selected skill, agent/model, tools, concrete steps, write scope, dependencies,
    success checks, outputs and logging. Use the available plan tool or a Markdown
    task ledger; do not assume Claude task-list tools exist.
@@ -26,11 +27,14 @@ Turn the requested goal into dependency-safe tasks and carry it through verifica
    Inspect the actual schema. Send workers self-contained tasks or explicitly
    request history sharing when supported. Observe completion through native
    notifications/waits, with concise user updates during long work.
-7. Run the relevant build and behavior checks. A fresh reviewer receives the goal,
+7. Freeze the candidate, then run the checks the plan selects for it, citing
+   valid receipts rather than repeating them; run counts, declared repeats and reruns
+   follow the delivery skill's `references/acceptance-by-task.md`. A fresh reviewer receives the goal,
    acceptance criteria, exact SHA/diff and raw artifacts, without the producer's
-   verdict. Reproduce findings before fixing. Mutation-test fragile guards with
+   verdict, and reruns a check only for a named unresolved risk. Reproduce findings before fixing. Mutation-test fragile guards with
    both a failing input and a negative control.
-8. Report completed outputs, actual validation and unresolved gaps. If a task
+8. Once acceptance and required gates are met, report completed outputs, actual
+   validation and unresolved gaps; do not add work to fill time. If a task
    fails, log its evidence and block dependents; continue independent work.
 
 If delegation is unavailable, execute sequentially and disclose that verification

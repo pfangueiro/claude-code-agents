@@ -38,7 +38,9 @@ run
     built-in graders that live only in this file. Code tasks execute the produced
     module in a bounded subprocess against independent requirement checks; review
     findings are proven by executing their concrete witness; the support case checks
-    the diagnosis against synthetic captured evidence. Protocol violations and scope
+    the diagnosis against synthetic captured evidence; the verification case checks
+    proposed reuse/run/blocked decisions against a synthetic receipt table and executes
+    no check. Protocol violations and scope
     violations FAIL. Scope is a complete entry inventory (files, directories, symlinks,
     never followed): any entry added, modified or removed in the solver workspace outside
     the allowed paths, or anywhere in the grading copy while it is graded, is a scope
@@ -101,11 +103,14 @@ def _load_evidence():
 
 evidence = _load_evidence()
 
-RESULT_SCHEMA = 'verified-handoff/agent-eval-result/v1'
+# v2: result rows and arms add verification decision counts and an `execution_efficiency`
+# block whose unmeasured fields stay null. Only the result artifact moved; the corpus,
+# adapter envelope, original response contracts and the v1 execution receipt are unchanged.
+RESULT_SCHEMA = 'verified-handoff/agent-eval-result/v2'
 CORPUS_SCHEMA = 'verified-handoff/agent-eval-corpus/v1'
 ARMS = ('baseline', 'candidate')
 OUTCOMES = ('PASS', 'FAIL', 'UNAVAILABLE')
-KINDS = ('feature', 'bug-repair', 'refactor', 'review', 'support')
+KINDS = ('feature', 'bug-repair', 'refactor', 'review', 'support', 'verification')
 CODE_KINDS = ('feature', 'bug-repair', 'refactor')
 PLACEHOLDER = '{prompt_file}'
 PROMPT_NAME = 'AGENT_EVAL_PROMPT.md'
@@ -138,6 +143,31 @@ RESPONSE_KEYS = ('files', 'findings', 'diagnosis')
 FILE_KEYS = ('path', 'content')
 FINDING_KEYS = ('path', 'line', 'args', 'expected', 'actual', 'description')
 DIAGNOSIS_KEYS = ('outcome', 'cause', 'missing_evidence', 'remaining_unknown')
+VERIFICATION_EVIDENCE_KEYS = ('captured_by', 'scenarios', 'receipts')
+SCENARIO_KEYS = ('id', 'note', 'candidate', 'required_checks')
+CANDIDATE_KEYS = ('sha', 'scope')
+CHECK_IDENTITY = ('command', 'dependencies', 'config', 'toolchain', 'environment')
+REQUIRED_CHECK_KEYS = ('check_id',) + CHECK_IDENTITY + ('runnable',)
+RECEIPT_KEYS = ('receipt_id', 'check_id', 'sha', 'scope') + CHECK_IDENTITY + ('freshness', 'status')
+RECEIPT_FRESHNESS = ('current', 'stale', 'unknown')
+RECEIPT_STATUSES = ('PASS', 'FAIL', 'UNAVAILABLE')
+VERIFICATION_KEYS = ('outcome', 'decisions', 'remaining_unknown')
+DECISION_KEYS = ('scenario_id', 'check_id', 'action', 'receipt_id')
+DECISION_ACTIONS = ('reuse', 'run', 'blocked')
+SHA_RE = re.compile(r'[0-9a-f]{40}|[0-9a-f]{64}')
+MAX_SCENARIOS = 10
+MAX_SCENARIO_CHECKS = 10
+MAX_RECEIPTS = 40
+MAX_DECISIONS = 100
+VERIFICATION_COUNTS = ('required_decisions', 'correct_decisions', 'missing_decisions',
+                       'unknown_decisions', 'proposed_runs', 'redundant_proposed_runs',
+                       'unsupported_reuses')
+# Without a trusted execution trace these stay unknown; model self-reports are not measurements.
+UNMEASURED_EFFICIENCY = {
+    'tool_executions': None, 'check_executions': None, 'reread_volume': None, 'saved_work': None,
+    'basis': 'unknown without a trusted execution trace; only adapter and trial durations are '
+             'measured and cost is adapter-reported',
+}
 
 LIMITATIONS = (
     'filesystem separation only: the adapter and the produced code run with the caller\'s '
@@ -148,7 +178,7 @@ LIMITATIONS = (
     'unless the adapter reported it',
     'hidden behavioral checks are finite cases against stated requirements, not proof of '
     'correctness',
-    'six small synthetic cases; repeated trials are descriptive counts with no statistical '
+    'seven small synthetic cases; repeated trials are descriptive counts with no statistical '
     'efficacy claim',
     'the support case interprets synthetic captured evidence; it does not measure the '
     'runtime of the machine running the evaluation',
@@ -180,6 +210,10 @@ LIMITATIONS = (
     'and is excluded only by trusting the bundled fixtures',
     'the aggregate reported cost is null with status overflow when the per-trial reported '
     'costs do not sum to a finite number; per-trial values and counts are still reported',
+    'the verification case grades proposed reuse, run and blocked decisions against a '
+    'synthetic receipt table; it executes no check and does not measure actual tool or check '
+    'executions, reread volume, saved work, speed or production benefit, which stay unknown '
+    '(null) without a trusted trace; model self-reported counts are not measurements',
 )
 
 RESPONSE_PROTOCOL = """\
@@ -214,6 +248,21 @@ workspace are not graded. Changing any file outside the allowed list, in the wor
 the response, fails the task, and so does creating any new file, directory or symlink in the
 workspace (including caches such as `__pycache__`; run Python with `-B`). Grading uses hidden
 behavioral checks against the stated requirements, not a comparison of source text.
+"""
+
+# Appended only to verification-task prompts, so the other kinds' prompts are unchanged.
+VERIFICATION_PROTOCOL = """\
+## Verification task protocol
+
+This is a verification task, so the support `diagnosis` shape above does not apply.
+`files` is `[]`, `findings` is `[]` and `diagnosis` is required with exactly these keys:
+
+- `outcome`: `"PASS"`, `"FAIL"` or `"INCOMPLETE"`, the aggregate over all decisions.
+- `decisions`: one `{"scenario_id": string, "check_id": string, "action": "reuse" | "run" |
+  "blocked", "receipt_id": string | null}` per required check of every scenario, each
+  pair once, in any order. `receipt_id` names the reused receipt for `reuse` and is `null`
+  for `run` and `blocked`.
+- `remaining_unknown`: string (at most 2000 characters) stating what is still unknown.
 """
 
 
@@ -394,6 +443,87 @@ def validate_support_evidence(raw) -> None:
         exits[probe_id] = probe['exit_code']
     if exits != SUPPORT_PROBE_EXITS:
         raise Invalid('corpus-evidence-mismatch')
+
+
+def is_id(value) -> bool:
+    return isinstance(value, str) and ID_RE.fullmatch(value) is not None
+
+
+def is_sha(value) -> bool:
+    return isinstance(value, str) and SHA_RE.fullmatch(value) is not None
+
+
+def receipt_covers(receipt: dict, candidate: dict, check: dict) -> bool:
+    """True when an original receipt is valid evidence for this exact current required check.
+
+    Every identity must equal the current value (a null receipt value is unknown and matches
+    nothing); there is no cross-SHA equivalence, even for identical trees; the result must be
+    current; and only an executed PASS or FAIL is a result (UNAVAILABLE is not).
+    """
+    return (receipt['check_id'] == check['check_id'] and receipt['sha'] == candidate['sha']
+            and receipt['scope'] == candidate['scope']
+            and all(receipt[field] == check[field] for field in CHECK_IDENTITY)
+            and receipt['freshness'] == 'current' and receipt['status'] in ('PASS', 'FAIL'))
+
+
+def validate_identity(item: dict, code: str, nullable: bool) -> None:
+    for field in CHECK_IDENTITY:
+        if item[field] is None and nullable:
+            continue
+        require_text(item[field], code, 1, 200)
+
+
+def validate_scenario(scenario, seen: set[str], code: str) -> None:
+    require_keys(scenario, SCENARIO_KEYS, code)
+    if not is_id(scenario['id']) or scenario['id'] in seen:
+        raise Invalid(code)
+    seen.add(scenario['id'])
+    require_text(scenario['note'], code, 0, 400)
+    candidate = scenario['candidate']
+    require_keys(candidate, CANDIDATE_KEYS, code)
+    if not is_sha(candidate['sha']) or not is_id(candidate['scope']):
+        raise Invalid(code)
+    checks = scenario['required_checks']
+    if not isinstance(checks, list) or not 0 < len(checks) <= MAX_SCENARIO_CHECKS:
+        raise Invalid(code)
+    check_ids: set[str] = set()
+    for check in checks:
+        require_keys(check, REQUIRED_CHECK_KEYS, code)
+        validate_identity(check, code, nullable=False)
+        if (not is_id(check['check_id']) or check['check_id'] in check_ids
+                or not isinstance(check['runnable'], bool)):
+            raise Invalid(code)
+        check_ids.add(check['check_id'])
+
+
+def validate_verification_evidence(raw) -> None:
+    """Closed schema for the synthetic receipt table, with exact types (bool is not int)."""
+    code = 'corpus-evidence-schema'
+    require_keys(raw, VERIFICATION_EVIDENCE_KEYS, code)
+    require_text(raw['captured_by'], code, 1)
+    receipts, scenarios = raw['receipts'], raw['scenarios']
+    if not isinstance(receipts, list) or len(receipts) > MAX_RECEIPTS:
+        raise Invalid(code)
+    if not isinstance(scenarios, list) or not 0 < len(scenarios) <= MAX_SCENARIOS:
+        raise Invalid(code)
+    receipt_ids: set[str] = set()
+    for receipt in receipts:
+        require_keys(receipt, RECEIPT_KEYS, code)
+        validate_identity(receipt, code, nullable=True)
+        if (not all(is_id(receipt[key]) for key in ('receipt_id', 'check_id', 'scope'))
+                or not is_sha(receipt['sha']) or receipt['receipt_id'] in receipt_ids
+                or receipt['freshness'] not in RECEIPT_FRESHNESS
+                or receipt['status'] not in RECEIPT_STATUSES):
+            raise Invalid(code)
+        receipt_ids.add(receipt['receipt_id'])
+    scenario_ids: set[str] = set()
+    for scenario in scenarios:
+        validate_scenario(scenario, scenario_ids, code)
+        for check in scenario['required_checks']:
+            statuses = {receipt['status'] for receipt in receipts
+                        if receipt_covers(receipt, scenario['candidate'], check)}
+            if len(statuses) > 1:
+                raise Invalid('corpus-evidence-ambiguous')
 
 
 def validate_task(raw) -> dict:
@@ -650,6 +780,8 @@ def build_prompt(task: dict, instructions_text: str) -> str:
         sections.append('## Captured evidence (synthetic)')
         sections.append('```json\n' + json.dumps(task['evidence'], indent=2) + '\n```')
     sections.append(RESPONSE_PROTOCOL.strip())
+    if task['kind'] == 'verification':
+        sections.append(VERIFICATION_PROTOCOL.strip())
     return '\n\n'.join(sections) + '\n'
 
 
@@ -785,6 +917,33 @@ def validate_diagnosis(raw) -> dict:
     return dict(raw)
 
 
+def validate_verification_diagnosis(raw) -> dict:
+    """Closed {outcome, decisions, remaining_unknown}; each (scenario, check) pair at most once."""
+    require_keys(raw, VERIFICATION_KEYS, 'response-verification-schema')
+    if raw['outcome'] not in ('PASS', 'FAIL', 'INCOMPLETE'):
+        raise Invalid('response-verification-outcome')
+    decisions = raw['decisions']
+    if not isinstance(decisions, list) or len(decisions) > MAX_DECISIONS:
+        raise Invalid('response-verification-decisions')
+    seen: set[tuple[str, str]] = set()
+    for item in decisions:
+        require_keys(item, DECISION_KEYS, 'response-verification-decision-schema')
+        pair = (item['scenario_id'], item['check_id'])
+        if not all(is_id(part) for part in pair):
+            raise Invalid('response-verification-decision-id')
+        if pair in seen:
+            raise Invalid('response-verification-duplicate-decision')
+        seen.add(pair)
+        if item['action'] not in DECISION_ACTIONS:
+            raise Invalid('response-verification-action')
+        reuse = item['action'] == 'reuse'
+        if (reuse and not is_id(item['receipt_id'])) or (not reuse and item['receipt_id'] is not None):
+            raise Invalid('response-verification-receipt')
+    require_text(raw['remaining_unknown'], 'response-verification-remaining-unknown')
+    return {'outcome': raw['outcome'], 'decisions': [dict(item) for item in decisions],
+            'remaining_unknown': raw['remaining_unknown']}
+
+
 def validate_response(raw: dict, task: dict) -> dict:
     require_keys(raw, RESPONSE_KEYS, 'response-schema')
     files = validate_response_files(raw['files'], task)
@@ -807,7 +966,10 @@ def validate_response(raw: dict, task: dict) -> dict:
             raise Invalid('scope-files-on-read-only-task')
         if findings:
             raise Invalid('response-findings-not-applicable')
-        diagnosis = validate_diagnosis(diagnosis)
+        if task['kind'] == 'verification':
+            diagnosis = validate_verification_diagnosis(diagnosis)
+        else:
+            diagnosis = validate_diagnosis(diagnosis)
     return {'files': files, 'findings': findings, 'diagnosis': diagnosis}
 
 
@@ -954,9 +1116,10 @@ def spec_cases(function: str, spec: Callable, arg_sets: list[tuple],
 
 
 def make_verdict(passed: bool, reasons: list[str], checks: list | None = None,
-                 review: dict | None = None, unavailable: str | None = None) -> dict:
+                 review: dict | None = None, unavailable: str | None = None,
+                 verification: dict | None = None) -> dict:
     return {'passed': passed, 'reasons': reasons, 'checks': checks or [], 'review': review,
-            'unavailable': unavailable}
+            'unavailable': unavailable, 'verification': verification}
 
 
 def check_behavior(root: Path, trial_dir: Path, module: str, cases: list[Case]) -> dict:
@@ -1218,6 +1381,78 @@ def grade_environment_diagnosis(task: dict, _root: Path, _trial_dir: Path, respo
     return make_verdict(passed, [] if passed else ['diagnosis-mismatch'], checks=checks)
 
 
+def verification_truth(evidence: dict) -> tuple[dict, str]:
+    """Expected decision per (scenario, check) and the aggregate outcome, from the table alone."""
+    truth: dict[tuple[str, str], tuple[str, frozenset]] = {}
+    results: set[str] = set()
+    for scenario in evidence['scenarios']:
+        for check in scenario['required_checks']:
+            covering = [receipt for receipt in evidence['receipts']
+                        if receipt_covers(receipt, scenario['candidate'], check)]
+            key = (scenario['id'], check['check_id'])
+            if covering:
+                # Corpus validation admits one status per covered check; a covering FAIL is kept.
+                truth[key] = ('reuse', frozenset(receipt['receipt_id'] for receipt in covering))
+                results.update(receipt['status'] for receipt in covering)
+            else:
+                truth[key] = ('run' if check['runnable'] else 'blocked', frozenset())
+                results.add('missing')
+    # A known failure dominates; a planned run or a blocked check is never an executed PASS.
+    outcome = 'FAIL' if 'FAIL' in results else 'INCOMPLETE' if 'missing' in results else 'PASS'
+    return truth, outcome
+
+
+def decision_correct(expected: tuple[str, frozenset], given: dict | None) -> bool:
+    action, receipts = expected
+    return (given is not None and given['action'] == action
+            and (action != 'reuse' or given['receipt_id'] in receipts))
+
+
+def decision_counts(truth: dict, given: dict, correct: int) -> dict:
+    """Proposed work in the response; it describes decisions, never actual execution."""
+    reusable = {key for key, (action, _) in truth.items() if action == 'reuse'}
+    runs = [key for key, item in given.items() if item['action'] == 'run']
+    reuses = [key for key, item in given.items() if item['action'] == 'reuse']
+    return {'required_decisions': len(truth), 'correct_decisions': correct,
+            'missing_decisions': len(set(truth) - set(given)),
+            'unknown_decisions': len(set(given) - set(truth)),
+            'proposed_runs': len(runs),
+            'redundant_proposed_runs': sum(1 for key in runs if key in reusable),
+            'unsupported_reuses': sum(1 for key in reuses
+                                      if given[key]['receipt_id'] not in truth.get(key, ('', frozenset()))[1])}
+
+
+def grade_receipt_reuse(task: dict, _root: Path, _trial_dir: Path, response: dict) -> dict:
+    """Grade proposed reuse/run/blocked decisions against the synthetic table; nothing executes."""
+    truth, outcome = verification_truth(task['evidence'])
+    diagnosis = response['diagnosis']
+    given = {(item['scenario_id'], item['check_id']): item for item in diagnosis['decisions']}
+    missing = [list(key) for key in truth if key not in given]
+    unknown = [list(key) for key in given if key not in truth]
+    decisions = [{'name': f'decision {key[0]}/{key[1]}',
+                  'expected': {'action': expected[0], 'receipt_ids': sorted(expected[1])},
+                  'observed': (None if key not in given else
+                               {'action': given[key]['action'], 'receipt_id': given[key]['receipt_id']}),
+                  'ok': decision_correct(expected, given.get(key))}
+                 for key, expected in truth.items()]
+    stated = len(diagnosis['remaining_unknown'].strip())
+    checks = [
+        {'name': 'outcome', 'expected': outcome, 'observed': diagnosis['outcome'],
+         'ok': diagnosis['outcome'] == outcome},
+        {'name': 'every required check has a decision', 'expected': [], 'observed': missing,
+         'ok': not missing},
+        {'name': 'no decision for a check that is not required', 'expected': [],
+         'observed': unknown, 'ok': not unknown},
+        *decisions,
+        {'name': 'remaining unknown is stated', 'expected': 'non-empty text', 'observed': stated,
+         'ok': stated > 0},
+    ]
+    correct = sum(1 for item in decisions if item['ok'])
+    passed = all(check['ok'] for check in checks)
+    return make_verdict(passed, [] if passed else ['verification-decision-mismatch'], checks=checks,
+                        verification=decision_counts(truth, given, correct))
+
+
 GRADERS: dict[str, Grader] = {
     'clamp-feature': Grader('feature', ('pkg/numbers.py',), ('pkg/numbers.py',),
                             grade_clamp_feature),
@@ -1228,6 +1463,8 @@ GRADERS: dict[str, Grader] = {
     'floor-division-review': Grader('review', (), (REVIEW_PATH,), grade_floor_division_review),
     'environment-diagnosis': Grader('support', (), ('pkg/clock.py',),
                                     grade_environment_diagnosis, validate_support_evidence),
+    'receipt-reuse-decisions': Grader('verification', (), ('pkg/service.py',), grade_receipt_reuse,
+                                      validate_verification_evidence),
 }
 
 
@@ -1244,7 +1481,8 @@ def new_record(ctx: RunContext, arm: str, task: dict, trial: int) -> dict:
                   'workspace_extra_files': 0, 'workspace_extra_entries': [],
                   'protected_changed_by_grading': [], 'grading_extra_entries': []},
         'behavior': {'checks': [], 'passed': 0, 'total': 0},
-        'review': None, 'diagnosis': None, 'unavailable_reasons': [], 'cleanup_failures': [],
+        'review': None, 'diagnosis': None, 'verification': None, 'unavailable_reasons': [],
+        'cleanup_failures': [],
         'trial_duration_seconds': None,
     }
 
@@ -1339,6 +1577,7 @@ def solve_and_grade(ctx: RunContext, instructions: dict, task: dict, workspace: 
                           'passed': sum(1 for check in verdict['checks'] if check['ok']),
                           'total': len(verdict['checks'])}
     record['review'] = verdict['review']
+    record['verification'] = verdict['verification']
     failures = scope_failures(scope)
     if verdict['unavailable'] is not None:
         record['unavailable_reasons'].append(verdict['unavailable'])
@@ -1381,6 +1620,8 @@ def ratio(numerator: int, denominator: int, complete: bool) -> dict:
 
 def arm_summary(rows: list[dict]) -> dict:
     reviews = [row for row in rows if row['kind'] == 'review']
+    verifications = [row for row in rows if row['kind'] == 'verification']
+    graded = [row['verification'] for row in verifications if row['verification'] is not None]
     assessed = [row['review'] for row in reviews if row['review'] is not None]
     complete = bool(reviews) and len(assessed) == len(reviews)
     tp = sum(item['true_positives'] for item in assessed)
@@ -1406,6 +1647,11 @@ def arm_summary(rows: list[dict]) -> dict:
                    'recall': ratio(tp, tp + fn, complete)},
         'cost_usd': {'reported_total': total, 'reported_total_status': total_status,
                      'reported_trials': len(costs), 'trials': len(rows)},
+        # Counts over assessed verification trials only; none assessed is unknown, not zero.
+        'verification': {'trials': len(verifications), 'assessed_trials': len(graded),
+                         'assessed_counts': ({key: sum(item[key] for item in graded)
+                                              for key in VERIFICATION_COUNTS} if graded else None)},
+        'execution_efficiency': dict(UNMEASURED_EFFICIENCY),
     }
 
 

@@ -4,11 +4,13 @@ These rules guide verification within your authorized scope — expected practic
 
 ## After Every Implementation
 
-- After implementing a feature or fix, ALWAYS verify it works before reporting completion
-- Run existing tests if they exist (`npm test`, `pytest`, `go test`, etc.)
-- If no tests exist for the changed code, write at least one test that validates the change
+- After implementing a feature or fix, verify it before reporting completion
+- Select the smallest COMPLETE set of checks: tests that exercise the changed behavior and its affected callers, integration/consumer contracts and security boundaries, plus every gate the project or its CI requires — not a blanket build or full suite for every edit. The delivery skill's `references/acceptance-by-task.md` is the shared reference for check selection, ownership, receipt reuse and new-head evidence
+- Run the build or type check when the project requires it or the change can affect what it covers (shared code, types, build configuration, dependencies)
+- If changed behavior has no test, write one that exercises it; a trivial, reversible, nonbehavioral prose edit needs no new test unless a checker or consumer reads that text
 - When no test exists and the change is non-trivial, prefer an INDEPENDENT reviewer (a fresh-context sub-agent or a different agent) to author or confirm the validating test — the producer writing AND grading its own oracle is self-assessment, not verification
-- Build the project to catch compilation/type errors
+- Run each check once per exact input by default: cite an existing valid receipt instead of repeating it, and name the concrete unresolved risk before rerunning one. Repetition that is part of the predeclared check design — repeated benchmark samples, sampling, a reliability/flakiness investigation or a freshness probe — is allowed: keep its reason, the required trial identity and every actual receipt; never rerun until a failure happens to turn green, and never substitute one sample for the agreed set (delivery `references/acceptance-by-task.md`)
+- Edit-time hook feedback (for example post-edit lint) is not verification; the selected checks still run
 - For UI changes, take a screenshot or describe the visual result
 
 ## Verification Standards

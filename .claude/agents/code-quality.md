@@ -73,6 +73,8 @@ When invoked, you must follow these steps:
 ## Report / Response
 
 Report the inspected revision, scope, requirements and checks actually performed.
+Cite existing valid receipts for checks already run at that revision; rerun one only
+for a named unresolved risk.
 Use the shared `/review-pr` procedure for independent PR review and the
 `delivery` skill's `references/acceptance-by-task.md` for relevant behavior checks.
 

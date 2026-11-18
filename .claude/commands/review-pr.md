@@ -31,7 +31,9 @@ quoted argument, never interpolate untrusted task text into a shell command.
    runtime captures, source-proven defects and unverified hypotheses; a source proof
    can establish a defect without an executable reproduction, but never claim a run
    that did not happen. An unavailable tool/runtime is a verification gap, not a clean
-   result. Existing independent receipts prove execution, not semantic coverage.
+   result. Existing independent receipts prove execution, not semantic coverage: cite
+   valid receipts at the reviewed head instead of rerunning them, and rerun a check
+   only for a named unresolved risk.
 5. Report prioritized confirmed findings, each with triggering input/state, expected
    and actual behavior, concrete impact, affected caller/contract, exact source
    location and evidence basis. Cite scoped rules when they materially support a
@@ -52,6 +54,8 @@ quoted argument, never interpolate untrusted task text into a shell command.
    authorized. Otherwise return feedback in conversation without requesting redundant
    permission. Recheck the PR head immediately before publication; a new head
    invalidates the verdict until the delta is reviewed and required checks cover it.
+   The earlier verdict stays history for its head; a delta review is an explicit
+   decision at the new head, never automatic approval.
 
 Follow `/delivery` for publication and the delivery skill's
 `references/acceptance-by-task.md` for change-specific evidence. Provider adapters

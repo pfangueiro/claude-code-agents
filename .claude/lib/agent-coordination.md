@@ -80,7 +80,7 @@ Status rules:
 - **FAIL**: at least one confirmed blocking defect in the declared scope.
 - **INCOMPLETE**: no confirmed blocking defect, but a required check or review is missing or could not run. Name each gap under **Missing**. Unknown is not zero.
 - **PASS**: every required check and review for the declared scope ran and none found a blocking defect. Nonblocking suggestions may go with a PASS. PASS covers only the declared scope. It is not a "safe to commit" statement or an overall quality grade.
-- A review and its check receipts apply only to the exact head SHA they name. Any new commit invalidates them.
+- A review and its check receipts apply only to the exact head SHA they name. A new commit is covered by neither: they stay history for that SHA, and the new head needs current checks and a verdict covering its delta, per delivery's `references/acceptance-by-task.md`.
 - A process exiting 0 is not the same as a required check passing. Record what the check actually asserted, not only its exit code.
 
 ## Error Recovery

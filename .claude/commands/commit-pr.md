@@ -29,13 +29,17 @@ project policy that grants it.
    - Record the resulting commit SHA as the candidate.
 
 4. **Local checks.** Run the project's required local checks on the candidate and
-   record commands and exit statuses. A failed or missing required check holds
-   push and PR creation; report the check and stop.
+   record commands and exit statuses, or cite valid receipts already recorded for
+   that exact candidate SHA (reuse conditions in the delivery skill's
+   `references/acceptance-by-task.md`). A failed, missing or stale required check
+   holds push and PR creation; report the check and stop.
 
 5. **Independent review.** Obtain an independent verdict that covers the exact
    candidate SHA. Unresolved blockers, or no available independent reviewer, hold
-   push and PR creation; name the gap. Any new commit after the verdict invalidates
-   it: rerun steps 4 and 5 for the new candidate.
+   push and PR creation; name the gap. A new commit after the verdict is not
+   covered by it: run the checks applicable to the new candidate (step 4) and obtain
+   a verdict covering its delta (step 5). Earlier receipts and verdicts stay as
+   history for the earlier SHA.
 
 6. **Push and create the PR.** Confirm the head to push equals the reviewed
    candidate. Use the account and credentials the environment already selects; do

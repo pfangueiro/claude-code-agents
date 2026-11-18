@@ -78,9 +78,24 @@ AGENTS.md and relevant source before relying on these notes.
   `delivery/references/acceptance-by-task.md`; optional repository measurements and their
   disclosure/sandbox limits in `delivery/references/repository-measurements.md`. The
   `verified-handoff` v1 receipt schema is unchanged.
+- Verification is proportional and owned once. `delivery/references/acceptance-by-task.md`
+  is the single home for check selection (affected behavior/contracts/dependencies plus
+  required project/CI and maintenance gates; no blanket build/suite per edit), one owner
+  per check with receipt reuse only at matching input, argv/cwd, config/toolchain and
+  environment freshness, freezing before expensive checks, and new-head evidence
+  (original receipts stay history; v1 receipts are never relabelled across SHAs). Rules,
+  commands, execute/orchestration and both Codex overrides point to it rather than
+  copying it. About 30 minutes is a planning heuristic only. The Claude
+  `post-edit-lint.sh` hook is edit-time feedback, not acceptance: nearest local ESLint
+  binary run from the session cwd (config discovery unchanged), check-only on the edited file, bounded output, exit 0 (`tests/codex/test_post_edit_lint.py`).
 - Opt-in agent-guidance evaluation is documented in
   `verified-handoff/references/agent-evaluation.md`: baseline vs candidate instruction
-  files, a six-case synthetic corpus, a caller-supplied trusted adapter, behavioural
+  files, a seven-case synthetic corpus (the original six plus a read-only verification case
+  grading proposed reuse/run/blocked decisions against a synthetic receipt table: exact
+  identity, no cross-SHA equivalence, null/stale/unknown/UNAVAILABLE never cover, FAIL
+  dominates then INCOMPLETE; it measures decisions, not execution, and tool/check
+  executions, reread volume and saved work stay `null`; result artifact
+  `agent-eval-result/v2`, corpus still v1), a caller-supplied trusted adapter, behavioural
   graders outside solver inputs; a known candidate failure or regression is FAIL, else
   unavailability or source drift is INCOMPLETE, else PASS for the declared selected scope;
   unknown never zero, requested and observed model kept separate, source identity as
@@ -123,7 +138,7 @@ AGENTS.md and relevant source before relying on these notes.
   acceptance snapshots ([review](docs/archive/codex-2026-10-12/REVIEW.md),
   [global validation](docs/archive/codex-2026-10-12/GLOBAL-VALIDATION.md)) are archived
   historical records under [docs/archive/](docs/archive/README.md). Dashboard, watchdog, notifications,
-  the Claude statusline renderer, Claude's unconditional auto-lint and snapshots remain
+  the Claude statusline renderer, Claude's file-scoped ESLint edit hook and snapshots remain
   unported (an opt-in, user-approved post-edit lint now exists — see below). MCP
   examples are disabled and Codex hooks are opt-in. The status bar counterpart is an
   opt-in `tui.status_line` example of built-in footer IDs (context remaining, native
@@ -140,7 +155,8 @@ AGENTS.md and relevant source before relying on these notes.
   integer timeout 1-30. Lint runs only on a RECOGNIZED positive edit result (canonical
   apply_patch success text or structured `{"success": true}`); explicit failure runs
   nothing and emits NO feedback (no lint, no reminder), while an unknown/missing/unrecognized
-  result runs nothing but falls back to a manual quality-gate reminder that does not assert
+  result runs nothing but falls back to a verification-plan reminder (affected checks and the
+  quality gate on the final input, or valid evidence for it; no per-edit suite) that does not assert
   success. On an approved exact-root match (nested cwd not
   approved; relative/NUL/invalid cwd rejected) the argv runs directly — no shell, no
   interpolation, no `--fix` — stdio discarded, in its own process group under the 40 s

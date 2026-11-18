@@ -23,7 +23,9 @@ code-quality rules, the `code-quality` agent, `code-review-checklist`, `/review-
 `/quality-gate`, and `delivery` with `references/acceptance-by-task.md`. Report concrete
 findings and their evidence class. A review names the exact base and head SHA it covered. A
 check receipt records the exact checked input SHA, not a base (a source-only receipt records
-no SHA). A new commit invalidates both. Report PASS, FAIL or INCOMPLETE for the declared
+no SHA). A new commit is covered by neither: both stay history for their original input, and
+the new head needs current checks and a verdict covering its delta. Select and reuse checks
+per `references/acceptance-by-task.md`. Report PASS, FAIL or INCOMPLETE for the declared
 scope: missing required evidence is INCOMPLETE, and unknown is not zero. Accept work by task
 type. Default maintenance roles: Codex coordinates and independently verifies, and an actual
 Claude execution implements. Existing explicit owner or project instructions that set other
@@ -32,6 +34,8 @@ its own authorization.
 
 Adapter checks: `python3 -m unittest discover -s tests/codex -v`.
 Claude checks: `./validate.sh` and `bash tests/gap/run.sh --prove --jobs 4`.
+These maintenance checks stay required for framework changes; proportional check
+selection never removes them.
 Run installed-environment checks in a disposable home, not against personal
 configuration. `validate.sh` observes only — `--heal` is retired (no repair; rejected) —
 so never treat any `--heal` as a verification gate; repair is an explicit `install.sh --update`.

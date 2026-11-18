@@ -40,8 +40,9 @@ code-quality rules, the `code-quality` agent, `code-review-checklist`, `/review-
 - Findings are concrete and evidence-classed: runtime-reproduced, source-proven, unverified
   hypothesis or nonblocking suggestion. Do not use grades or unmeasured metrics.
 - A review names the exact base and head SHA it covered. A check receipt records the exact
-  checked input SHA, not a base (a source-only receipt records no SHA). A new commit
-  invalidates both.
+  checked input SHA, not a base (a source-only receipt records no SHA). A new commit is
+  covered by neither: both stay history for their original input, and the new head needs
+  current checks and a verdict covering its delta (see `acceptance-by-task.md`).
 - Outcomes are PASS, FAIL or INCOMPLETE for the declared scope. A required check that did not
   run is INCOMPLETE, never PASS. Unknown is not zero.
 - Acceptance follows the task type in `acceptance-by-task.md`.
@@ -142,7 +143,7 @@ MCP servers provide external tools that extend Claude Code. See `.claude/lib/mcp
 **Command hooks (9 scripts):**
 - `session-start-healthcheck.sh` — SessionStart: observe-only fast-path drift check; logs findings and reports that explicit `install.sh --update` is needed (never forks an installer)
 - `file-protection.sh` — PreToolUse: blocks edits to sensitive files (.env, *.key, *.pem)
-- `post-edit-lint.sh` — PostToolUse: auto-lints TS/JS after Write/Edit, warns on debug statements
+- `post-edit-lint.sh` — PostToolUse: check-only ESLint feedback on the edited TS/JS file (nearest project-local install, run from the session cwd, never `--fix`), warns on debug statements; feedback, not an acceptance gate
 - `notify.sh` — Notification: desktop alerts when Claude needs attention
 - `agent-tracker.sh` — SubagentStart/SubagentStop: real-time agent lifecycle tracking to `agent-events.jsonl`
 - `session-end.sh` — SessionEnd: logs session completion to `session-summaries.jsonl`
