@@ -24,5 +24,10 @@ This fallback does not enforce a native profile's sandbox or tool policy.
   other workers cite those receipts instead of rerunning them (delivery
   `references/acceptance-by-task.md`).
 
-Inherit the selected model by default. Security and incident work needs careful
-verification and suitable capabilities, not an untranslated `opus` setting.
+Inherit the active model and reasoning effort by default. With an active owner
+model policy, request only a PLAN_READY selection from $sdlc-delivery
+`scripts/model_policy.py` for the exact collaboration surface (`codex-spawn`); a
+fork that inherits its parent's model (`codex-fork`) is INCOMPLETE unless host
+evidence shows per-invocation control. Security and incident work needs careful
+verification and suitable capabilities, not an untranslated `opus` setting. Model
+choice never changes permissions, scope or reviewer independence.

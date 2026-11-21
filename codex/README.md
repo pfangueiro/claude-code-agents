@@ -68,8 +68,11 @@ describe the task naturally. The `sdlc-` prefix avoids names colliding with Code
 system skills. The original explicit-only policy is preserved for commit-pr,
 create-jira, new-feature and ui-guidelines. Skills do not automatically fork, and model judgment
 does not guarantee activation. Assign native specialists only when the host exposes
-their agent types. Agent models inherit the active configuration; Claude model names
-and cost assumptions are not converted into arbitrary OpenAI defaults.
+their agent types. Agent models and effort inherit the active configuration by default;
+Claude model names and cost assumptions are not converted into arbitrary OpenAI defaults.
+An owner can opt in to per-task selection with `$sdlc-delivery`'s `scripts/model_policy.py`
+(one private owner policy; PLAN_READY only on a host-observed supported surface; see its
+`references/model-policy.md`). Nothing activates it on install.
 If custom agent types are unavailable, load `$sdlc-agent-code-quality` (or the
 appropriate guide) inline or pass it to an authorized generic worker. Role-guide
 text does not enforce the native profile's sandbox. Local CLI prompt inspection
@@ -100,7 +103,8 @@ Optional local persistent delivery: the exported bundle includes
 `~/.agents/skills/sdlc-delivery/scripts/controller.py`, the same operator CLI as the
 Claude edition. It stays off until an owner runs `setup` for one repository. It runs only
 as a foreground process the owner starts. It launches fresh `codex exec --json` sessions
-that inherit the native model, approval and sandbox policy unchanged. A Codex review
+that inherit the native model, approval and sandbox policy unchanged; it does not apply
+the opt-in model policy. A Codex review
 profile uses your existing Codex authentication, and its approving review of the
 integrated candidate is what gates external publication. Codex quota is not captured
 (no parity with Claude's rate-limit observations). Without a configured, eligible Codex

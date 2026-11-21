@@ -13,6 +13,8 @@ One per delivery, amended in place.
 - **Base identity:** repository, branch, exact SHA, toolchain versions, dirty state.
 - **Roles:** coordinator, implementer, independent verifier, and where each
   assignment came from (default, explicit owner instruction, project instruction).
+- **Model policy:** inherited (no or inactive owner policy) or the owner policy digest in
+  use. Model choice never changes roles, authorization or checks.
 - **Authorization:** effects allowed (commit, push, PR, merge, release, deploy)
   and who granted them. Unlisted effects are not authorized.
 - **Checks:** predeclared commands, the gate each one feeds and the one role that
@@ -28,6 +30,10 @@ One per delivery, amended in place.
 - **Write scope:** paths this task may change; scopes of parallel tasks are disjoint.
 - **Worktree** and base SHA.
 - **Routing:** provider role and capabilities or skills the task needs.
+- **Risk and model:** the coordinator's risk class (routine, complex or critical) and
+  required capabilities; the model is inherited or a PLAN_READY selection record
+  (binding, requested model and effort, policy, request and capability digests). One
+  choice per slice (see `model-policy.md`).
 - **Checks:** subset of predeclared checks this task must pass.
 
 ## Receipt
@@ -39,6 +45,8 @@ check; a receipt is never copied, edited or relabelled to another input.
 - Task ID, provider, profile, session, worktree, base SHA.
 - Command, start and end time, child exit code or signal.
 - Provider terminal result and any unresolved background task or later event.
+- Requested, selected and observed model and effort, each recorded separately; unknown
+  stays null, and an agent's statement about its own model is not evidence.
 - Log locations: child process output and provider event log, both complete.
 - Admission outcome, recorded separately: passed, failed, timed out, killed,
   interrupted or not run.
@@ -63,6 +71,7 @@ check; a receipt is never copied, edited or relabelled to another input.
 - Changed paths, compared with the manifest.
 - Base, result and review identities.
 - Exact commands and statuses from receipts.
+- Model evidence: inherited, or the selection record and its `verify` outcome.
 - State per effect: implemented, reviewed, merged, deployed — each yes or no.
 - Review findings: blockers with requirement and reproduction, then suggestions.
 - Remaining blockers: gate, owner, next executable step.

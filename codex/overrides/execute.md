@@ -10,8 +10,13 @@ Turn the requested goal into dependency-safe tasks and carry it through verifica
    success checks, outputs and logging. Use the available plan tool or a Markdown
    task ledger; do not assume Claude task-list tools exist.
 3. Discover installed skills, specialist agent types, MCPs and native tools. Use
-   only capabilities exposed by this session. Select specialists by task; inherit
-   the model unless the user or applicable policy specifies another available one.
+   only capabilities exposed by this session. Select specialists by task. Inherit
+   the model and reasoning effort unless the owner explicitly instructs otherwise
+   or an active owner model policy yields a PLAN_READY selection for the task's
+   declared risk on the exact surface ($sdlc-delivery `scripts/model_policy.py`;
+   an inherit-only fork or unsupported control is INCOMPLETE, never reported as
+   selected). Choose once per coherent slice; a model change alone never reruns
+   unchanged checks or changes permissions, scope or reviewer independence.
    If native custom types are unavailable, load the corresponding sdlc-agent-<name>
    guide and apply its procedure inline or pass it to an authorized generic worker;
    do not claim its native sandbox/tool restrictions were enforced.

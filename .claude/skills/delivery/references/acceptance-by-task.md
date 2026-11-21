@@ -52,6 +52,12 @@ blanket build or full suite for every edit:
   and keeps its check.
 - Required gates: project-required CI and a repository's own maintenance checks stay
   required; a faster delivery never drops or weakens them.
+- Model or effort: a different model or effort is not by itself a reason to rerun a check
+  whose input, argv, configuration, toolchain and environment are unchanged. A check whose
+  result depends on the model, such as an agent evaluation, records the model as part of
+  its identity. A claim about which model ran needs a `model_policy.py verify` result (see
+  [model-policy.md](model-policy.md)); it is evidence about the run, not acceptance of the
+  work.
 - Edit-time feedback, such as a post-edit lint hook, is not an acceptance check.
 
 ## One plan, one owner per check

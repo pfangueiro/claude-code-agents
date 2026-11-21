@@ -61,7 +61,31 @@ AGENTS.md and relevant source before relying on these notes.
   `docs/PERSISTENT-DELIVERY.md`. Never edit state files in place; earlier ledger schemas
   are refused, with no migration.
 - Native custom routing is host-dependent. Guide discovery is verified; guide prose
-  does not enforce a native sandbox. Models and approval policy are inherited.
+  does not enforce a native sandbox. Approval policy is inherited; models and effort are
+  inherited by default (see the model-policy note below).
+- Opt-in model policy: `delivery/scripts/model_policy.py` (stdlib, read-only JSON, exported by
+  both installers inside the existing skill; skill counts unchanged, managed-file lists grow by
+  the new resources) with `references/model-policy.md`
+  and an inactive example. Authority is only the owner-global private
+  `~/.config/sdlc/model-policy.json` (no `--policy` flag, no project-local file; installers never
+  create or trust it). Missing or inactive is INHERIT with no claim; a malformed or unsafe present
+  policy is INCOMPLETE. `select` returns PLAN_READY only for the first owner-ordered approved
+  binding of the request's provider and exact risk class with a digest-bound agent-eval-result/v2
+  PASS artifact that observed exactly that model, every required capability and fresh host
+  evidence for the exact surface (availability, self-resolution, effort). Unknown support, an
+  inherit-only or role-default surface and the controller surface are INCOMPLETE. `verify`
+  recomputes the retained selection (drift, evaluation drift, inconsistent records) and compares
+  requested and observed model/effort from native JSONL or a selection-bound host observation.
+  The retained record has closed keys and must equal its recomputation (kept digests with an
+  altered task, risk, source, policy or capability summary is FAIL `selection-record-mismatch`).
+  Stream identity is the assistant-message model cross-checked with terminal `modelUsage`; the
+  init model is configuration only (init plus success is INCOMPLETE), and
+  `controller_providers.parse_stream` only classifies the terminal. Policy, request and
+  capability evidence are private-file inputs; selection, stream, observation and evaluation
+  artifacts are caller-trusted retained files. `verify` compares metadata with the plan and
+  proves neither emitted flags nor log provenance. The controller is unchanged and does not apply it; editing
+  delivery SKILL, task-contract or acceptance-by-task changes its runtime digest (explicit
+  reconcile).
 - Code-quality guidance is right-sized and reuse-first: the `code-quality` rule, the
   `code-quality` agent and the `code-review-checklist` skill ask for the smallest complete
   change, reuse before new code (project helper → platform/stdlib → installed dependency),

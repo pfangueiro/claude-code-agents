@@ -80,6 +80,13 @@ migration. Do not copy controller ledgers, locks, Git bindings or linked worktre
 another laptop. Requirements and setup are in the
 [operator guide](docs/PERSISTENT-DELIVERY.md#requirements).
 
+**Optional model policy.** Model and effort are inherited from each CLI's configuration unless
+you opt in once with a private owner file, `~/.config/sdlc/model-policy.json`
+([reference](.claude/skills/delivery/references/model-policy.md)). Installers and updates
+never create, adopt or modify it, and a fresh host stays on inheritance until its owner writes
+one. Updating the delivery guidance changes the persistent controller's runtime digest, so an
+existing controller holds until you reconcile explicitly (step 8 of the upgrade procedure).
+
 ## Codex user-global installation
 
 Use Python 3.11+ and the same Python environment for later updates/checks:

@@ -22,8 +22,10 @@ until a real tool call or process does it and its receipt is collected.
   execution implements. Only explicit owner or project instructions override it.
 - The default assigns roles; it does not start a dispatcher. A role is fulfilled
   only when a real controller or CLI invocation runs it.
-- Never hardcode accounts, profiles, models or paths. Inherit configured CLI
-  defaults and report the model actually observed.
+- Never hardcode accounts, profiles, models or paths. By default inherit configured
+  CLI defaults (model and effort included) and report the model actually observed.
+  Only an active owner model policy permits a per-invocation model or effort request
+  (see *Model selection*).
 - An unavailable provider or reviewer stays a named gap, for example
   `independent review: not performed (verifier provider unavailable)`. Same-provider
   self-review is never reported as cross-provider review.
@@ -97,6 +99,26 @@ until a real tool call or process does it and its receipt is collected.
 - An interrupted or incomplete run keeps its recorded outcome. A later recovery is
   a new boundary with its own receipts; it never relabels the earlier history.
 
+## Model selection (opt-in)
+
+Default: with no owner model policy, or an inactive one, inherit the native configuration
+and claim no selection. An owner opts in once with a private policy; see
+[model policy](references/model-policy.md).
+
+- The coordinator declares each slice's risk class (routine, complex, critical) and
+  required capabilities; workers cannot lower it.
+- `scripts/model_policy.py select` returns PLAN_READY only for an approved, evaluated
+  binding of the same provider and risk class whose exact model and effort the actual
+  invocation surface is freshly observed to support. Anything else is INCOMPLETE: never a
+  silent weaker model, and never a role default reported as selected.
+- Model and effort never change roles, permissions, write scopes, verification gates or
+  reviewer independence. Choose once per coherent slice; a model change alone is not a
+  reason to rerun unchanged checks.
+- `verify` compares the requested model with native or host-observed metadata. Record
+  requested, selected and observed separately; null stays unknown.
+- The persistent controller does not apply the policy. Its runs inherit native
+  configuration, and a controller request is INCOMPLETE.
+
 ## Recovery
 
 - Preserve task ID, provider, profile, session, worktree, SHA and evidence.
@@ -158,5 +180,8 @@ the receipts, not assumed.
 - `references/acceptance-by-task.md` — proportional behavioral acceptance profiles,
   check selection and ownership, receipt reuse and new-head evidence.
 - `references/repository-measurements.md` — optional measurement and task-grounding limits.
+- `references/model-policy.md` and `references/model-policy.example.json` — opt-in model
+  selection and model-version lifecycle (inactive example).
+- `scripts/model_policy.py` — read-only model-policy `status`, `select` and `verify`.
 - `scripts/controller.py` — optional local persistent-delivery operator CLI (off until
   set up).

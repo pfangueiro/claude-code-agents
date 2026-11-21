@@ -7,13 +7,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **SDLC framework** — one repository with Claude Code and Codex integrations. The Claude
 edition has 13 specialized SDLC/SSDLC agents, 30 skills, and 12 executable command
 templates (13 command-directory Markdown files include README.md). Agent descriptions
-guide model judgment; Claude files specify Haiku/Sonnet/Opus roles.
+guide model judgment; Claude agent files carry static Haiku/Sonnet/Opus defaults (compatible
+starting points, not a calibrated optimum); per-task model selection is an owner opt-in
+(delivery `references/model-policy.md`).
 
 Read [AGENTS.md](AGENTS.md) for cross-engine maintenance rules and [MEMORY.md](MEMORY.md)
 for architecture and verified state. Codex builds from shared domain sources plus
 `codex/overrides/`: 42 workflows, 13 specialist guides and 13 native TOML definitions
 (55 skill bundles: 51 implicit, 4 explicit-only). It inherits the active Codex model and
-permission policy. User-global installation is
+permission policy unless an owner opts in to the model policy. User-global installation is
 `./install-codex.sh --user`; check with `--user --check`. See [codex/FEATURES.md](codex/FEATURES.md).
 
 ## Git & Commit Conventions
@@ -175,7 +177,7 @@ Optional dashboard aggregating Claude Code JSONL session logs across all project
 
 ## Security-First
 
-**CRITICAL:** security-auditor and incident-commander ALWAYS use Opus. Security considerations are embedded in every agent following OWASP guidelines and DevSecOps best practices.
+**CRITICAL:** security-auditor and incident-commander default to Opus in their agent definitions; with an active owner model policy they run only an approved, evaluated binding qualified for their declared (typically critical) risk class, otherwise the run is INCOMPLETE (delivery `references/model-policy.md`). Security considerations are embedded in every agent following OWASP guidelines and DevSecOps best practices.
 
 ## Health observation & explicit repair
 
