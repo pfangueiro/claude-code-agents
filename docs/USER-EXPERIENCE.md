@@ -44,20 +44,34 @@ edit-time feedback, not acceptance evidence.
 ## Existing installations
 
 - This guidance changes no personal configuration, and existing optional selections are
-  preserved. Updating the framework is a separate step: follow the upgrade procedure in
-  [INSTALL.md](../INSTALL.md) to preview, back up and reconcile affected files, because the
-  broad `install.sh --update` can replace same-name customizations and reconcile settings
-  such as permissions, attribution, the status line and framework hook bindings.
+  preserved. Updating the framework is a separate step. Ask the assistant to "update the
+  installed framework and preserve my settings": it uses the safe updater
+  (`./framework update`), which shows a plan first, backs up affected files and never
+  rewrites your personal settings ([details](FRAMEWORK-CONTROL.md#update-an-existing-installation)).
+  The older manual procedure in [INSTALL.md](../INSTALL.md) remains, but its broad
+  `install.sh --update` can replace same-name customizations and reconcile settings such as
+  permissions, attribution, the status line and framework hook bindings.
 - The Claude `CLAUDE.md` template is seed-only. A fresh install gets the outcome-first
   response preferences, but an existing `~/.claude/CLAUDE.md` is never overwritten. If you
   want the new preferences, edit your own file.
+
+## Checking the framework and display preferences
+
+When your request is about the framework itself, the assistant can use `./framework` in the
+source checkout or the installed helper to show readiness and optional extras
+([details](FRAMEWORK-CONTROL.md)). It is not run before every request. If you saved display
+preferences (concise or full detail, reminders only about changes) or marked extras as
+reviewed, they are respected where relevant, at most once per conversation; your own and
+your project's instructions still win. They change presentation only: failures, blockers
+and needed permissions are always shown, and saving them grants nothing.
 
 ## What is not implemented
 
 These ideas came up as possibilities and are **not implemented**. Do not expect them:
 
 - a setup wizard, feature menu or startup tour;
-- a user profile switch or settings registry for these defaults;
+- a user profile switch, or a setting that changes these defaults (the helper's display
+  preferences only change how its status is shown);
 - an automatic first-use hint at session start, or a stored record that a hint was
   dismissed;
 - any measured claim that these defaults make work faster or better.

@@ -1864,6 +1864,7 @@ EXPECTED_LIBS=(
     "sdlc-patterns.md"
     "agent-coordination.md"
     "mcp-guide.md"
+    "framework_settings.py"
 )
 
 section "Checking Library Files (${#EXPECTED_LIBS[@]} expected)"

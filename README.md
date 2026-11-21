@@ -350,6 +350,20 @@ match the installed manifest (e.g. `--project` against a user install) is report
 `error`, never silently relabelled clean. Exit status: `0` nothing wrong, `1` drift, `2`
 error. (The Codex integrity check needs the declared Codex Python dependencies.)
 
+### One entry point: `./framework`
+
+In the source checkout, `./framework` (default `status`) is a friendlier front door to the
+same read-only checks: it shows whether installed files match their own install records,
+then compares them with this checkout. `./framework settings` shows optional extras with how
+to change each one and saves display preferences only when you pass a settings option.
+`./framework update` runs the safe updater for an existing installation (a read-only plan,
+then an explicit apply with a verified backup; it never pulls source or rewrites your
+settings). You can simply ask the agent to "update the installed framework and preserve my
+settings". Fresh installs still use `./install.sh` and `./install-codex.sh`. It is not
+installed on your PATH: from other folders run the installed helper
+`python3 ~/.claude/lib/framework_settings.py` (or `python3 ~/.codex/framework/settings.py`).
+Details and limits: [docs/FRAMEWORK-CONTROL.md](docs/FRAMEWORK-CONTROL.md).
+
 Installed components live under `~/.claude/` — verify with `ls ~/.claude/agents ~/.claude/skills ~/.claude/commands ~/.claude/rules`.
 
 ---
@@ -370,7 +384,7 @@ your actual `$HOME`.
 | `~/.claude/skills/` | 30 skill directories | Replaced per-skill (`rm -rf` then copy) |
 | `~/.claude/commands/` | 12 executable templates + README (13 Markdown files) | Replaced |
 | `~/.claude/rules/` | 8 rule `.md` files | Replaced |
-| `~/.claude/lib/` | 4 reference files (templates, patterns, coordination, MCP guide) | Replaced |
+| `~/.claude/lib/` | 4 reference files (templates, patterns, coordination, MCP guide) plus the read-only status/settings helper `framework_settings.py` | Replaced |
 | `~/.claude/hooks/` | 6 core `.sh` hooks (+`chmod +x`) always, plus 2 analytics hooks (`--with-analytics`) and 1 notify hook (`--with-notifications`); 2 reference `.json` configs | Framework-named hooks replaced; **foreign hooks are preserved** (no broad prune); retired framework names pruned by name |
 | `~/.claude/output-styles/concise.md` | Code-first output style | Replaced on drift by install, `--update` and `--upgrade`; removed by `--uninstall` |
 | `~/.claude/statusline.sh` | Status bar script | Replaced only when it differs from source |

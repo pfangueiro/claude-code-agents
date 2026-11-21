@@ -9,6 +9,13 @@ on:
 permissions:
   contents: read
 
+# A new push to the same pull request cancels that pull request's superseded run. Pushes to main
+# are grouped by their own commit, so every main commit keeps its own complete run. No job or
+# gate is removed, and runs for unrelated pull requests or refs are never cancelled.
+concurrency:
+  group: "${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}"
+  cancel-in-progress: "${{ github.event_name == 'pull_request' }}"
+
 jobs:
   codex-adapter:
     name: Codex adapter acceptance and mutation checks

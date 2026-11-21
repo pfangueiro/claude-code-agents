@@ -98,8 +98,9 @@ AGENTS.md and relevant source before relying on these notes.
   Codex managed AGENTS block so it also covers read-only questions. Outcome-first, plain
   language; no novice choice of agents/models/hooks/checks; ask only for missing material
   requirements, consequential choices or authority; short updates. Evidence, roles, model
-  inheritance and opt-ins are unchanged. No skill, wizard, settings registry, profile switch,
-  startup hook or stored hint dismissal exists. The seed `CLAUDE.md.template` now prefers
+  inheritance and opt-ins are unchanged. No skill, wizard, profile switch, startup hook or
+  stored hint dismissal exists; the framework helper's display preferences (below) are
+  presentation only. The seed `CLAUDE.md.template` now prefers
   outcome-first plain explanations (seed-only). Offline tests in
   `tests/codex/test_workflow_guidance.py` prove packaging, not agent efficacy; user guide
   `docs/USER-EXPERIENCE.md`.
@@ -212,6 +213,31 @@ AGENTS.md and relevant source before relying on these notes.
   `.pyc` (`sys.dont_write_bytecode` is set before importing the checker) — locks, repairs,
   runs the broad installer/validate, executes project scripts, probes networks or reads
   config/auth/settings/secrets.
+- `./framework` (source checkout only, not on PATH) loads `scripts/framework_control.py`.
+  `status` (default; read-only, never prompts) combines the portable helper
+  `.claude/lib/framework_settings.py` (installed records only: delivery manifest; Codex
+  manifest within the exact `.codex/framework` resource set plus the scoped `sdlc-` skill and
+  `.codex/agents/*.toml` namespaces, plus the managed AGENTS block digest and
+  hook-choice consistency; broad Claude is Not checked) with `scripts/framework-status.py`;
+  exit 0 nothing to do, 1 attention or differs from the checkout, 2 incomplete/error/usage.
+  Presence of a lint approval list, an active model policy or a controller binding is Not
+  checked, never On; private parse errors never echo content. `settings` delegates to the
+  helper (presentation-only `~/.config/sdlc/framework-preferences.json`, written only on an
+  explicit option; `--review` TTY-only; new-extras notice only after an older completed
+  review). `update` lazily passes its arguments to `scripts/framework_update.py`
+  (`plan [--source] [--home] [--edition claude|codex|both] [--out FILE]`, `apply --plan FILE`):
+  existing user-global installs only (default: every installed integration); never pulls or
+  newly installs. `apply` passes the saved source path/SHA into `build_plan`, which checks it
+  right after `read_source` and before any source module load or staging; the final
+  `check_binding` still compares target/editions/operations/fingerprint. The broad installer
+  runs only in a disposable staging home after the delivery forecast; Codex uses
+  `plan_installation` after manifest prevalidation (the `hooks` bool must equal whether
+  `.codex/hooks.json` is an owned file). Backup and `operations.jsonl` live under
+  `~/.sdlc-framework-update/backups/`; rollback touches only this run's writes; a missing
+  terminal log record turns a verified run into INCOMPLETE with the files kept. The helper
+  installs as `~/.claude/lib/framework_settings.py` (LIB_FILES) and byte-identical
+  `.codex/framework/settings.py`; a test pins the helper's Codex allowlist to `build()`'s
+  `.codex/framework/` set. Guide: `docs/FRAMEWORK-CONTROL.md`.
 
 ## Evidence and publishing
 

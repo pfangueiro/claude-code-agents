@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+from typing import NamedTuple
 
 import yaml
 
@@ -177,6 +178,8 @@ def build() -> dict[str, bytes]:
     files['.codex/framework/statusline.example.toml'] = (REPO / 'codex/statusline.example.toml').read_bytes()
     files['.codex/framework/hook.py'] = (REPO / 'codex/hook.py').read_bytes()
     files['.codex/framework/lint.py'] = (REPO / 'codex/lint.py').read_bytes()
+    # The portable read-only status/settings helper, byte-identical to the Claude edition's copy.
+    files['.codex/framework/settings.py'] = (REPO / '.claude/lib/framework_settings.py').read_bytes()
     return files
 
 
@@ -292,8 +295,31 @@ def load_manifest(root: Path) -> dict:
     return meta
 
 
+class InstallPlan(NamedTuple):
+    """Read-only result of planning: desired writes (None = delete) and the bytes each path held."""
+    root: Path
+    writes: dict[Path, bytes | None]
+    expected: dict[Path, bytes | None]
+    changes: list[str]
+    manifest_path: Path
+
+
 def install(root: Path, *, dry_run: bool = False, uninstall: bool = False,
             check: bool = False, hooks: bool = False, user: bool = False) -> list[str]:
+    plan = plan_installation(root, uninstall=uninstall, hooks=hooks, user=user)
+    if check and plan.changes:
+        raise ValueError('adapter drift: ' + ', '.join(plan.changes))
+    if not dry_run and not check:
+        transaction(plan.root, plan.writes, plan.expected)
+    return plan.changes
+
+
+def plan_installation(root: Path, *, uninstall: bool = False, hooks: bool = False,
+                      user: bool = False) -> InstallPlan:
+    """Compute the hash-owned install/update without writing anything.
+
+    Performs every ownership, scope, symlink and instruction-block check of ``install``.
+    It does not enforce the CLI's default-CODEX_HOME limit; callers must do that."""
     root = root.absolute()
     if any(parent.is_symlink() for parent in (root, *root.parents)):
         raise ValueError('symlink installation root')
@@ -358,11 +384,7 @@ def install(root: Path, *, dry_run: bool = False, uninstall: bool = False,
     elif not manifest_path.exists() or manifest_path.read_bytes() != encoded:
         writes[manifest_path] = encoded
     changes = [str(p.relative_to(root)) for p in writes]
-    if check and changes:
-        raise ValueError('adapter drift: ' + ', '.join(changes))
-    if not dry_run and not check:
-        transaction(root, writes, expected)
-    return changes
+    return InstallPlan(root, writes, expected, changes, manifest_path)
 
 
 def shell_quote(value: str) -> str:

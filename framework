@@ -1,0 +1,21 @@
+#!/usr/bin/env python3
+"""Friendly entry point for this framework source checkout: ./framework --help.
+
+This file only loads scripts/framework_control.py without writing Python caches into the
+checkout. It is not installed on PATH.
+"""
+import importlib.util
+from pathlib import Path
+import sys
+
+sys.dont_write_bytecode = True
+
+if sys.version_info < (3, 11):
+    sys.stderr.write('./framework needs Python 3.11 or newer; nothing was run.\n')
+    raise SystemExit(2)
+
+_CONTROL = Path(__file__).resolve().parent / 'scripts' / 'framework_control.py'
+_SPEC = importlib.util.spec_from_file_location('framework_control', _CONTROL)
+_MODULE = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_MODULE)
+raise SystemExit(_MODULE.main())

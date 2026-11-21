@@ -121,6 +121,7 @@ LIB_FILES=(
     "sdlc-patterns.md"
     "agent-coordination.md"
     "mcp-guide.md"
+    "framework_settings.py"
 )
 
 # Lib files the framework once shipped and has since RETIRED. install copies

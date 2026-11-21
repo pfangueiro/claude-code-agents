@@ -58,3 +58,21 @@ genuinely conflict.
   up. Never activate them silently, and do not describe a single switch that turns them on
   or off. Existing saved choices are preserved. Claude's existing core post-edit lint
   feedback stays as installed; it is edit-time feedback, not acceptance evidence.
+
+## Framework Status and Display Preferences
+
+- The framework ships a read-only status and settings helper: `./framework` in the source
+  checkout, and installed copies (`framework_settings.py` in the Claude `lib` folder,
+  `settings.py` in the Codex framework folder). Use it only when the request is about the
+  framework itself, such as its readiness, an update or an optional extra; it is not a
+  required step before other requests.
+- If the owner saved display preferences or reviewed extras with it, apply them where
+  relevant, at most once per interactive conversation: the chosen detail level, and
+  reminders only about changes since a recorded review. Owner and project instructions win
+  over them, and they never become a repeated setup questionnaire.
+- These preferences shape presentation only. Concise or quiet output never hides a
+  failure, a material blocker or a needed authorization, and a saved preference grants no
+  permission.
+- Optional features keep their own native setup and owner policies; the helper only
+  records what was reviewed and shows how to change each one. Save preferences only when
+  the owner asks.

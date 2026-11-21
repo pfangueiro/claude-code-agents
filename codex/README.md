@@ -54,6 +54,24 @@ for user installation because its discovery layout is not verified; use the defa
 home, or `--project` for an explicit project install. No shell aliases, daemons, model
 settings, credential changes, approval changes or hook trust are installed.
 
+Status and display preferences: the install also ships `.codex/framework/settings.py`,
+byte-identical to the read-only helper the Claude edition installs. From any folder run
+`python3 ~/.codex/framework/settings.py` (user install) or
+`python3 /absolute/path/to/project/.codex/framework/settings.py --project /absolute/path/to/project`.
+It checks owned files, the managed AGENTS block and the hook choice against this install's
+own manifest only. It never runs the Claude installer, never reads `config.toml`, `auth.json`
+or the lint approval entries, and reports hook trust, sign-in, model runs and MCP as not
+checked. A comparison with the current source needs the checkout (`./framework status`
+there). See [docs/FRAMEWORK-CONTROL.md](../docs/FRAMEWORK-CONTROL.md).
+
+Updating an existing user install: in the source checkout, `./framework update plan
+--edition codex --out FILE` (FILE inside a new private folder such as one from
+`mktemp -d`) then `./framework update apply --plan FILE`. It uses this installer's own
+hash-owned planner, keeps your recorded hook choice and your text outside the managed
+`AGENTS.md` block, refuses a manifest whose hook choice contradicts its file list, backs up
+affected files and never runs the Claude installer, pulls source or grants hook trust.
+Project installs and a custom `CODEX_HOME` are refused; use `./install-codex.sh` there.
+
 Files with foreign ownership, user modifications, ambiguous instruction markers or
 symlink destinations cause a nonzero failure before target file writes. Updates and
 uninstall preserve unrelated files and instruction content. An install lock detects

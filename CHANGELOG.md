@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Framework control for both editions: a source-checkout entry point `./framework`
+  (`status` by default, `settings`, `update`; `--help` and structured `--json`) backed by
+  `scripts/framework_control.py`. `status` is read-only and never prompts: it combines the
+  portable helper `.claude/lib/framework_settings.py` (installed records only) with the
+  existing source comparison `scripts/framework-status.py`; exit 0 nothing needs attention,
+  1 attention or differs from the checkout, 2 incomplete, error or usage. `update` passes its
+  arguments to the safe existing-install updater `scripts/framework_update.py`, loaded only
+  for that command. The updater (`plan`, `apply --plan`) updates only already-installed
+  user-global integrations from a clean checkout's HEAD: an explicit private plan whose
+  source commit is re-checked before any checkout code runs, the broad installer run only in
+  a staging home, the Codex planner after manifest prevalidation (including hook-choice
+  consistency), a verified backup, a private operation log and own-writes-only rollback. It
+  never pulls, newly installs, or changes settings, `CLAUDE.md`, accounts, optional
+  selections or hook trust. The helper installs to `~/.claude/lib/framework_settings.py` (install.sh
+  `LIB_FILES`) and, byte-identical, to `.codex/framework/settings.py`. Review fixes in the
+  helper: Codex owned paths must be in the exact `.codex/framework` resource set or the
+  scoped `sdlc-` skill and `.codex/agents/*.toml` namespaces (the private lint approval
+  list, runtime events and the manifest are refused before any read); Codex Ready also
+  requires the managed AGENTS block digest and a hook choice consistent with a verified
+  `hooks.json`; private model-policy parse errors never echo content; a lint approval list,
+  an active model policy or a controller binding is Not checked, never On; the new-extras
+  reminder needs an older completed review, so display saves and single acknowledgments no
+  longer announce it; hints show the real invocation; a `CLAUDE_CONFIG_DIR` or `CODEX_HOME`
+  naming another folder is reported without printing its value. The user-experience rule
+  describes using the helper's presentation preferences only when relevant. CI cancels a
+  superseded pull-request run; every main commit keeps its own run and all five jobs remain.
+  The required GitHub status check is this repository's branch setting; installing the
+  framework does not change another project's GitHub branch settings.
+  No skill, command or agent is added; no startup hook, schedule, service, PATH command or
+  alias; no model, approval, sandbox or hook-trust change. Guide
+  `docs/FRAMEWORK-CONTROL.md`; focused tests `tests/codex/test_framework_settings.py`,
+  `tests/codex/test_framework_control.py` and `tests/codex/test_framework_update.py`.
+
 - "Start building" default experience for both editions: a new canonical
   `.claude/rules/user-experience.md` (rules 7 → 8) exported to Codex through the existing
   `rules.md` bundler, and a short pointer in the Codex managed AGENTS block so it also

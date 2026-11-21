@@ -119,6 +119,7 @@ instruction content are preserved. User installation currently requires default 
 | Optional local evidence hooks | `./install-codex.sh --user --hooks`, then native `/hooks` review/trust |
 | Explicit project-scoped alternative | `./install-codex.sh --project /absolute/path/to/project` |
 | Read-only cross-integration status | `python3 scripts/framework-status.py [--json] [--project PATH] [--claude-home PATH]` |
+| Friendly status, settings and safe update (source checkout) | `./framework --help`; see [docs/FRAMEWORK-CONTROL.md](docs/FRAMEWORK-CONTROL.md) |
 
 Foreign/modified files, ambiguous instruction blocks and symlink destinations fail closed.
 Updates do not silently heal owner customizations. MCP examples are disabled and hooks
@@ -196,7 +197,7 @@ Most of it lands under `~/.claude/` and is loaded by Claude Code in every projec
 ├── commands/              # 12 executable templates + directory README
 ├── skills/                # 30 modular knowledge packages
 ├── rules/                 # 8 instruction sets; permissions/hooks are separate mechanisms
-├── lib/                   # Templates, patterns, coordination protocol, MCP guide
+├── lib/                   # Templates, patterns, coordination protocol, MCP guide, status/settings helper
 ├── hooks/                 # 6 core command hooks (+ analytics/notify hooks when selected) + 2 reference configs
 ├── daemon/                # launchd watchdog — opt-in (--with-watchdog), macOS only
 ├── analytics/             # Observability dashboard (claude-obs alias) — opt-in (--with-analytics)
@@ -214,7 +215,7 @@ Most of it lands under `~/.claude/` and is loaded by Claude Code in every projec
 
 | Path | Contents | Re-install / `--update` behavior |
 |---|---|---|
-| `agents/`, `commands/`, `rules/`, `lib/` | The framework's `.md` / `.json` files | Each framework-owned file is **replaced** so drift heals. Framework files deleted from source are pruned. |
+| `agents/`, `commands/`, `rules/`, `lib/` | The framework's `.md` / `.json` files; `lib/` also gets the Python status and settings helper `framework_settings.py` (listed in `install.sh` `LIB_FILES`) | Each framework-owned file is **replaced** so drift heals. Framework files deleted from source are pruned. |
 | `skills/` | 30 skill directories | Each framework skill directory is `rm -rf`'d and re-copied, so files deleted *inside* a skill heal too. |
 | `hooks/` | 6 core `.sh` hooks (made executable) always, plus analytics/notify hooks when their flag is set; 2 reference `.json` configs | Framework hooks replaced. **Foreign hook files are preserved** (no broad prune); a retired framework hook is removed explicitly by name. `settings.json` bindings are reconciled by exact framework command path, so foreign bindings are kept. |
 | `output-styles/concise.md` | Code-first output style | Replaced on drift by a bare install, `--update` and `--upgrade` (`sync_output_styles`). Removed by `--uninstall`. |
@@ -368,6 +369,16 @@ installer on your schedule — it is not background self-heal):
 ## Upgrading an existing installation
 
 Updating is **explicit**. Nothing pulls, installs or repairs in the background: the SessionStart check and the opt-in watchdog only **report** drift to `framework-health.jsonl`. For the observers, settings-sync-wipe recovery and snapshot restore commands, see **[SELF-HEALING.md](./SELF-HEALING.md)**.
+
+**Safe update for an existing installation (recommended).** In plain words, ask the agent: *"Update the installed framework and preserve my settings."* Behind that, the source checkout's `./framework update` runs the safe updater (`scripts/framework_update.py`). It updates the integrations already installed in your home to the checked-out commit. It never pulls, checks out or newly installs anything, so first bring the checkout to a reviewed `main` revision whose CI passed using the inspect-before-pull part of step 1 below (an empty `git status --short`, the pre-pull checks, then `git pull --ff-only`). Then:
+
+```bash
+plan_dir=$(mktemp -d)                                  # new owner-only folder outside Git
+./framework update plan --out "$plan_dir/plan.json"    # read-only; review what it lists
+./framework update apply --plan "$plan_dir/plan.json"  # only after you agree with the plan
+```
+
+Add `--edition claude` or `--edition codex` to `plan` to restrict it; a Codex-only update never runs the Claude installer. `apply` refuses before running any checkout code if the checkout moved off the planned commit, refuses any other difference from the plan, backs up and verifies every affected file, and keeps a private operation log. It never rewrites your settings, `CLAUDE.md`, Codex configuration, accounts or optional choices. Details, refusals and limits: [docs/FRAMEWORK-CONTROL.md](docs/FRAMEWORK-CONTROL.md#update-an-existing-installation). The manual procedure below remains available as the dangerous alternative: its broad `./install.sh --update` step still replaces same-name files with no backup.
 
 The three installers own files differently, and that is why the order below matters:
 
