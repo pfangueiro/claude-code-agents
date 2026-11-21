@@ -1,4 +1,4 @@
-Never modify code you haven't read. Never guess — ask when unsure.
+Never modify code you haven't read. Ask when a material requirement, a consequential choice or required permission is unclear; otherwise make a reasonable, reversible choice and say so.
 
 # Global Preferences
 
@@ -18,8 +18,9 @@ Never modify code you haven't read. Never guess — ask when unsure.
 ## Response Preferences
 - Respond in English
 - Be concise and direct — no filler or excessive praise
-- Show code, not explanations, unless asked
-- When explaining, use bullet points over paragraphs
+- Lead with the outcome in plain language: what changed and how to use or try it
+- Show code, commands and technical detail when asked or when they are needed to act
+- Use short paragraphs or bullets, whichever reads more clearly
 - Never add emojis unless explicitly asked
 
 ## Git Workflow

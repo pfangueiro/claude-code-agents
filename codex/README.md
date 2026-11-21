@@ -79,6 +79,14 @@ text does not enforce the native profile's sandbox. Local CLI prompt inspection
 verified implicit skill discovery and exclusion of explicit-only workflows; native
 custom-role routing was not exposed by that host and is not claimed as verified.
 
+Default experience: the managed AGENTS.md block carries a short "Start building" pointer
+(work from the described outcome in plain language, choose workflows and checks without
+asking the user to pick them, ask only for missing material requirements, consequential
+choices or authority). The detailed guidance is the shared
+`.claude/rules/user-experience.md`, exported in `rules.md`; owner and project
+instructions win. See [USER-EXPERIENCE.md](../docs/USER-EXPERIENCE.md). It is guidance,
+not a setting, and nothing optional is activated by it.
+
 Delivery: `$sdlc-delivery`, `$sdlc-repo-context` and `$sdlc-verified-handoff` are
 exported from the shared portable skills with their scripts, and the managed AGENTS.md
 block routes implementation outcomes through `$sdlc-delivery` with a default role pair

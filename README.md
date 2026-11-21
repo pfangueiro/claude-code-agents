@@ -12,6 +12,11 @@
 procedures and specialist roles; keep provider-specific runtime behavior in its adapter.
 Describe a task naturally or select a workflow explicitly. Selection uses model judgment.
 
+**New here?** Describe the result you want in plain words. The default "Start building"
+guidance asks the assistant to handle technical choices, ask only what matters, and
+explain how to try the result. See [Start building](docs/USER-EXPERIENCE.md) for the
+defaults and the features that stay optional until you choose to set them up.
+
 | | Claude Code | Codex |
 |---|---|---|
 | User-global install | `./install.sh` | `./install-codex.sh --user` |
@@ -236,7 +241,7 @@ confirmed global discovery and reviewer use for both integrations as of 2026-10-
 | **Skills** | 30 | Modular knowledge packages (git, Docker, CI/CD, K8s, SRE, IaC, observability, delivery, repo-context, verified-handoff, experiment-loop, scheduled-tasks, worktree-workflow, remote-triggers, context-escalation, diverge, etc.) |
 | **Command templates** | 12 | `/commit-pr`, `/review-pr`, `/compact`, `/new-feature`, `/create-jira`, `/build-fix`, `/tdd`, `/quality-gate`, `/checkpoint`, `/save-session`, `/resume-session`, `/optimize`; `/security-scan` comes from a skill |
 | **MCP Servers** | 4 | context7, sequential-thinking, playwright, github |
-| **Rules** | 7 | Instructions for security, code quality, fix quality, verification, framework integrity, anti-anchoring and delivery routing; native permissions/sandbox enforce access boundaries |
+| **Rules** | 8 | Instructions for security, code quality, fix quality, verification, framework integrity, anti-anchoring, delivery routing and the "Start building" default experience; native permissions/sandbox enforce access boundaries |
 | **Hooks** | 10 | Agent tracking, session lifecycle, permission auditing, file protection, edit-time lint feedback, debug detection, pre-compact snapshots, notifications |
 
 ---
@@ -364,7 +369,7 @@ your actual `$HOME`.
 | `~/.claude/agents/` | 13 agent `.md` files | Replaced (heals drift) |
 | `~/.claude/skills/` | 30 skill directories | Replaced per-skill (`rm -rf` then copy) |
 | `~/.claude/commands/` | 12 executable templates + README (13 Markdown files) | Replaced |
-| `~/.claude/rules/` | 7 rule `.md` files | Replaced |
+| `~/.claude/rules/` | 8 rule `.md` files | Replaced |
 | `~/.claude/lib/` | 4 reference files (templates, patterns, coordination, MCP guide) | Replaced |
 | `~/.claude/hooks/` | 6 core `.sh` hooks (+`chmod +x`) always, plus 2 analytics hooks (`--with-analytics`) and 1 notify hook (`--with-notifications`); 2 reference `.json` configs | Framework-named hooks replaced; **foreign hooks are preserved** (no broad prune); retired framework names pruned by name |
 | `~/.claude/output-styles/concise.md` | Code-first output style | Replaced on drift by install, `--update` and `--upgrade`; removed by `--uninstall` |
@@ -581,7 +586,7 @@ claude mcp add github -- npx -y @modelcontextprotocol/server-github
 
 ## Always-Loaded Rules
 
-The installer places seven rule files in `~/.claude/rules/`, which Claude Code loads as user-level instructions in every session. The rules guide the model. Native permissions and sandboxing enforce access boundaries:
+The installer places eight rule files in `~/.claude/rules/`, which Claude Code loads as user-level instructions in every session. The rules guide the model. Native permissions and sandboxing enforce access boundaries:
 
 - **security.md** — No secrets in commits, parameterized queries, input validation, security headers, least privilege
 - **code-quality.md** — Sufficient relevant current source before edits (no read-count quota), no dead code, single responsibility, early returns, explicit error handling, descriptive naming
@@ -590,6 +595,7 @@ The installer places seven rule files in `~/.claude/rules/`, which Claude Code l
 - **framework-integrity.md** — Hooks must enforce invariants or produce evidence; read-only checkers detect drift, and only an explicit installer run repairs it; snapshots have documented restore paths
 - **anti-anchoring.md** — Name the obvious pick + a non-obvious alternative + a trap on open-ended judgment calls; escalate consequential open decisions to `/diverge`
 - **delivery.md** — Route implementation outcomes through `/delivery` with a default role pair that owner or project instructions override; report states only from receipts
+- **user-experience.md** — "Start building" defaults: work from the described outcome in plain language, ask only when a material requirement is missing, a choice is consequential or authority is needed, and keep updates short. Owner and project instructions prevail; configured models, accounts, permissions, required checks and independent review are unchanged, and optional features are never activated silently (see [Start building](docs/USER-EXPERIENCE.md))
 
 These quality rules — and the matching `code-quality` agent and `code-review-checklist` skill — ask for right-sized, reuse-first changes: make the smallest complete change a requirement needs (its callers, tests and docs included), reach for an existing project helper, then the platform or an already-installed dependency, before writing new code, and split or extract on evidence of divergent responsibility rather than a line count. The same guidance is built into the Codex edition's generated `rules.md`, so both editions review by one standard. The reuse-first framing is adapted in our own words from the [Ponytail](https://github.com/DietrichGebert/ponytail/tree/09c434ab73ca43761c5d8b0c5d341926c2fba710) project.
 
@@ -628,7 +634,7 @@ Installed once, user-global under `~/.claude/` — Claude Code loads it in every
 ├── agents/          # 13 model-selected SDLC agents
 ├── commands/        # 12 executable templates + README
 ├── skills/          # 30 modular knowledge packages
-├── rules/           # 7 instruction/guidance rule sets (native permissions enforce access, not these)
+├── rules/           # 8 instruction/guidance rule sets (native permissions enforce access, not these)
 ├── lib/             # Templates, patterns, coordination protocol
 ├── hooks/           # 6 core command hooks (+ analytics/notify hooks when selected) + 2 reference configs
 ├── daemon/          # launchd watchdog — observe-only validate + snapshots — opt-in (--with-watchdog), macOS only

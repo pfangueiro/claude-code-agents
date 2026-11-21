@@ -1,8 +1,8 @@
 """Semantic-boundary checks for the workflow-guidance remediation (AR-002/003/004/005).
 
 Offline only: reads canonical Claude source and builds the Codex edition in memory
-with framework.build(); it never installs, writes a real home, creates an issue,
-pushes, or contacts a provider. Each test asserts an intentional behavioral
+with framework.build(); installs go only into disposable temporary directories. It
+never writes a real home, creates an issue, pushes, or contacts a provider. Each test asserts an intentional behavioral
 boundary, not a verbatim copy of the new prose.
 """
 import os
@@ -20,7 +20,12 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'codex'))
 import framework as f
 
-OWNED_RULES = ('security', 'verification', 'fix-quality', 'anti-anchoring', 'framework-integrity')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_framework import snapshot
+
+OWNED_RULES = ('security', 'verification', 'fix-quality', 'anti-anchoring', 'framework-integrity',
+               'user-experience')
+UX_RULE = '.claude/rules/user-experience.md'
 
 
 def source(rel: str) -> str:
@@ -431,6 +436,48 @@ class RulesAreGuidanceNotInviolable(unittest.TestCase):
         # `install-codex.sh --check` is itself an invalid phantom form, so pin the
         # valid scoped syntax the rule actually documents.
         self.assertRegex(text, r'install-codex\.sh --user --check')
+
+
+class StartBuildingDefaults(unittest.TestCase):
+    """Packaging and ownership boundaries of the 'Start building' default rule.
+
+    The canonical rule is exported in memory and installed into disposable user and project
+    roots that already hold owner instructions and config. These checks prove packaging, the
+    managed pointer and preservation of owner content only; they do not measure whether an
+    agent follows the guidance.
+    """
+
+    OWNER_INSTRUCTIONS = b'# Owner instructions\nKeep my own preferences.\n'
+    OWNER_CONFIG = b'model = "owner-choice"\n'
+    RULES = '.codex/framework/rules.md'
+
+    def test_rule_exported_into_codex_rules_resource(self):
+        exported = f.build()[self.RULES].decode()
+        self.assertIn(f.adapt(source(UX_RULE), f.source_inventory()), exported)
+
+    def test_installs_carry_rule_and_pointer_and_preserve_owner_content(self):
+        if not shutil.which('git'):
+            self.skipTest('git not available')
+        exported = f.build()[self.RULES]
+        pointer = f.instructions()
+        self.assertIn(f'`{self.RULES}`'.encode(), pointer)
+        for user, agents in ((True, '.codex/AGENTS.md'), (False, 'AGENTS.md')):
+            with self.subTest(user=user):
+                root = Path(tempfile.mkdtemp(prefix='ux-home-' if user else 'ux-proj-')).resolve()
+                self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+                owner = {agents: self.OWNER_INSTRUCTIONS, '.codex/config.toml': self.OWNER_CONFIG}
+                for rel, data in owner.items():
+                    (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                    (root / rel).write_bytes(data)
+                f.install(root, user=user)
+                self.assertEqual(f.install(root, user=user, check=True), [])
+                # The managed pointer resolves to the installed resource carrying the rule.
+                self.assertEqual((root / self.RULES).read_bytes(), exported)
+                # Owner instructions keep their place ahead of one managed block; config is untouched.
+                self.assertEqual((root / agents).read_bytes(), self.OWNER_INSTRUCTIONS + pointer)
+                self.assertEqual((root / '.codex/config.toml').read_bytes(), self.OWNER_CONFIG)
+                f.install(root, user=user, uninstall=True)
+                self.assertEqual(snapshot(root), owner)
 
 
 if __name__ == '__main__':

@@ -236,6 +236,11 @@ If native specialist types are unavailable, use the sdlc-agent-<name> role skill
 inline or give their procedures to authorized generic workers.
 Read the installed `.codex/framework/rules.md` before implementing or approving work;
 for a user install, resolve it under the configured Codex home.
+Default experience ("Start building", detailed in the installed rules.md): for
+every request, including read-only questions, work from the described outcome in
+plain language; pick workflows, specialists and checks yourself; ask only for a
+missing material requirement, a consequential choice or required authority; keep
+updates short and explain how to use the result. Owner or project preferences win.
 Discover tools/MCP schemas before use. Keep coupled work sequential, parallel writes
 in disjoint worktrees, and reviewers independent. Inherit model and approval policy
 by default; only an active owner model policy permits a supported PLAN_READY model

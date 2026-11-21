@@ -93,6 +93,16 @@ AGENTS.md and relevant source before relying on these notes.
   `>20`/`< 40` line rules are gone). Findings cite concrete consequences, not invented
   metrics; the rule opening reads as instruction guidance, not guaranteed enforcement. The
   Codex edition inherits it through the generated `rules.md`.
+- Default experience ("Start building"): one canonical `.claude/rules/user-experience.md`
+  (eighth rule) exported through the existing rules bundler, plus a short pointer in the
+  Codex managed AGENTS block so it also covers read-only questions. Outcome-first, plain
+  language; no novice choice of agents/models/hooks/checks; ask only for missing material
+  requirements, consequential choices or authority; short updates. Evidence, roles, model
+  inheritance and opt-ins are unchanged. No skill, wizard, settings registry, profile switch,
+  startup hook or stored hint dismissal exists. The seed `CLAUDE.md.template` now prefers
+  outcome-first plain explanations (seed-only). Offline tests in
+  `tests/codex/test_workflow_guidance.py` prove packaging, not agent efficacy; user guide
+  `docs/USER-EXPERIENCE.md`.
 - Quality outcomes share one vocabulary across the `code-quality` agent, `/quality-gate`,
   `/review-pr`, `code-review-checklist` and the verification rule: findings are
   runtime-reproduced, source-proven, unverified hypotheses or nonblocking suggestions;

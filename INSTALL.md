@@ -4,6 +4,12 @@ Both integrations are user-global by default and apply across projects for that 
 Choose one or install both from the same checkout; their runtime directories are separate.
 Project instructions and alternate profiles can change effective behavior.
 
+After installing, you can describe the outcome you want in plain words. The default
+"Start building" guidance (`.claude/rules/user-experience.md`, exported to Codex) needs no
+extra setup and turns no optional feature on. See [Start building](docs/USER-EXPERIENCE.md).
+An existing `~/.claude/CLAUDE.md` is never overwritten, so updated seed preferences reach
+only fresh installs.
+
 ## Setting up another laptop
 
 Cloning or pulling this repository gets the **source only**. Nothing installs, updates,
@@ -189,7 +195,7 @@ Most of it lands under `~/.claude/` and is loaded by Claude Code in every projec
 ├── agents/                # 13 specialized agents
 ├── commands/              # 12 executable templates + directory README
 ├── skills/                # 30 modular knowledge packages
-├── rules/                 # 7 instruction sets; permissions/hooks are separate mechanisms
+├── rules/                 # 8 instruction sets; permissions/hooks are separate mechanisms
 ├── lib/                   # Templates, patterns, coordination protocol, MCP guide
 ├── hooks/                 # 6 core command hooks (+ analytics/notify hooks when selected) + 2 reference configs
 ├── daemon/                # launchd watchdog — opt-in (--with-watchdog), macOS only

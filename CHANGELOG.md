@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- "Start building" default experience for both editions: a new canonical
+  `.claude/rules/user-experience.md` (rules 7 → 8) exported to Codex through the existing
+  `rules.md` bundler, and a short pointer in the Codex managed AGENTS block so it also
+  applies to read-only questions. It asks for outcome-first, plain-language work: no
+  novice choice of internal agents, models, hooks or checks; questions only for missing
+  material requirements, consequential choices or required authority; short updates that
+  explain how to try the result. Evidence rules, roles, model inheritance and every
+  existing opt-in are unchanged; no skill, wizard, settings registry, profile switch or
+  startup hook is added. The seed `global-config/CLAUDE.md.template` replaces "Never
+  guess", "Show code, not explanations" and the bullets-first preference with
+  outcome-first plain explanations (seed-only; existing `CLAUDE.md` files are never
+  overwritten). New user guide `docs/USER-EXPERIENCE.md` separates real guidance from
+  ideas that are not implemented. Offline packaging/preservation tests in
+  `tests/codex/test_workflow_guidance.py`; they prove packaging, not agent efficacy.
+
 - Opt-in model selection and model-version lifecycle policy shared by both editions:
   `delivery/scripts/model_policy.py` (stdlib, read-only JSON `status`/`select`/`verify` and a
   pure `decide` API), `delivery/references/model-policy.md` and an inactive
