@@ -34,15 +34,20 @@ mechanism. Your own and your project's instructions take precedence.
 
 Core workflows and checking guidance are on by default. The following features are
 available when you choose to set them up, and nothing turns them on silently: analytics,
-the watchdog, notifications, Codex hooks, the Codex footer and MCP examples, the post-edit
-lint, the prompt/agent reference hook templates, the persistent delivery controller, and
-unattended work or external effects. Each one keeps its own setup steps in README,
-INSTALL or `codex/README.md`. There is no single switch that turns them all on or off.
+the watchdog, notifications, Codex hooks, the Codex footer and MCP examples, Codex
+approved post-edit lint, the prompt/agent reference hook templates, the persistent
+delivery controller, and unattended work or external effects. Each one keeps its own setup
+steps in README, INSTALL or `codex/README.md`. There is no single switch that turns them
+all on or off. Claude's existing core post-edit lint feedback stays as installed; it is
+edit-time feedback, not acceptance evidence.
 
 ## Existing installations
 
-- Your saved choices are preserved. Updates do not reset settings or ask the setup
-  questions again.
+- This guidance changes no personal configuration, and existing optional selections are
+  preserved. Updating the framework is a separate step: follow the upgrade procedure in
+  [INSTALL.md](../INSTALL.md) to preview, back up and reconcile affected files, because the
+  broad `install.sh --update` can replace same-name customizations and reconcile settings
+  such as permissions, attribution, the status line and framework hook bindings.
 - The Claude `CLAUDE.md` template is seed-only. A fresh install gets the outcome-first
   response preferences, but an existing `~/.claude/CLAUDE.md` is never overwritten. If you
   want the new preferences, edit your own file.

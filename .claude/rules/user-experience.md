@@ -52,8 +52,9 @@ genuinely conflict.
 - One account is enough. Use only owner-authorized, eligible profiles under the existing
   routing; do not discover accounts, log in, or change billing.
 - Core workflows and checking guidance are on by default. Optional features (analytics,
-  watchdog, notifications, Codex hooks, footer and MCP examples, the post-edit lint,
-  prompt/agent reference hook templates, the persistent delivery controller, unattended
-  work and external effects) are available when the owner chooses to set them up. Never
-  activate them silently, and do not describe a single switch that turns them on or off.
-  Existing saved choices are preserved.
+  watchdog, notifications, Codex hooks, footer and MCP examples, Codex approved post-edit
+  lint, prompt/agent reference hook templates, the persistent delivery controller,
+  unattended work and external effects) are available when the owner chooses to set them
+  up. Never activate them silently, and do not describe a single switch that turns them on
+  or off. Existing saved choices are preserved. Claude's existing core post-edit lint
+  feedback stays as installed; it is edit-time feedback, not acceptance evidence.
