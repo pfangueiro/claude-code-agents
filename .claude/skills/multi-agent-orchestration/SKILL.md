@@ -44,7 +44,7 @@ Agent:
   name: "worker-a"           # optional — makes the agent addressable via SendMessage({to: name})
   run_in_background: false   # optional — background is the DEFAULT; pass false to BLOCK
   isolation: "worktree"      # optional — "worktree" | "remote" ("remote" always runs in background)
-  model: "sonnet" | "opus" | "haiku" | "fable"   # optional — IGNORED for subagent_type: "fork"
+  model: "sonnet" | "opus" | "haiku" | "fable"   # optional — omit to inherit; IGNORED for subagent_type: "fork"
 ```
 
 **Background is the default — do not invert this.** Verified against the shipped `sdk-tools.d.ts`:
@@ -59,6 +59,14 @@ run this agent synchronously when you need its result before continuing."*
 
 Writing `run_in_background: true` merely restates the default — it is a no-op, not the thing that
 makes an agent asynchronous.
+
+### Model and effort
+Omit `model` by default: the agent definition's frontmatter or the session model applies. Set it
+only from a PLAN_READY selection of the delivery skill's `scripts/model_policy.py` (owner policy
+active, `claude-agent` surface observed to honour it). A fork ignores `model`, so a forked worker
+cannot carry a selection and is reported INCOMPLETE, not selected. Choose once per coherent slice,
+keep the coordinator's risk class, and never let a model change alter tools, permissions, scope or
+reviewer independence. Record the requested and observed model separately.
 
 ### Subagent context — read this before assuming a fork
 **Omitting `subagent_type` does NOT fork the coordinator.** Verified against the shipped

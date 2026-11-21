@@ -193,12 +193,23 @@ not a review. Run the scanner where the project requires it *and* the agent, bec
 4. Within a batch: all tasks launch in parallel (single message, multiple tool calls)
 5. Between batches: wait for all tasks in batch N before starting batch N+1
 
-## Model Selection for Agents
+## Model and Effort for Agents
 
-| Complexity | Model | Use When |
-|------------|-------|----------|
-| Quick lookup, simple search | haiku | Fast, low-cost exploration |
-| Standard implementation | sonnet | Most coding and analysis tasks |
-| Critical reasoning, complex architecture | opus | High-stakes decisions, incident response |
+The `**Model:**` lines above are each agent definition's static frontmatter default: a
+compatible starting point, not a calibrated optimum or a capability ranking. Model and effort
+are separate choices.
 
-Default to **sonnet** unless the task is trivially simple (haiku) or critically complex (opus).
+- **Default: inherit.** Omit the `Agent` `model` parameter; the agent's frontmatter default or
+  the session model applies, and the report records the model actually observed.
+- **Opt-in:** only while the owner's private model policy is active, run the delivery skill's
+  `scripts/model_policy.py select` with the coordinator's risk class (routine, complex,
+  critical) and required capabilities for the `claude-agent` surface. Pass the PLAN_READY model
+  only when host capability evidence shows the call honours it over the frontmatter default. A
+  role default that wins, a fork (which ignores `model`) or an unsupported effort is INCOMPLETE,
+  never reported as selected.
+- Never default to the largest model or rank models by name; ordering, approvals and version
+  pins are owner data in the policy.
+- Model choice never changes the agent's tools, permissions, scope, the required independent
+  verifier or reviewer independence.
+
+Details: the delivery skill's `references/model-policy.md`.

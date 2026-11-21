@@ -126,6 +126,11 @@ def runtime_names():
     return names
 
 
+def shipped_scripts():
+    """Every Python script the delivery skill ships (the controller runtime is a subset)."""
+    return sorted(p.name for p in SOURCE_SCRIPTS.iterdir() if p.is_file() and p.suffix == '.py')
+
+
 @unittest.skipUnless(GIT, 'git is required')
 class ControllerExports(unittest.TestCase):
     def setUp(self):
@@ -262,12 +267,14 @@ class ControllerExports(unittest.TestCase):
             self.assertEqual(list(layout.account.iterdir()), [], 'account directory was written')
 
     def assert_exports(self, layouts):
-        """Both exports carry the exact runtime bytes, and each manifest hashes what is installed."""
-        names = runtime_names()
+        """Both exports carry exactly the shipped scripts with their exact bytes, the controller
+        runtime is among them, and each manifest hashes what is installed."""
+        shipped, runtime = shipped_scripts(), runtime_names()
+        self.assertLessEqual(set(runtime), set(shipped))
         for layout in layouts:
             installed = sorted(p.name for p in layout.scripts.iterdir() if p.suffix == '.py')
-            self.assertEqual(installed, names, layout.name)
-            for name in names:
+            self.assertEqual(installed, shipped, layout.name)
+            for name in shipped:
                 self.assertEqual((layout.scripts / name).read_bytes(), (SOURCE_SCRIPTS / name).read_bytes(),
                                  f'{layout.name}: {name}')
             self.assertEqual(layout.evidence.read_bytes(), SOURCE_EVIDENCE.read_bytes(), layout.name)
@@ -281,7 +288,7 @@ class ControllerExports(unittest.TestCase):
                                     (self.home, codex['files'], '.agents/skills/sdlc-delivery/scripts/')):
             for rel, checksum in files.items():
                 self.assertEqual(sha256(base / rel), checksum, rel)
-            self.assertTrue({prefix + name for name in names} <= set(files), prefix)
+            self.assertTrue({prefix + name for name in shipped} <= set(files), prefix)
 
     def exercise(self, layout):
         """help, init, status, run (INCOMPLETE), STOP and lazy engine recovery from one export."""

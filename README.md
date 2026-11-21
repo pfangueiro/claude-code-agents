@@ -161,6 +161,7 @@ Both editions share one evidence-based quality contract:
 | Run required checks | `/quality-gate` ([command](.claude/commands/quality-gate.md)), `verified-handoff` receipts | Per-check PASS/FAIL/UNAVAILABLE/NOT_APPLICABLE; overall FAIL, INCOMPLETE or PASS for the completed scope |
 | Decide what counts as done | [Acceptance by task](.claude/skills/delivery/references/acceptance-by-task.md), [repository measurements](.claude/skills/delivery/references/repository-measurements.md) | Task-specific evidence; unknowns are reported, never counted as zero |
 | Compare instruction changes | [Agent evaluation](.claude/skills/verified-handoff/references/agent-evaluation.md) | Opt-in baseline vs candidate on a synthetic corpus; a pilot is not proof of efficacy |
+| Choose a model per task (opt-in) | [Model policy](.claude/skills/delivery/references/model-policy.md) | INHERIT by default; PLAN_READY only for an approved, evaluated binding the exact surface supports; `verify` compares requested and observed model |
 
 The contract uses no grades and no unmeasured metrics. The 2026-10-24 acceptance of this
 contract is archived as a [historical record](docs/archive/quality-outcomes-2026-10-24/VALIDATION.md).
@@ -264,8 +265,11 @@ guaranteed.
 | **sre-specialist** | SLO, reliability, on-call, runbook | SRE, SLOs, capacity, chaos eng | Sonnet |
 | **meta-agent** | create an agent for… | Generates new custom agents | Opus |
 
-The model column describes the Claude source files. Codex inherits its active model;
-these aliases and provider pricing are not translated.
+The model column is each Claude agent file's static default: a compatible starting point,
+not a calibrated optimum or a capability ranking. Codex inherits its active model; these
+aliases and provider pricing are not translated. Per-task model and effort selection in
+either edition is an owner opt-in ([model policy](.claude/skills/delivery/references/model-policy.md)),
+off on every host until its owner writes a private policy.
 
 ---
 

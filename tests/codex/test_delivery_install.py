@@ -3,6 +3,8 @@
 No test reads or writes a real user home, settings or credentials. Set
 DELIVERY_INSTALLER to a staged installer path to test a copy before materialization.
 """
+from datetime import datetime, timedelta, timezone
+import hashlib
 import importlib.util
 import json
 import os
@@ -30,6 +32,35 @@ CONSUMED_SCOPES = ['.claude/skills/delivery', '.claude/skills/repo-context', '.c
 PERSONAL = {'settings.json': b'{"model": "personal"}\n', 'CLAUDE.md': b'Personal instructions\n',
             'skills/personal/SKILL.md': b'personal skill', 'commands/mine.md': b'personal command',
             'rules/personal.md': b'personal rule', 'hooks/guard.sh': b'#!/bin/sh\n'}
+MODEL_POLICY_SUITE = ROOT / 'tests/delivery/test_model_policy.py'
+
+
+def load_tests(loader, tests, pattern):
+    """Also register the portable model-policy suite (tests/delivery) with tests/codex discovery,
+    which CI runs; a suite that loads no cases is an error, never a silent pass."""
+    spec = importlib.util.spec_from_file_location('delivery_test_model_policy', MODEL_POLICY_SUITE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    suite = loader.loadTestsFromModule(module)
+    if not suite.countTestCases():
+        raise RuntimeError(f'no model-policy tests loaded from {MODEL_POLICY_SUITE}')
+    tests.addTests(suite)
+    return tests
+
+
+def utc_stamp(offset_seconds=0.0):
+    moment = datetime.now(timezone.utc) + timedelta(seconds=offset_seconds)
+    return moment.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+
+
+def write_private_json(path, data):
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(path.parent, 0o700)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'wb') as handle:
+        handle.write(json.dumps(data).encode())
+    os.chmod(path, 0o600)
+    return path
 
 
 def snapshot(root):
@@ -471,6 +502,105 @@ class InstalledDeliveryResources(unittest.TestCase):
             for name in installer.SKILLS:
                 self.assertEqual((home / f'skills/{name}/SKILL.md').read_bytes(),
                                  (ROOT / f'.claude/skills/{name}/SKILL.md').read_bytes())
+
+
+class InstalledModelPolicy(unittest.TestCase):
+    """Both real exports of delivery scripts/model_policy.py run from an unrelated cwd in one
+    disposable HOME against a real offline agent-eval-result/v2 artifact. Installing creates no
+    owner policy, so the default stays inheritance; nothing activates outside this HOME."""
+
+    def test_both_exports_select_against_a_real_offline_evaluation_artifact(self):
+        spec = importlib.util.spec_from_file_location('sdlc_codex_framework_model_policy',
+                                                      ROOT / 'codex/framework.py')
+        framework = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(framework)
+        with tempfile.TemporaryDirectory(prefix='model-policy-export-') as directory:
+            root = Path(directory).resolve()
+            os.chmod(root, 0o700)
+            home, source, work, cwd = root / 'home', root / 'source', root / 'work', root / 'unrelated'
+            (home / '.claude').mkdir(mode=0o700, parents=True)
+            os.chmod(home, 0o700)
+            work.mkdir(mode=0o700)
+            cwd.mkdir()
+            for rel in [f'.claude/skills/{name}' for name in installer.SKILLS]:
+                shutil.copytree(ROOT / rel, source / rel, ignore=shutil.ignore_patterns('__pycache__'))
+            for rel in installer.SINGLE_FILES:
+                (source / '.claude' / rel).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(ROOT / '.claude' / rel, source / '.claude' / rel)
+            env = {'PATH': os.environ.get('PATH', '/usr/bin:/bin'), 'HOME': str(home),
+                   'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': os.devnull, 'LC_ALL': 'C'}
+            git = ['git', '-C', str(source), '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid']
+            subprocess.run(['git', 'init', '-q', str(source)], env=env, check=True)
+            subprocess.run(git + ['add', '-A'], env=env, check=True)
+            subprocess.run(git + ['commit', '-q', '-m', 'resources'], env=env, check=True)
+            installer.run(home / '.claude', source)
+            framework.install(home, user=True)
+            self.assertFalse((home / '.config').exists(), 'an installer created owner policy state')
+            exports = {'claude': home / '.claude/skills/delivery', 'codex': home / '.agents/skills/sdlc-delivery'}
+            for name, skill in exports.items():
+                for rel in ('scripts/model_policy.py', 'references/model-policy.example.json'):
+                    self.assertEqual((skill / rel).read_bytes(),
+                                     (ROOT / '.claude/skills/delivery' / rel).read_bytes(), f'{name}: {rel}')
+                self.assertTrue((skill / 'references/model-policy.md').is_file(), name)
+            request = write_private_json(work / 'request.json', {
+                'version': 1, 'task_id': 'slice-1', 'source': {'kind': 'git-sha', 'value': 'b' * 40},
+                'declared_by': 'coordinator', 'provider': 'claude', 'role': 'implement', 'risk': 'complex',
+                'surface': 'claude-cli', 'capabilities': ['code']})
+
+            def select(skill, capabilities):
+                scripts = skill / 'scripts'
+                before = sorted(p.name for p in scripts.iterdir())
+                proc = subprocess.run([sys.executable, '-I', str(scripts / 'model_policy.py'), 'select',
+                                       '--request', str(request), '--capabilities', str(capabilities)],
+                                      cwd=cwd, env=env, capture_output=True, text=True, timeout=120)
+                self.assertNotIn('Traceback', proc.stderr)
+                self.assertEqual(sorted(p.name for p in scripts.iterdir()), before, 'select wrote beside the export')
+                return proc.returncode, json.loads(proc.stdout)
+
+            placeholder = write_private_json(work / 'placeholder-capabilities.json', {'unused': True})
+            for name, skill in exports.items():
+                code, data = select(skill, placeholder)
+                self.assertEqual((code, data['decision'], data['reasons']), (0, 'INHERIT', ['policy-missing']), name)
+            proc, result = offline_eval.run_installed_evaluator(
+                home / '.claude/skills/verified-handoff/scripts/agent_eval.py', root / 'agent-eval',
+                offline_eval.RESPONSES_B, env)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertEqual((result['schema'], result['outcome']), ('verified-handoff/agent-eval-result/v2', 'PASS'))
+            observed = {row['observed_model'] for row in result['results']}
+            self.assertEqual(len(observed), 1, observed)
+            model = observed.pop()
+            artifact = root / 'agent-eval/out/result.json'
+            evaluation = {'path': str(artifact), 'sha256': hashlib.sha256(artifact.read_bytes()).hexdigest(),
+                          'model': model}
+            approval = {'by': 'fixture owner', 'at': utc_stamp(-60)}
+
+            def binding(identifier):
+                return {'provider': 'claude', 'model': identifier, 'effort': None, 'pinned': True,
+                        'capabilities': ['code'], 'status': 'approved',
+                        'evaluation': dict(evaluation, model=identifier), 'approval': approval}
+
+            write_private_json(home / '.config/sdlc/model-policy.json', {
+                'version': 1, 'active': True, 'evidence_max_age_seconds': 3600,
+                'bindings': {'mismatched': binding('fixture-other-model'), 'evaluated': binding(model)},
+                'routes': {'claude': {'complex': ['mismatched', 'evaluated']}}})
+            support = {identifier: {'available': True, 'resolves_to': identifier, 'efforts': None}
+                       for identifier in ('fixture-other-model', model)}
+            capabilities = write_private_json(work / 'capabilities.json', {
+                'version': 1, 'provider': 'claude', 'surface': 'claude-cli', 'observed_at': utc_stamp(-30),
+                'observed_by': 'fixture host probe', 'client_version': None, 'model_control': 'per-invocation',
+                'effort_control': 'unsupported', 'models': support})
+            for name, skill in exports.items():
+                with self.subTest(export=name):
+                    code, data = select(skill, capabilities)
+                    self.assertEqual((code, data['decision']), (0, 'PLAN_READY'), data)
+                    self.assertEqual((data['selected']['binding'], data['selected']['model']), ('evaluated', model))
+                    self.assertEqual(data['selected']['evaluation_sha256'], evaluation['sha256'])
+                    self.assertTrue(data['selected']['fallback'])
+                    self.assertEqual(data['considered'][0], {'binding': 'mismatched', 'eligible': False,
+                                                             'reasons': ['evaluation-model-mismatch']})
+                    self.assertFalse(data['executed'])
+            self.assertEqual(installer.run(home / '.claude', source, check=True)[0], [])
+            self.assertEqual(framework.install(home, user=True, check=True), [])
 
 
 if __name__ == '__main__':

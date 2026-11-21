@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "active": false,
+  "evidence_max_age_seconds": 3600,
+  "bindings": {
+    "claude-a": {
+      "provider": "claude",
+      "model": "example-claude-model-a-2026-01",
+      "effort": "high",
+      "pinned": true,
+      "capabilities": ["code", "review"],
+      "status": "approved",
+      "evaluation": {
+        "path": "/absolute/path/to/agent-eval/claude-a/out/result.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "model": "example-claude-model-a-2026-01"
+      },
+      "approval": {"by": "owner", "at": "2026-01-15T09:00:00Z"}
+    },
+    "claude-b": {
+      "provider": "claude",
+      "model": "example-claude-model-b-2026-01",
+      "effort": null,
+      "pinned": true,
+      "capabilities": ["code"],
+      "status": "approved",
+      "evaluation": {
+        "path": "/absolute/path/to/agent-eval/claude-b/out/result.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "model": "example-claude-model-b-2026-01"
+      },
+      "approval": {"by": "owner", "at": "2026-01-15T09:00:00Z"}
+    },
+    "claude-a-next": {
+      "provider": "claude",
+      "model": "example-claude-model-a-2026-07",
+      "effort": "high",
+      "pinned": true,
+      "capabilities": ["code", "review"],
+      "status": "candidate",
+      "evaluation": {
+        "path": "/absolute/path/to/agent-eval/claude-a-next/out/result.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "model": "example-claude-model-a-2026-07"
+      },
+      "approval": null
+    },
+    "codex-a": {
+      "provider": "codex",
+      "model": "example-codex-model-a-2026-01",
+      "effort": null,
+      "pinned": false,
+      "capabilities": ["code", "review"],
+      "status": "approved",
+      "evaluation": {
+        "path": "/absolute/path/to/agent-eval/codex-a/out/result.json",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "model": "example-codex-model-a-2026-01"
+      },
+      "approval": {"by": "owner", "at": "2026-01-15T09:00:00Z"}
+    }
+  },
+  "routes": {
+    "claude": {
+      "routine": ["claude-b"],
+      "complex": ["claude-a", "claude-b"],
+      "critical": ["claude-a"]
+    },
+    "codex": {
+      "complex": ["codex-a"],
+      "critical": ["codex-a"]
+    }
+  }
+}

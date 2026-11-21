@@ -59,6 +59,14 @@ automatic publication requires an actual Codex review decision, not Python check
 Describe it from the source; its tests, native smoke run and independent review are
 publication gates, so report only acceptance that actually ran.
 
+The optional model policy (`delivery/scripts/model_policy.py`, reference
+`references/model-policy.md`) is an owner opt-in through one private owner-global file.
+Installers and updates never create, adopt or rewrite it, and nothing activates it on a host;
+without it both editions inherit configured models and effort. It selects only within an
+already authorized provider and role, never accounts or providers, and never changes
+permissions, gates or reviewer independence. The controller does not apply it; do not edit
+`controller*.py` to add model or effort flags without a separate owner decision.
+
 Before publishing, fetch and reconcile remote changes without rebasing published SHAs.
 Stage explicit task paths, inspect the staged diff for private data, run applicable
 checks, and obtain independent review at the exact commit. Verify GitHub's branch head

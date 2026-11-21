@@ -9,6 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Opt-in model selection and model-version lifecycle policy shared by both editions:
+  `delivery/scripts/model_policy.py` (stdlib, read-only JSON `status`/`select`/`verify` and a
+  pure `decide` API), `delivery/references/model-policy.md` and an inactive
+  `model-policy.example.json`. Default stays inheritance: a missing or inactive owner policy
+  yields INHERIT with no selection claim, and a malformed or unsafe present policy is
+  INCOMPLETE. Authority is one owner-global private file (`~/.config/sdlc/model-policy.json`;
+  no `--policy` flag or project-local policy), validated through the existing
+  `controller_inputs` private-file, bounded-read and strict-JSON helpers. Bindings pin an exact
+  model and effort; `select` picks, in owner order within the request's provider and exact risk
+  class only, the first approved binding whose agent-eval-result/v2 artifact matches its digest,
+  passed and observed exactly that model, that carries every required capability and that fresh
+  host evidence shows the exact surface can request (available, resolving to itself, effort
+  supported). Candidates need evaluation and explicit owner approval; revoked bindings never
+  route; fallback stays within the class; anything unknown is INCOMPLETE. `verify` detects
+  policy/request/capability drift, evaluation drift and inconsistent selection records, and
+  compares requested with observed model and effort from native provider JSONL or a
+  selection-bound host observation (agent prose is never evidence). The retained selection has
+  closed keys and must equal its recomputation: a record that keeps its input digests but names
+  another task, risk, source, policy state or capability evidence is FAIL
+  `selection-record-mismatch`, while a changed input stays INCOMPLETE drift. In a native Claude
+  stream the served model is the one named on the assistant messages, cross-checked with the
+  terminal `modelUsage`; the init event is configuration only, so init plus success alone is
+  INCOMPLETE, another authoring model is FAIL (mismatch or mixed) and unexplained extra usage
+  is INCOMPLETE. The policy, request and capability evidence are private-file inputs; the
+  selection, stream, observation and evaluation artifacts are caller-trusted retained files,
+  and `verify` compares metadata with the plan without proving that flags were emitted or that
+  a log belongs to the task. Workflow guidance
+  (delivery, task contract, acceptance, delivery rule, execute and its agent matrix,
+  orchestration, Codex runtime text and overrides) keeps inheritance as the default; static
+  agent defaults are unchanged. The persistent controller is unchanged and does not apply the
+  policy; the edited delivery guidance changes its runtime digest, so existing controllers hold
+  until an explicit reconcile. Covered by `tests/delivery/test_model_policy.py` (registered
+  through `tests/codex/test_delivery_install.py`) and an installed-export test against a real
+  offline agent-eval artifact. Skill, command and specialist counts, the verified-handoff v1
+  receipt and agent-eval-result v2 are unchanged; each installer's managed-file list grows by
+  the new delivery resources.
 - `scripts/framework-status.py`: a read-only cross-integration status command. It reports
   the repository SHA, each integration's installed source SHA and owned-integrity state
   (`not_installed`/`clean`/`drift`/`error`) through the existing read-only checkers

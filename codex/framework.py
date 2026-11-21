@@ -31,7 +31,9 @@ RUNTIME = """Codex runtime contract: discover the actual tools and their schemas
 Use shell/file tools for reading, rg for search, apply_patch or an available editor
 for changes, native collaboration for authorized delegation, and connected MCPs
 only after checking availability. Claude tool names in domain prose describe roles,
-not callable APIs. Skills do not automatically fork. Inherit model and permissions;
+not callable APIs. Skills do not automatically fork. Inherit permissions. Inherit
+model and effort unless an active owner model policy yields a supported PLAN_READY
+selection (opt-in, described by the $sdlc-delivery workflow); report the observed model.
 AGENTS.md and these procedures are guidance, not enforced access control.
 Resolve resource paths from this skill's directory, not the shell working directory.
 Do not send messages, merge, release, deploy or mutate live data unless authorized.
@@ -193,7 +195,9 @@ DESCRIPTIONS = {
 
 
 def agent_selection(inv: dict) -> str:
-    lines = ['# Native specialist selection', '', 'Discover available agent types before spawning. Inherit model configuration.',
+    lines = ['# Native specialist selection', '', 'Discover available agent types before spawning. Inherit model and effort '
+             'configuration by default; with an active owner model policy, request only a supported PLAN_READY '
+             'selection (opt-in, described by the $sdlc-delivery workflow).',
              'If native role types are unavailable, load the corresponding sdlc-agent-<name> skill and apply it inline or pass its procedure to an authorized generic worker.', '']
     for name in inv['agents']:
         meta, _ = frontmatter(REPO / f'.claude/agents/{name}.md')
@@ -233,7 +237,9 @@ inline or give their procedures to authorized generic workers.
 Read the installed `.codex/framework/rules.md` before implementing or approving work;
 for a user install, resolve it under the configured Codex home.
 Discover tools/MCP schemas before use. Keep coupled work sequential, parallel writes
-in disjoint worktrees, and reviewers independent. Inherit model and approval policy.
+in disjoint worktrees, and reviewers independent. Inherit model and approval policy
+by default; only an active owner model policy permits a supported PLAN_READY model
+or effort request ($sdlc-delivery), which never changes permissions or gates.
 The adapter does not grant permission for deployment, messages or live-data writes.
 Optional hooks require native /hooks trust review.
 If the host exposes a native task-title rename capability (discover its schema),

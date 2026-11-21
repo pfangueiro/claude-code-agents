@@ -19,7 +19,7 @@ Do not describe this as complete runtime parity.
 | Task DAG / teams | Plan/ledger and actual collaboration APIs | Claude Task/implicit-team persistence not assumed |
 | Background/fork behavior | Host schema discovery | No automatic context fork or Claude background defaults |
 | Parallel coding | Separate Git worktrees | Coupled steps sequential; no fake launcher isolation parameter |
-| Model tiers/effort | Inherit active Codex config | No Opus/Sonnet/Haiku mapping or hardcoded pricing |
+| Model tiers/effort | Inherit active Codex config by default; opt-in owner model policy (`sdlc-delivery/scripts/model_policy.py`) | Per-invocation request only from a PLAN_READY selection on a host-observed supported surface (`codex-cli`, `codex-spawn`); an inherit-only fork is INCOMPLETE; `verify` compares requested and observed model (a Codex `exec --json` stream usually carries no model, so it stays unknown); no Opus/Sonnet/Haiku mapping, hardcoded model IDs or pricing; the persistent controller does not apply it |
 | Four MCPs | Disabled TOML examples | Availability/schema/account checked at use; nothing auto-connected |
 | Deep analysis | Optional Sequential Thinking workflow | Actual tool discovery, local evidence fallback disclosed |
 | Browser testing / Context7 | Preserved MCP-specific domain procedures | Example schema depends on installed server; no MCP assumed available |

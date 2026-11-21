@@ -117,6 +117,7 @@ Process batches in order. Within each batch, maximize parallelism.
 - **Coordinator synthesis**: After research agents complete, READ and SYNTHESIZE all findings before launching implementation agents — never pass raw research output
 - For risky/experimental implementation tasks, pass the `Agent` tool's own `isolation: "worktree"` parameter — it gives that agent a temporary git worktree so it works on an isolated copy of the repo. This is a parameter of the `Agent` launcher, **not** `EnterWorktree`: `EnterWorktree` is explicit-instruction-only, session-scoped, and cannot be entered twice, so it is never the isolation mechanism for a batch
 - For long-running monitoring, use CronCreate instead of manual polling loops
+- **Model and effort** — omit the `Agent` `model` parameter by default (the agent definition or session model applies). Pass a model only from a PLAN_READY selection of the delivery skill's `scripts/model_policy.py` for this task's declared risk class on the `claude-agent` surface (owner policy active). A fork ignores `model`, and a role default that wins or an effort the surface cannot set makes the request INCOMPLETE, never reported as selected. One choice per coherent slice; see the delivery skill's `references/model-policy.md`
 - Always read a file before editing it
 - After code changes, run the checks the plan assigns to the task for its affected behavior; do not repeat a check another task already ran at the same input — cite its receipt
 
