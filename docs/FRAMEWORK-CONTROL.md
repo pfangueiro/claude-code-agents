@@ -126,7 +126,30 @@ installs a new edition. Bring this checkout to a revision of `main` that was rev
 whose CI passed, using the inspect-before-pull part of
 [INSTALL.md step 1](../INSTALL.md#1-preview-from-a-clean-checkout) (an empty
 `git status --short`, the pre-pull checks, then `git pull --ff-only`). Planning refuses a
-checkout with any staged, untracked or modified file in the paths it reads.
+checkout with any staged, untracked, ignored or modified file in the paths it reads.
+
+**If planning refuses your checkout.** The clean-source check also covers ignored files in
+the paths the updater reads, such as a project's native settings or history, editor
+metadata or compiled caches. These are often your personal files. The refusal is still
+legitimate: a file there could be copied or built into your installation, so the check is
+not weakened and not every unknown file is harmless. A refusal does **not** mean you should
+delete local settings, caches or project overrides. Ask the agent instead: *"Use a clean
+source checkout and preserve my local settings."* It should use a separate clean checkout
+or Git worktree of this repository at the reviewed GitHub `main` commit, leave your
+original checkout and its ignored files unchanged, and run the quick plan and apply
+commands below from that clean checkout. The framework never creates this checkout itself.
+
+**Keeping that clean checkout.** One retained checkout on the host is enough, for example
+`~/.local/share/sdlc-framework/source`, detached at the reviewed commit. That location is an
+operator convention, not an installer default or a service. Both integrations stay one
+user-global installation; the checkout is not a project copy. When Claude is updated from
+there, `~/.claude/.framework-path` names that folder, so keep it while the installation or
+watchdog uses it. A Codex-only user can remember the path or pass it with `--source`. The
+location is plain data, never permission to run something there. For a later update,
+confirm that the new GitHub `main` commit was reviewed and its CI passed, advance the clean
+checkout to it as a separate step (the updater never pulls), then plan and apply. Copy
+nothing from private configuration, caches, accounts or controller state into it or to
+another machine.
 
 **2. Plan (read-only).**
 

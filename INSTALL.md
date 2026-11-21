@@ -380,6 +380,8 @@ plan_dir=$(mktemp -d)                                  # new owner-only folder o
 
 Add `--edition claude` or `--edition codex` to `plan` to restrict it; a Codex-only update never runs the Claude installer. `apply` refuses before running any checkout code if the checkout moved off the planned commit, refuses any other difference from the plan, backs up and verifies every affected file, and keeps a private operation log. It never rewrites your settings, `CLAUDE.md`, Codex configuration, accounts or optional choices. Details, refusals and limits: [docs/FRAMEWORK-CONTROL.md](docs/FRAMEWORK-CONTROL.md#update-an-existing-installation). The manual procedure below remains available as the dangerous alternative: its broad `./install.sh --update` step still replaces same-name files with no backup.
 
+If `plan` refuses the checkout because of untracked or ignored files in the paths it reads (for example native project settings, editor metadata or compiled caches), do not delete them to get past the check. Such a file could be copied or built into the installation, so the refusal stands. Ask the agent instead: *"Use a clean source checkout and preserve my local settings."* It uses and keeps a separate clean checkout or Git worktree at the reviewed GitHub `main` commit, leaves your original checkout unchanged, and runs the same plan and apply there. The framework does not create that checkout itself; see the guide above for keeping it.
+
 The three installers own files differently, and that is why the order below matters:
 
 | Installer | Owns | A same-name file it did not write |

@@ -238,6 +238,16 @@ AGENTS.md and relevant source before relying on these notes.
   installs as `~/.claude/lib/framework_settings.py` (LIB_FILES) and byte-identical
   `.codex/framework/settings.py`; a test pins the helper's Codex allowlist to `build()`'s
   `.codex/framework/` set. Guide: `docs/FRAMEWORK-CONTROL.md`.
+- A source-precondition refusal (untracked or ignored entries in the paths the updater reads,
+  such as native project settings/history, editor metadata or compiled caches) is legitimate
+  and never authorizes deleting local settings, caches or project overrides. Fallback: the
+  agent uses and keeps one clean checkout or Git worktree at the reviewed GitHub `main` SHA,
+  leaving the original checkout and its ignored files unchanged. Its location is an operator
+  convention, not an installer default, service or auto-created folder. Later updates verify
+  GitHub main CI, advance that clean source separately (the updater never pulls), then
+  plan/apply. Claude's `.framework-path` names it once updated from there, so keep it while
+  in use; the locator is data, never authority to execute. Copy no private config, cache,
+  account or controller state into it.
 
 ## Evidence and publishing
 

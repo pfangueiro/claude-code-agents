@@ -6,6 +6,7 @@ provider, starts a process or touches the real home.
 """
 from __future__ import annotations
 
+import base64
 import contextlib
 import hashlib
 import importlib.util
@@ -781,6 +782,73 @@ class ReminderCatalog(Base):
             self.write_prefs({**json.loads(self.prefs.read_bytes()), 'catalog_reviewed': 1})
             _, report = self.status()
             self.assertEqual(report['reminders'], [])
+
+
+def load_canonical_installer():
+    """The real delivery installer module, loaded only for its manifest reader (nothing is run)."""
+    spec = importlib.util.spec_from_file_location('install_delivery', ROOT / 'scripts/install-delivery.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+ADOPTED_ORIGINAL = b'adopted-original-sentinel\n' * 50000
+
+
+class InstallRecordSize(Base):
+    def adopted_manifest_bytes(self) -> tuple[bytes, str]:
+        """A canonical-shaped delivery manifest whose adopted original pushes it past 1 MiB."""
+        for rel, data in DELIVERY_FILES.items():
+            self.write(self.claude / rel, data)
+        encoded = base64.b64encode(ADOPTED_ORIGINAL).decode()
+        manifest = {'version': 1, 'source_sha': 'a' * 40,
+                    'files': {rel: sha(data) for rel, data in DELIVERY_FILES.items()},
+                    'adopted': {'rules/delivery.md': {'baseline': 'c' * 40, 'original': encoded}},
+                    'dirs': ['commands', 'rules', 'skills', 'skills/delivery', 'skills/verified-handoff']}
+        return (json.dumps(manifest, indent=2, sort_keys=True) + '\n').encode(), encoded
+
+    def test_large_adopted_delivery_manifest_is_verified_without_exposing_originals(self):
+        data, encoded = self.adopted_manifest_bytes()
+        self.assertGreater(len(data), 1 << 20)
+        self.write(self.claude / fs.DELIVERY_MANIFEST, data)
+        canonical = load_canonical_installer().load_manifest(self.claude)
+        self.assertEqual(canonical['adopted']['rules/delivery.md']['original'], encoded)
+        before = self.snapshot()
+        code, report = self.status()
+        delivery = self.component(report, 'claude_delivery')
+        self.assertEqual((code, delivery['state']), (0, 'ready'))
+        self.assertEqual(delivery['owned_files'], len(DELIVERY_FILES))
+        self.assertEqual(delivery['problems'], [])
+        code, text, err, _ = self.run_cli('status', '--detail', 'full')
+        self.assertEqual(code, 0)
+        for output in (json.dumps(report), text, err):
+            self.assertNotIn(encoded[:64], output)
+            self.assertNotIn('adopted-original-sentinel', output)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_install_record_over_its_own_cap_is_refused(self):
+        data, _ = self.adopted_manifest_bytes()
+        self.assertLess(len(data), fs.MAX_INSTALL_RECORD_BYTES)
+        padded = data + b' ' * (fs.MAX_INSTALL_RECORD_BYTES + 1 - len(data))
+        self.write(self.claude / fs.DELIVERY_MANIFEST, padded)
+        before = self.snapshot()
+        code, report = self.status()
+        delivery = self.component(report, 'claude_delivery')
+        self.assertEqual((code, delivery['state']), (1, 'needs_attention'))
+        self.assertIn('larger than expected', delivery['summary'])
+        self.assertEqual(self.snapshot(), before)
+
+    def test_preferences_keep_their_one_mebibyte_cap(self):
+        self.assertEqual(fs.MAX_JSON_BYTES, 1 << 20)
+        self.assertGreater(fs.MAX_INSTALL_RECORD_BYTES, fs.MAX_JSON_BYTES)
+        valid = json.dumps(fs.default_preferences()).encode()
+        data = self.write_prefs(valid + b' ' * (fs.MAX_JSON_BYTES + 1 - len(valid)))
+        code, report = self.status()
+        self.assertEqual((code, report['preferences']['state']), (1, 'refused'))
+        self.assertEqual(self.run_cli('settings', '--set-detail', 'full')[0], 2)
+        self.assertEqual(self.prefs.read_bytes(), data)
+        with self.assertRaises(fs.RefusedError):
+            fs.parse_json(valid + b' ' * fs.MAX_JSON_BYTES)
 
 
 class ScopeAndInvocation(Base):

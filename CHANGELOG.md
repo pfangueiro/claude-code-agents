@@ -32,7 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an active model policy or a controller binding is Not checked, never On; the new-extras
   reminder needs an older completed review, so display saves and single acknowledgments no
   longer announce it; hints show the real invocation; a `CLAUDE_CONFIG_DIR` or `CODEX_HOME`
-  naming another folder is reported without printing its value. The user-experience rule
+  naming another folder is reported without printing its value. Installed records get a
+  separate finite 16 MiB manifest budget, so canonical delivery manifests and adopted
+  originals over 1 MiB no longer cause a false Needs attention, while private preferences and
+  the model policy keep their 1 MiB cap; original data is never reported. The user-experience rule
   describes using the helper's presentation preferences only when relevant. CI cancels a
   superseded pull-request run; every main commit keeps its own run and all five jobs remain.
   The required GitHub status check is this repository's branch setting; installing the

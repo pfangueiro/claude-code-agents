@@ -59,6 +59,9 @@ SOURCE_LOCATOR = '.framework-path'
 CONTROLLER_BINDING = 'sdlc-controller.binding'
 
 MAX_JSON_BYTES = 1 << 20
+# Install manifests get their own finite budget: the delivery manifest legitimately embeds
+# base64 copies of adopted originals, so it can exceed the private-file JSON cap above.
+MAX_INSTALL_RECORD_BYTES = 16 << 20
 MAX_SMALL_BYTES = 64 << 10
 MAX_OWNED_FILE_BYTES = 16 << 20
 MAX_OWNED_FILES = 4096
@@ -175,8 +178,8 @@ def _reject_constant(name: str) -> object:
     raise ValueError(f'non-finite number {name}')
 
 
-def parse_json(data: bytes) -> object:
-    if len(data) > MAX_JSON_BYTES:
+def parse_json(data: bytes, limit: int = MAX_JSON_BYTES) -> object:
+    if len(data) > limit:
         raise RefusedError('the file is larger than expected')
     try:
         return json.loads(data.decode('utf-8'), object_pairs_hook=_reject_duplicates,
@@ -304,10 +307,10 @@ def delivery_allowed(rel: str) -> bool:
 
 def load_install_record(root: Path, rel: str) -> dict | None:
     try:
-        data = read_regular(root / rel, MAX_JSON_BYTES)
+        data = read_regular(root / rel, MAX_INSTALL_RECORD_BYTES)
     except FileNotFoundError:
         return None
-    record = parse_json(data)
+    record = parse_json(data, MAX_INSTALL_RECORD_BYTES)
     if (not isinstance(record, dict) or type(record.get('version')) is not int or record['version'] != 1
             or not isinstance(record.get('files'), dict)):
         raise RefusedError('the install record has an unexpected format')
